@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""不问凡尘 · 仙友助手：十八摸与 NPC 天赋只读查询。"""
+"""不问凡尘 · 仙友助手：十八摸、NPC 天赋与 NPC 物品只读查询。"""
+APP_VERSION = "1.3.0"
 import glob
 import hashlib
 import html
@@ -19,7 +20,7 @@ BUILTIN_DIR = getattr(sys, "_MEIPASS", HERE)
 CFG = os.path.join(HERE, "config.json")
 OUT_HTML = os.path.join(HERE, "仙友助手.html")
 OUT_VERSION = os.path.join(HERE, "仙友助手版本.js")
-DEFAULT_MODULES = {"bedroom": True, "talent": True, "items": True}
+DEFAULT_MODULES = {"bedroom": True, "talent": True, "items": True, "pill": True}
 
 
 # ---------------- MessagePack 解码（最小实现） ----------------
@@ -375,6 +376,51 @@ def scan_items(obj, meta):
     return rows
 
 
+def _manual_field(entry, name):
+    """丹方手记字段带 alchemy_recipe_manual_entry_ 前缀，兼容旧写法。"""
+    return entry.get("alchemy_recipe_manual_entry_" + name, entry.get(name))
+
+
+def scan_pill(obj, meta, mapdata):
+    """整理炼丹进度：等级、炉子、丹方手册、已拾取点，并挂上盘面数据。"""
+    player = obj.get("playerModel") or {}
+    rp = player.get("refining_pills") or {}
+    herbs = {str(h.get("id")): h for h in (meta.get("herbs") or []) if isinstance(h, dict)}
+    recipes = {str(r.get("id")): r for r in (meta.get("recipes") or []) if isinstance(r, dict)}
+    manual = []
+    entries = (player.get("pill_recipe_manual") or {}).get("alchemy_recipe_manual_entries") or {}
+    for entry in (entries.values() if isinstance(entries, dict) else entries):
+        if not isinstance(entry, dict):
+            continue
+        recipe_id = _manual_field(entry, "recipe_id")
+        info = recipes.get(str(recipe_id)) or {}
+        stats = _manual_field(entry, "herb_stats") or {}
+        manual.append({
+            "id": recipe_id, "name": info.get("name") or ("丹方 %s" % recipe_id),
+            "tier": info.get("tier") or 0, "element": info.get("element") or 0,
+            "grade": _manual_field(entry, "best_grade") or 0,
+            "craft": _manual_field(entry, "craft_count") or 0,
+            "toxin": _manual_field(entry, "toxin") or 0,
+            "effects": _manual_field(entry, "effect_ids") or [],
+            "herbs": [[(herbs.get(str(k)) or {}).get("name") or str(k), v]
+                      for k, v in sorted(stats.items(), key=lambda kv: str(kv[0]))],
+        })
+    manual.sort(key=lambda r: (r["tier"], str(r["name"])))
+    history = player.get("refining_pills_craft_history") or {}
+    realm_id = (meta.get("phases") or {}).get(str((player.get("combat") or {}).get("cultivate_layer_id")))
+    return {
+        "level": rp.get("rp_level") or 0, "exp": rp.get("rp_exp") or 0,
+        "furnace": rp.get("rp_unlocked_furnace") or 0,
+        "current_furnace": rp.get("rp_current_furnace") or 0,
+        "realm": (meta.get("realms") or {}).get(str(realm_id)) or "",
+        "manual": manual,
+        "highest_grade": history.get("highest_crafted_grade") or 0,
+        "consumed": sorted(int(x) for x in (rp.get("rp_consumed_once_poi_ids") or [])
+                           if isinstance(x, int)),
+        "map": mapdata, "fog": [],
+    }
+
+
 def _source_payload(path, stamp, original, rows, meta_info):
     return {
         "rows": rows, "src": os.path.basename(path) if path else "",
@@ -386,7 +432,7 @@ def _source_payload(path, stamp, original, rows, meta_info):
 
 
 def render(dec, cfg):
-    enabled = [name for name in ("bedroom", "talent", "items") if cfg["modules"].get(name)]
+    enabled = [name for name in ("bedroom", "talent", "items", "pill") if cfg["modules"].get(name)]
     payload = {"enabled": enabled, "modules": {}, "warnings": []}
     if not enabled:
         payload["warnings"].append("查询模块都已关闭。请运行“功能设置.bat”重新开启。")
@@ -402,10 +448,14 @@ def render(dec, cfg):
     empty = {"items": {}, "npcs": {}, "spaces": {}, "realms": {"0": "凡人"}}
     talent_meta = metadata.get("talent") or dict(empty, talents=[])
     items_meta = metadata.get("items") or dict(empty)
+    pill_meta = metadata.get("pill") or {"recipes": [], "herbs": [], "realms": {"0": "凡人"}, "phases": {}}
+    pill_map, pill_map_info = ({}, {})
+    if "pill" in enabled:
+        pill_map, pill_map_info = meta_update.load_pill_map(game_dir, BUILTIN_DIR)
     files = save_files(dec)
     originals = original_save_index(find_save_root())
     timed = [(path,) + source_time(path, originals) for path in files]
-    best_bedroom, latest_talent, latest_items = None, None, None
+    best_bedroom, latest_talent, latest_items, latest_pill = None, None, None, None
     errors = []
 
     for path, stamp, original in timed:
@@ -426,6 +476,13 @@ def render(dec, cfg):
             if "items" in enabled and (latest_items is None or stamp > latest_items["stamp"]):
                 latest_items = _source_payload(
                     path, stamp, original, scan_items(obj, items_meta), report["modules"]["items"])
+            if "pill" in enabled and (latest_pill is None or stamp > latest_pill["stamp"]):
+                rows = scan_pill(obj, pill_meta, pill_map)
+                rows["fog"] = {m.get("name") or "default":
+                               meta_update.load_fog_strokes(original or path,
+                                                            m.get("name") or "default")
+                               for m in (pill_map.get("maps") or [])}
+                latest_pill = _source_payload(path, stamp, original, rows, report["modules"]["pill"])
         except Exception as e:
             errors.append("%s：%s" % (os.path.basename(path), e))
 
@@ -445,13 +502,22 @@ def render(dec, cfg):
                              if key in catalog]
         module["realms"] = items_meta.get("realms") or {"0": "凡人"}
         payload["modules"]["items"] = module
+    if "pill" in enabled:
+        module = latest_pill or _source_payload(
+            "", 0, "", scan_pill({}, pill_meta, pill_map), report["modules"]["pill"])
+        if not module["rows"].get("map"):
+            module["rows"]["map"] = pill_map
+        module["map_config"] = pill_map_info.get("label", "未知")
+        module["map_warning"] = pill_map_info.get("warning", "")
+        payload["modules"]["pill"] = module
     if not files:
         payload["warnings"].append("还没有可用存档副本，请先启动游戏并等待插件导出。")
     elif errors:
         payload["warnings"].append("跳过 %d 份无法解析的副本。" % len(errors))
         payload["errors"] = errors[:5]
     if ("bedroom" in enabled and best_bedroom is None) or \
-            (("talent" in enabled and latest_talent is None) or ("items" in enabled and latest_items is None)):
+            (("talent" in enabled and latest_talent is None) or ("items" in enabled and latest_items is None)
+             or ("pill" in enabled and latest_pill is None)):
         payload["warnings"].append("暂未找到有效存档，请确认插件已导出 gameworld 副本。")
     return payload
 
@@ -467,14 +533,62 @@ CSS += r"""
 .search-panel{background:#171b23;border:1px solid #293140;border-radius:12px;padding:15px;margin:16px 0 12px}.search-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.search-field>span,.filter-field>span,.advanced-grid label>span{display:block;color:#aeb8c7;font-size:12px;margin:0 0 7px}.search-field:first-child>span{color:#d9c785}.search-field input,.filter-field select,.advanced-grid select{width:100%;background:#10141a;border:1px solid #303949;border-radius:8px;color:#e8eaed;padding:11px 12px;font-size:13px;outline:none}.search-field input:focus,.filter-field select:focus,.advanced-grid select:focus{border-color:#698c78;box-shadow:0 0 0 2px #263b34}.search-field input::placeholder{color:#667182}.filter-bar{display:grid;grid-template-columns:minmax(150px,1fr) minmax(190px,1.35fr) auto;align-items:end;gap:12px;margin:0 2px 14px}.filter-actions{display:flex;gap:8px}.filter-button{background:#1b222c;border:1px solid #35404f;border-radius:8px;color:#c6cfda;padding:10px 14px;min-height:40px;cursor:pointer;white-space:nowrap;font-size:12px}.filter-button:hover{background:#25303d;border-color:#526175}.filter-button.primary{color:#e2d7ac;border-color:#655d3d}.filter-count{color:#e8c76d}.advanced-filters{background:#141820;border:1px solid #293140;border-radius:10px;margin:0 0 14px;padding:0 13px}.advanced-filters summary{cursor:pointer;list-style:none;color:#9da8b7;font-size:12px;padding:11px 1px}.advanced-filters summary::-webkit-details-marker{display:none}.advanced-filters summary:before{content:"›";display:inline-block;margin-right:7px;transition:.15s}.advanced-filters[open] summary:before{transform:rotate(90deg)}.advanced-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;border-top:1px solid #252c37;padding:13px 0 15px}.owner summary .location{line-height:1.6;text-align:right}.category-badge{color:#d8c78f}.search-note{color:#758092;font-size:11px;margin:10px 2px 0}@media(max-width:850px){.filter-bar{grid-template-columns:1fr 1fr}.filter-actions{grid-column:span 2}.advanced-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.owner summary .location{text-align:left}}@media(max-width:560px){.search-panel{padding:12px}.search-fields,.filter-bar,.advanced-grid{grid-template-columns:1fr}.filter-actions{grid-column:span 1}.filter-button{flex:1}.owner summary .location{width:100%;text-align:left}}
 """
 CSS += r"""
-.item-group{background:#15181f;border:1px solid #293140;border-radius:12px;margin:0 0 14px;overflow:hidden}.item-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:11px 12px 0}.sortbtn{background:#1b222c;border:1px solid #35404f;border-radius:7px;color:#9aa3b2;padding:5px 11px;font-size:11px;cursor:pointer}.sortbtn:hover{background:#25303d}.sortbtn.on{background:#263b34;border-color:#3d735b;color:#c9f5dd}.item-tools .meta{margin-left:auto;color:#778292;font-size:11px}.ratebar{width:62px;height:5px;border-radius:3px;background:#232833;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:6px}.ratebar i{display:block;height:100%;background:#4fbf83}.badge.deadly{background:#3a2126;color:#e88b82}.loadmore{display:block;width:calc(100% - 24px);margin:8px 12px 12px;background:#1b222c;border:1px dashed #35404f;border-radius:8px;color:#9aa3b2;padding:9px;font-size:12px;cursor:pointer}.loadmore:hover{background:#25303d;color:#c6cfda}.steal-detail{flex-basis:100%;color:#8b93a1;font-size:11px;line-height:1.7;margin-top:2px}.steal-detail b{color:#b4bdca;font-weight:600}.steal-detail .bad{color:#e88b82}.npc-card .slots{padding:0 14px 12px}.item-group>summary{list-style:none;cursor:pointer}.item-group>summary::-webkit-details-marker{display:none}.item-arrow{color:#6f7787;font-size:17px;transition:.15s;display:inline-block}.item-group[open] .item-arrow{transform:rotate(90deg)}.item-head{padding:16px 18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.item-title{font-size:19px;font-weight:650}.item-stat{margin-left:auto;color:#8b93a1;font-size:12px}.owner .badge.steal{background:#22392e;color:#8ee6b3}.owner .badge.nosteal{background:#2a2d33;color:#8b93a1}.steal-ok{color:#6edda2;font-size:12px;font-weight:600}.steal-risk{color:#e88b82}.filter-bar.four{grid-template-columns:minmax(140px,1fr) minmax(165px,1.3fr) minmax(125px,1fr) auto}@media(max-width:850px){.filter-bar.four{grid-template-columns:1fr 1fr}.filter-bar.four .filter-actions{grid-column:span 2}}@media(max-width:560px){.filter-bar.four{grid-template-columns:1fr}.filter-bar.four .filter-actions{grid-column:span 1}.item-head{padding:13px 12px}.item-title{font-size:17px}.item-stat{margin-left:0;width:100%}}
+.item-group{background:#15181f;border:1px solid #293140;border-radius:12px;margin:0 0 14px;overflow:hidden}.item-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:11px 12px 0}.sortbtn{background:#1b222c;border:1px solid #35404f;border-radius:7px;color:#9aa3b2;padding:5px 11px;font-size:11px;cursor:pointer}.sortbtn:hover{background:#25303d}.sortbtn.on{background:#263b34;border-color:#3d735b;color:#c9f5dd}.item-tools .meta{margin-left:auto;color:#778292;font-size:11px}.ratebar{width:62px;height:5px;border-radius:3px;background:#232833;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:6px}.ratebar i{display:block;height:100%;background:#4fbf83}.badge.deadly{background:#3a2126;color:#e88b82}.loadmore{display:block;width:calc(100% - 24px);margin:8px 12px 12px;background:#1b222c;border:1px dashed #35404f;border-radius:8px;color:#9aa3b2;padding:9px;font-size:12px;cursor:pointer}.loadmore:hover{background:#25303d;color:#c6cfda}.steal-detail{flex-basis:100%;color:#8b93a1;font-size:11px;line-height:1.7;margin-top:2px}.steal-detail b{color:#b4bdca;font-weight:600}.steal-detail .bad{color:#e88b82}.npc-card .slots{padding:0 14px 12px}.appver{color:#7d8797;font-size:12px;font-weight:500;vertical-align:middle;margin-left:4px}.item-group>summary{list-style:none;cursor:pointer}.item-group>summary::-webkit-details-marker{display:none}.item-arrow{color:#6f7787;font-size:17px;transition:.15s;display:inline-block}.item-group[open] .item-arrow{transform:rotate(90deg)}.item-head{padding:16px 18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.item-title{font-size:19px;font-weight:650}.item-stat{margin-left:auto;color:#8b93a1;font-size:12px}.owner .badge.steal{background:#22392e;color:#8ee6b3}.owner .badge.nosteal{background:#2a2d33;color:#8b93a1}.steal-ok{color:#6edda2;font-size:12px;font-weight:600}.steal-risk{color:#e88b82}.filter-bar.four{grid-template-columns:minmax(140px,1fr) minmax(165px,1.3fr) minmax(125px,1fr) auto}@media(max-width:850px){.filter-bar.four{grid-template-columns:1fr 1fr}.filter-bar.four .filter-actions{grid-column:span 2}}@media(max-width:560px){.filter-bar.four{grid-template-columns:1fr}.filter-bar.four .filter-actions{grid-column:span 1}.item-head{padding:13px 12px}.item-title{font-size:17px}.item-stat{margin-left:0;width:100%}}
+.pill-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:16px;align-items:start}
+.mapbox{position:relative;background:#12100e;border:1px solid #293140;border-radius:12px;overflow:hidden}
+.mapbox canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+.mapbox svg{position:absolute;inset:0;width:100%;height:100%}
+.poi-dot{cursor:pointer;transition:opacity .15s}
+.poi-dot.dim{opacity:.2}
+.poi-dot.off{display:none}
+#pillfog{display:none}
+.mapbox.showfog #pillfog{display:block}
+.mapbox.showfog #pillherb{display:none}
+.mapbox.showfog .poi-dot.unseen{opacity:0;pointer-events:none}
+.pill-side{display:flex;flex-direction:column;gap:10px;min-width:0}
+.chips{display:flex;gap:7px;flex-wrap:wrap}
+.chip{background:#171b23;border:1px solid #2b3340;color:#9aa3b2;border-radius:20px;padding:6px 13px;font-size:12px;cursor:pointer;font-family:inherit}
+.chip.on{background:#263b34;border-color:#3d735b;color:#c9f5dd}
+.chip i{font-style:normal;color:#7d8593;margin-left:4px}
+.chip-label{align-self:center;color:#6f7787;font-size:11px;letter-spacing:.5px}
+.rec-info{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:7px;padding-top:7px;border-top:1px solid #242c37}
+.rec-info div{color:#c9d2df}
+.rec-info span{color:#7d8593;margin-right:6px;font-size:11px}
+.near{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;padding-top:7px;border-top:1px solid #242c37;color:#7d8593;font-size:11px}
+.route-item{background:#1d232c;border:1px solid #2b3340;color:#b9c6d6;border-radius:12px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit}
+.route-item:hover{border-color:#3d735b;color:#c9f5dd}
+.route{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;color:#a8b3c1;font-size:11px}
+.route>span{color:#7d8593;margin-right:2px}
+.route-item i{font-style:normal;color:#6f7787;margin-left:5px}
+.pill-search{width:100%;background:#10141a;border:1px solid #303949;border-radius:8px;color:#e8eaed;padding:10px 12px;font-size:13px;outline:none;font-family:inherit}
+.pill-list{max-height:380px;overflow:auto;border:1px solid #232833;border-radius:10px;background:#141820}
+.pill-item{display:flex;gap:8px;align-items:center;padding:9px 11px;border-bottom:1px solid #1e242d;cursor:pointer;font-size:12px}
+.pill-item:hover{background:#1b222c}
+.pill-item .dotmark{width:8px;height:8px;border-radius:50%;flex:none}
+.pill-item .nm{flex:1;color:#d5dce6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill-item .tp{color:#7d8593;font-size:11px}
+.pill-item.done .nm{color:#6f7787;text-decoration:line-through}
+.pill-detail{background:#15181f;border:1px solid #293140;border-radius:10px;padding:11px 13px;font-size:12px;line-height:1.8;color:#b4bdca;min-height:52px}
+.pill-detail b{color:#e8eaed}
+.legend{display:flex;gap:12px;flex-wrap:wrap;color:#8b93a1;font-size:11px}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+@media(max-width:850px){.pill-grid{grid-template-columns:1fr}}
+.manual{margin-top:14px;border:1px solid #232833;border-radius:10px;background:#141820;overflow:hidden}
+.manual-head{display:flex;justify-content:space-between;align-items:baseline;padding:11px 13px;background:#171b23;color:#d5dce6;font-size:13px}
+.manual-head span{color:#7d8593;font-size:11px;font-weight:400}
+.manual-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;padding:11px}
+.manual-item{display:flex;gap:7px;align-items:center;flex-wrap:wrap;background:#181d25;border:1px solid #242c37;border-radius:9px;padding:9px 11px;font-size:12px;cursor:pointer}
+.manual-item:hover{border-color:#3d735b}
+.manual-item .nm{color:#dfe6ef;font-weight:600;margin-right:auto}
+.manual-item .tag{color:#86909e;font-size:11px;background:#1d232c;border-radius:6px;padding:2px 6px}
 """
 
-HTML_TEMPLATE = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>不问凡尘 · 仙友助手</title><style>__CSS__</style></head><body><div class="wrap"><h1>不问凡尘 · 仙友助手</h1><div class="sub">只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。</div><div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div><section id="bedroom" class="panel"></section><section id="talent" class="panel"></section><section id="items" class="panel"></section><div class="tip">游戏保存后按 F8 可立即导出副本，平时插件每 60 秒自动同步。本页仅在数据变化时自动刷新。<br>配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。若存档结构、加密或 Unity 格式大改，仍需更新工具。</div></div><script src="仙友助手版本.js"></script><script>
+HTML_TEMPLATE = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>不问凡尘 · 仙友助手</title><style>__CSS__</style></head><body><div class="wrap"><h1>不问凡尘 · 仙友助手 <span class="appver">v__VER__</span></h1><div class="sub">只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。</div><div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div><section id="bedroom" class="panel"></section><section id="talent" class="panel"></section><section id="items" class="panel"></section><section id="pill" class="panel"></section><div class="tip">游戏保存后按 F8 可立即导出副本，平时插件每 60 秒自动同步。本页仅在数据变化时自动刷新。<br>配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。若存档结构、加密或 Unity 格式大改，仍需更新工具。</div></div><script src="仙友助手版本.js"></script><script>
 const INITIAL_VERSION=window.PROGRESS_VERSION||'';const DATA=__DATA__;
 const $=id=>document.getElementById(id);const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const labels={bedroom:'十八摸',talent:'NPC天赋',items:'NPC物品'};let active=store.get('worldapart.active.tab.v2',DATA.enabled[0]||'');if(!DATA.enabled.includes(active))active=DATA.enabled[0]||'';
+const labels={bedroom:'十八摸',talent:'NPC天赋',items:'NPC物品',pill:'炼丹'};let active=store.get('worldapart.active.tab.v2',DATA.enabled[0]||'');if(!DATA.enabled.includes(active))active=DATA.enabled[0]||'';
 function sourceHtml(m){return `<div class="source">存档：${esc(m.src||'暂无')} ｜ 原始更新：${esc(m.stamp_text)} ｜ 配置：${esc(m.config)}${m.config_warning?' ｜ '+esc(m.config_warning):''}</div>`}
 function showTab(name){active=name;store.set('worldapart.active.tab.v2',name);document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===name));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name))}
 function initTabs(){$('tabs').innerHTML=DATA.enabled.map(n=>`<button class="tab" data-tab="${n}">${labels[n]}</button>`).join('');document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>showTab(x.dataset.tab));if(!DATA.enabled.length){$('warnings').innerHTML=DATA.warnings.map(esc).join('<br>');return}showTab(active)}
@@ -823,7 +937,375 @@ document.addEventListener('click',event=>{
   document.querySelectorAll('#items .item-group[open]').forEach(node=>refreshItemOwners(node.dataset.item));
  }
 });
-$('warnings').innerHTML=(DATA.warnings||[]).map(esc).join('<br>');initTabs();renderBedroom();initTalent();initItems();
+const PILL_COLOR={1:'#e8c76d',2:'#ff7b72',3:'#6edda2',4:'#6aa9ff',5:'#d18bff',6:'#9a7bff'};
+const PILL_TYPE={1:'丹方属性',2:'丹方',3:'减毒',4:'奖励',5:'传送口',6:'传送口'};
+const PILL_ELEMENT=['无','金','木','水','火','土'];
+const PILL_ELEMENT_COLOR=['#8b93a1','#e6dcae','#8ccf92','#7fc0ee','#ee9a86','#d8b273'];
+const PILL_TYPES={recipe:[2],effect:[1],cleanse:[3],reward:[4],portal:[5,6]};
+const PILL_TYPE_LABEL={recipe:'丹方',effect:'丹方属性',cleanse:'减毒',reward:'奖励',portal:'传送口'};
+const PILL_KEYWORDS=['攻击','暴击','生命','破韧','防御','速度','灵力','伤害','净化','复活','修为','灼烧','共鸣'];
+// 未知类型（游戏新增拾取物）自动归入「其他」，不会从筛选里消失
+let PILL_GROUPS=PILL_TYPES,PILL_LABELS=PILL_TYPE_LABEL;
+let pillFilter={types:Object.keys(PILL_TYPES),elements:['1','2','3','4','5'],keywords:[],q:''};
+function poiFill(p){
+ return p[1]===2?(PILL_ELEMENT_COLOR[p[2]]||PILL_COLOR[2]):(PILL_COLOR[p[1]]||'#9aa3b0');
+}
+function pillName(p,mp){const t=p[1];
+ if(t===2){const id=(mp.pool||[])[p[5]]||'';const r=(mp.recipes||{})[id];return (r&&r.n)||('丹方 '+id)}
+ if(t===1){const e=(mp.effects||{})[String(p[4])];return e?e[0]:('药效 '+p[4])}
+ if(t===3)return '减毒';
+ if(t===4){const r=(mp.rewards||{})[String(p[8])];return r?r[0]:('奖励 '+p[8])}
+ if(t===5||t===6){const pt=(mp.portals||{})[String(p[10])];return pt?pt[0]:('传送门 '+p[10])}
+ return (PILL_LABELS.other||'其他')+' ('+t+')'}
+function pillDesc(p,mp){
+ if(p[1]===1){const e=(mp.effects||{})[String(p[4])];return e?`${e[3]}　拾取经验 ${e[4]}`:''}
+ if(p[1]===4){const r=(mp.rewards||{})[String(p[8])];return r?`${r[3]}　价值 ${r[4]}~${r[5]}`:''}
+ if(p[1]>=5){const pt=(mp.portals||{})[String(p[10])];return pt?pt[3]:''}
+ if(p[1]===3)return '拾取后削减丹毒';
+ return ''}
+function pillText(p,mp){
+ if(p[1]===2){const r=(mp.recipes||{})[String((mp.pool||[])[p[5]]||'')];return r?r.d||'':''}
+ if(p[1]===1){const e=(mp.effects||{})[String(p[4])];return e?e[3]||'':''}
+ return '';
+}
+function pillMatch(p,mp){
+ if(!pillFilter.types.some(k=>(PILL_GROUPS[k]||[]).includes(p[1])))return false;
+ // 五行、效果只有丹方与丹方属性有，减毒/奖励/传送口不受这两项影响
+ if(p[2]>0&&!pillFilter.elements.includes(String(p[2])))return false;
+ if(pillFilter.keywords.length){
+  const text=pillText(p,mp);
+  if(text&&!pillFilter.keywords.some(k=>text.includes(k)))return false;
+ }
+ const q=pillFilter.q.trim();if(!q)return true;
+ // 除了名称，也匹配效果文案，新版本新效果直接打字就能搜到
+ return pillName(p,mp).includes(q)||pillText(p,mp).includes(q);
+}
+function initPill(){
+ const m=DATA.modules&&DATA.modules.pill;if(!m)return;const host=$('pill');
+ const st=m.rows||{},maps=(st.map&&st.map.maps)||[];
+ if(!maps.length){host.innerHTML=sourceHtml(m)+'<div class="empty">暂无炼丹盘面数据</div>';return}
+ const pick=parseInt(store.get('worldapart.pill.map.v1',0),10)||0;
+ const mp=maps[pick>=0&&pick<maps.length?pick:0];
+ const cols=mp.cols,rowsN=mp.rows,ts=mp.tile_size||20,consumed=new Set(st.consumed||[]);
+ const learned=new Set((st.manual||[]).map(r=>String(r.id)));
+ const compById=new Map();(mp.pois||[]).forEach((p,i)=>compById.set(p[0],(mp.comps||[])[i]));
+ const elemCounts={};mp.pois.forEach(p=>{if(p[2])elemCounts[p[2]]=(elemCounts[p[2]]||0)+1});
+ // 游戏新增拾取物类型时不再被筛掉，统一落到「其他」
+ const extra=[...new Set(mp.pois.map(p=>p[1]).filter(t=>PILL_COLOR[t]===undefined))].sort((a,b)=>a-b);
+ if(extra.length){
+  PILL_LABELS=Object.assign({},PILL_TYPE_LABEL,{other:'其他'});
+  PILL_GROUPS=Object.assign({},PILL_TYPES,{other:extra});
+  if(!pillFilter.types.includes('other'))pillFilter.types=pillFilter.types.concat('other');
+ }else{PILL_LABELS=PILL_TYPE_LABEL;PILL_GROUPS=PILL_TYPES}
+ pillFilter.types=pillFilter.types.filter(k=>PILL_GROUPS[k]);
+ const cards=[[`炼丹等级`,`${st.level||0} 级`,`经验 ${st.exp||0}`],
+  [`炉火`,`${st.current_furnace||0} 号炉`,`已解锁 ${st.furnace||0} 座`],
+  [`丹方手记`,`${(st.manual||[]).length} / ${Object.keys(mp.recipes||{}).length} 张`,`最高 ${st.highest_grade||0} 品`],
+  [`盘面拾取点`,`${mp.pois.length} 个`,`已拾取 ${consumed.size}`]]
+  .map(([k,v,s])=>`<div class="card"><div class="k">${esc(k)}</div><div class="v">${esc(v)}<span> ${esc(s)}</span></div></div>`).join('');
+ host.innerHTML=sourceHtml(m)+`<div class="cards">${cards}</div>`+
+  (maps.length>1?`<div class="chips" id="pillmaps"><span class="chip-label">盘面</span>`+
+   maps.map((x,i)=>`<button class="chip${x===mp?' on':''}" data-map="${i}">${esc(x.name)}<i>${(x.pois||[]).length}</i></button>`).join('')+`</div>`:'')+
+  `<div class="pill-grid"><div class="mapbox"><canvas id="pillmap"></canvas><svg id="pillsvg" viewBox="0 0 ${cols} ${rowsN}" xmlns="http://www.w3.org/2000/svg"></svg></div>`+
+  `<div class="pill-side"><div class="chips" id="pillchips"></div><div class="chips" id="pillelems"></div><div class="chips" id="pillkeys"></div>`+
+  `<input id="pillq" class="pill-search" placeholder="搜索丹方 / 药效 / 奖励名称">`+
+  `<div class="pill-detail" id="pillinfo">点击盘面上的标记或右侧列表查看详情</div>`+
+  `<div class="pill-list" id="pilllist"></div>`+
+  `<div class="legend">${[1,3,4,5].map(t=>`<span><i style="background:${PILL_COLOR[t]}"></i>${PILL_TYPE[t]}</span>`).join('')}${[1,2,3,4,5].map(t=>`<span><i style="background:${PILL_ELEMENT_COLOR[t]}"></i>${PILL_ELEMENT[t]}丹方</span>`).join('')}<span><i style="background:#5a4a36"></i>山</span><span><i style="background:#26414a"></i>沼泽</span></div></div></div>`+
+  `<div class="manual"><div class="manual-head">丹方手记<span>已学会 ${(st.manual||[]).length} 张 · 点击定位盘面</span></div><div class="manual-list" id="pillmanual"></div></div>`+
+  `<div class="tip">盘面为游戏内置固定地图（${cols}×${rowsN} 格，每格 ${ts} 单位），并非随机生成；带删除线的拾取点表示本存档已拾取过。「迷雾」开启后只显示已探索区域，落在迷雾里的拾取点会一起隐藏。</div>`;
+ // 地形
+ const cv=$('pillmap');cv.width=cols;cv.height=rowsN;
+ const ctx=cv.getContext('2d');const img=ctx.createImageData(cols,rowsN);const px=img.data;
+ const palette={0:[20,18,16],1:[90,74,54],2:[38,66,74]};let i=0;
+ for(const [v,c] of mp.runs){const col=palette[v]||palette[0];for(let k=0;k<c;k++){px[i]=col[0];px[i+1]=col[1];px[i+2]=col[2];px[i+3]=255;i+=4}}
+ ctx.putImageData(img,0,0);
+ const svg=$('pillsvg'),NS='http://www.w3.org/2000/svg';
+ // 迷雾：未探索区域压暗，已探索的笔迹按半径揭开
+ const strokes=(st.fog||{})[mp.name||'default']||[];
+ let fogLayer=null;
+ if(strokes.length){
+  const defs=document.createElementNS(NS,'defs');
+  const mask=document.createElementNS(NS,'mask');
+  mask.setAttribute('id','pillfogmask');mask.setAttribute('maskUnits','userSpaceOnUse');
+  mask.setAttribute('x','0');mask.setAttribute('y','0');
+  mask.setAttribute('width',cols);mask.setAttribute('height',rowsN);
+  const cover=document.createElementNS(NS,'rect');
+  cover.setAttribute('x','0');cover.setAttribute('y','0');
+  cover.setAttribute('width',cols);cover.setAttribute('height',rowsN);
+  cover.setAttribute('fill','#000');mask.appendChild(cover);
+  strokes.forEach(([seg,sx,sy,ex,ey,r])=>{
+   if(seg){
+    const line=document.createElementNS(NS,'line');
+    line.setAttribute('x1',sx/ts);line.setAttribute('y1',sy/ts);
+    line.setAttribute('x2',ex/ts);line.setAttribute('y2',ey/ts);
+    line.setAttribute('stroke','#fff');line.setAttribute('stroke-width',Math.max(r*2/ts,.8));
+    line.setAttribute('stroke-linecap','round');mask.appendChild(line);
+   }else{
+    const c=document.createElementNS(NS,'circle');
+    c.setAttribute('cx',sx/ts);c.setAttribute('cy',sy/ts);
+    c.setAttribute('r',Math.max(r/ts,.8));c.setAttribute('fill','#fff');mask.appendChild(c);
+   }
+  });
+  defs.appendChild(mask);svg.appendChild(defs);
+  fogLayer=document.createElementNS(NS,'rect');
+  fogLayer.setAttribute('x','0');fogLayer.setAttribute('y','0');
+  fogLayer.setAttribute('width',cols);fogLayer.setAttribute('height',rowsN);
+  fogLayer.setAttribute('id','pillfog');
+  fogLayer.setAttribute('fill','#06080a');fogLayer.setAttribute('fill-opacity','.82');
+  fogLayer.setAttribute('mask','url(#pillfogmask)');
+  svg.appendChild(fogLayer);
+ }
+ // 判断某个坐标是否在已探索范围内
+ function exploredAt(x,y){
+  for(let k=0;k<strokes.length;k++){
+   const s=strokes[k],r=s[5];
+   if(s[0]){
+    const dx=s[3]-s[1],dy=s[4]-s[2],len=dx*dx+dy*dy;
+    let t=len?((x-s[1])*dx+(y-s[2])*dy)/len:0;
+    t=t<0?0:t>1?1:t;
+    const px=s[1]+t*dx-x,py=s[2]+t*dy-y;
+    if(px*px+py*py<=r*r)return true;
+   }else{
+    const px=x-s[1],py=y-s[2];
+    if(px*px+py*py<=r*r)return true;
+   }
+  }
+  return false;
+ }
+ // 药材轨迹
+ const herbs=mp.herbs||{};
+ const herbLayer=document.createElementNS(NS,'g');herbLayer.setAttribute('id','pillherb');
+ svg.appendChild(herbLayer);
+ (mp.trajectories||[]).forEach(([hid,,,segs])=>{
+  if(!segs||!segs.length)return;const pts=segs.map(s=>`${s[1]/ts},${s[2]/ts}`).join(' ');
+  const line=document.createElementNS(NS,'polyline');line.setAttribute('points',pts);
+  line.setAttribute('fill','none');line.setAttribute('stroke','#8f7bd8');line.setAttribute('stroke-opacity','.28');
+  line.setAttribute('stroke-width','.8');herbLayer.appendChild(line);
+  const first=segs[0];const label=document.createElementNS(NS,'text');
+  label.setAttribute('x',first[1]/ts);label.setAttribute('y',first[2]/ts);label.setAttribute('fill','#9a86e6');
+  label.setAttribute('font-size','3.2');label.setAttribute('opacity','.75');
+  label.textContent=herbs[String(hid)]||('药材 '+hid);herbLayer.appendChild(label)});
+ // 拾取点
+ const dots=[];
+ mp.pois.forEach(p=>{
+  const c=document.createElementNS(NS,'circle');
+  c.setAttribute('cx',p[6]/ts);c.setAttribute('cy',p[7]/ts);
+  c.setAttribute('r',p[1]===2?2.4:1.7);
+  c.setAttribute('fill',poiFill(p));
+  c.setAttribute('fill-opacity',p[1]===4?'.75':'.95');
+  c.setAttribute('stroke','#0b0d10');c.setAttribute('stroke-width','.4');
+  c.classList.add('poi-dot');
+  if(consumed.has(p[0]))c.classList.add('dim');
+  if(strokes.length&&!exploredAt(p[6],p[7]))c.classList.add('unseen');
+  c.addEventListener('click',()=>showPoi(p));
+  svg.appendChild(c);dots.push(c);
+ });
+ const routeLayer=document.createElementNS(NS,'g');
+ routeLayer.setAttribute('id','pillroute');svg.appendChild(routeLayer);
+ const ring=document.createElementNS(NS,'circle');
+ ring.setAttribute('fill','none');ring.setAttribute('stroke','#fff');
+ ring.setAttribute('stroke-width','.9');ring.setAttribute('r','6');
+ ring.style.display='none';svg.appendChild(ring);
+ // 把传送路线画在盘面上，避免只给坐标却看不到门在哪
+ function drawRoute(steps){
+  while(routeLayer.firstChild)routeLayer.removeChild(routeLayer.firstChild);
+  steps.forEach(([cfg,x1,y1,x2,y2])=>{
+   const line=document.createElementNS(NS,'line');
+   line.setAttribute('x1',x1/ts);line.setAttribute('y1',y1/ts);
+   line.setAttribute('x2',x2/ts);line.setAttribute('y2',y2/ts);
+   line.setAttribute('stroke','#4fe0c0');line.setAttribute('stroke-width','1.4');
+   line.setAttribute('stroke-dasharray','5 4');line.setAttribute('stroke-opacity','.9');
+   routeLayer.appendChild(line);
+   [[x1,y1,'入'],[x2,y2,'出']].forEach(([x,y,label])=>{
+    const dot=document.createElementNS(NS,'circle');
+    dot.setAttribute('cx',x/ts);dot.setAttribute('cy',y/ts);dot.setAttribute('r','5');
+    dot.setAttribute('fill','#0b1412');dot.setAttribute('fill-opacity','.65');
+    dot.setAttribute('stroke','#4fe0c0');dot.setAttribute('stroke-width','1.6');
+    routeLayer.appendChild(dot);
+    const text=document.createElementNS(NS,'text');
+    text.setAttribute('x',x/ts);text.setAttribute('y',y/ts-7.5);
+    text.setAttribute('fill','#4fe0c0');text.setAttribute('font-size','9');
+    text.setAttribute('text-anchor','middle');text.textContent=label;
+    routeLayer.appendChild(text);
+   });
+  });
+ }
+ $('pillinfo').onclick=e=>{
+  const jump=e.target.closest('[data-x]');
+  if(jump){
+   ring.setAttribute('cx',+jump.dataset.x/ts);
+   ring.setAttribute('cy',+jump.dataset.y/ts);
+   ring.style.display='';
+  }
+ };
+ function showPoi(p){
+  const isRecipe=p[1]===2;
+  const rid=isRecipe?String((mp.pool||[])[p[5]]||''):'';
+  const rec=isRecipe?(mp.recipes||{})[rid]:null;
+  const tags=[PILL_TYPE[p[1]]||''];
+  if(isRecipe&&rec)tags.push(`${PILL_ELEMENT[rec.e]||'—'}系 · ${rec.t||0} 阶`);
+  else if(p[1]<=3&&p[2])tags.push(`${PILL_ELEMENT[p[2]]||''}${p[3]?` · ${p[3]}阶`:''}`);
+  if(isRecipe&&rec)tags.push(learned.has(rid)?'已学会':'未学会');
+  if(consumed.has(p[0]))tags.push('已拾取');
+  let html=`<b>${esc(pillName(p,mp))}</b>　<span class="muted">${esc(tags.filter(Boolean).join(' · '))}</span>`+
+   `<div style="margin-top:4px">坐标 ${p[6]}, ${p[7]}　编号 #${p[0]}</div>`;
+  if(rec){
+   const tiers=(rec.g||[]).join(' / ')||'—';
+   html+=`<div class="rec-info"><div><span>丹毒上限</span>${rec.x||0}</div>`+
+    `<div><span>成丹门槛</span>${tiers}</div>`+
+    `<div><span>灵力 / 时长</span>${rec.s||0} / ${rec.tm||0}</div>`+
+    `<div><span>可炼次数</span>${rec.m||'不限'}</div></div>`;
+   if(rec.d)html+=`<div class="muted" style="margin-top:6px">${esc(rec.d)}</div>`;
+  }else if(p[1]===1&&(mp.effects||{})[String(p[4])]){
+   const eff=mp.effects[String(p[4])];
+   if(eff[7])html+=`<div class="rec-info"><div><span>主属性</span>${esc(eff[7])}</div>`+
+    `<div><span>数值</span>${eff[6]}</div></div>`;
+   if(eff[3])html+=`<div class="muted" style="margin-top:6px">${esc(eff[3])}</div>`;
+  }else if(pillDesc(p,mp)){
+   html+=`<div class="muted" style="margin-top:4px">${esc(pillDesc(p,mp))}</div>`;
+  }
+  const comp=compById.has(p[0])?compById.get(p[0]):-1;
+  const steps=(mp.routes||{})[String(comp)]||[];
+  if(mp.main!==undefined&&comp>=0){
+   if(comp===mp.main){
+    html+=`<div class="route"><span>传送</span>无需传送，与你出发的区域连通</div>`;
+   }else{
+    if(steps.length){
+     html+=`<div class="route"><span>传送 ${steps.length} 次</span>`+steps.map(([cfg,x1,y1,x2,y2])=>{
+      const name=((mp.portals||{})[String(cfg)]||[])[0]||('传送口 '+cfg);
+      return `<button class="route-item" data-x="${x1}" data-y="${y1}">${esc(name)}`+
+       `<i>${Math.round(x1)},${Math.round(y1)} → ${Math.round(x2)},${Math.round(y2)}</i></button>`;
+     }).join('')+`</div>`;
+    }else{
+     html+=`<div class="route"><span>传送</span>这一片没有连通传送口，暂时过不去</div>`;
+    }
+   }
+  }
+  if(p[1]===5||p[1]===6){
+   const other=mp.pois.find(q=>(q[1]===5||q[1]===6)&&q[10]===p[10]&&q[0]!==p[0]);
+   if(other)html+=`<div class="route"><span>${p[1]===5?'出口':'入口'}</span>`+
+    `${p[1]===5?'穿过这里就是':'从这里可以回到'} ${Math.round(other[6])},${Math.round(other[7])}`+
+    `<button class="route-item" data-x="${other[6]}" data-y="${other[7]}">定位</button></div>`;
+  }
+  $('pillinfo').innerHTML=html;
+  drawRoute(comp>=0&&comp!==mp.main?steps:[]);
+  ring.setAttribute('cx',p[6]/ts);ring.setAttribute('cy',p[7]/ts);ring.style.display='';
+ }
+ // 筛选（类型、五行、效果都可多选）
+ const chips=$('pillchips'),elems=$('pillelems'),keys=$('pillkeys'),mapbox=cv.parentElement;
+ const groupCount={};Object.keys(PILL_GROUPS).forEach(k=>{
+  groupCount[k]=mp.pois.filter(p=>PILL_GROUPS[k].includes(p[1])).length});
+ const keyCount={};mp.pois.forEach(p=>{
+  const text=pillText(p,mp);if(!text)return;
+  PILL_KEYWORDS.forEach(k=>{if(text.includes(k))keyCount[k]=(keyCount[k]||0)+1});
+ });
+ let fogOn=fogLayer?store.get('worldapart.pill.fog.v1',false)===true:false;
+ if(fogLayer)mapbox.classList.toggle('showfog',fogOn);
+ function renderChips(){
+  const keys=Object.keys(PILL_GROUPS);
+  const all=pillFilter.types.length===keys.length;
+  chips.innerHTML=`<button class="chip${all?' on':''}" data-all="1">${all?'全不选':'全选'}</button>`+
+   keys.map(k=>`<button class="chip${pillFilter.types.includes(k)?' on':''}" data-chip="${k}">${PILL_LABELS[k]}<i>${groupCount[k]}</i></button>`).join('')+
+   (fogLayer?`<button class="chip${fogOn?' on':''}" data-fog="1">迷雾</button>`:'');
+ }
+ function renderElems(){
+  const all=pillFilter.elements.length===5;
+  elems.innerHTML=`<span class="chip-label">五行</span><button class="chip${all?' on':''}" data-eall="1">${all?'全不选':'全选'}</button>`+
+   [1,2,3,4,5].map(v=>`<button class="chip${pillFilter.elements.includes(String(v))?' on':''}" data-elem="${v}">${PILL_ELEMENT[v]}<i>${elemCounts[v]||0}</i></button>`).join('');
+ }
+ function renderKeys(){
+  keys.innerHTML=`<span class="chip-label">效果</span>`+
+   PILL_KEYWORDS.filter(k=>keyCount[k]).map(k=>
+    `<button class="chip${pillFilter.keywords.includes(k)?' on':''}" data-key="${k}">${k}<i>${keyCount[k]}</i></button>`).join('');
+ }
+ chips.onclick=e=>{
+  const btn=e.target.closest('button');if(!btn)return;if(btn.dataset.all){
+   const all=pillFilter.types.length===Object.keys(PILL_GROUPS).length;
+   pillFilter.types=all?[]:Object.keys(PILL_GROUPS);
+   renderChips();applyFilter();return;
+  }
+  if(btn.dataset.fog){
+   fogOn=!fogOn;mapbox.classList.toggle('showfog',fogOn);
+   store.set('worldapart.pill.fog.v1',fogOn);renderChips();return;
+  }
+  const key=btn.dataset.chip;if(!key)return;
+  pillFilter.types=pillFilter.types.includes(key)?pillFilter.types.filter(x=>x!==key):pillFilter.types.concat(key);
+  renderChips();applyFilter();
+ };
+ const mapChips=$('pillmaps');
+ if(mapChips)mapChips.onclick=e=>{
+  const btn=e.target.closest('[data-map]');if(!btn)return;
+  store.set('worldapart.pill.map.v1',+btn.dataset.map);initPill();
+ };
+ elems.onclick=e=>{
+  const btn=e.target.closest('button');if(!btn)return;
+  if(btn.dataset.eall){
+   const all=pillFilter.elements.length===5;
+   pillFilter.elements=all?[]:['1','2','3','4','5'];
+   renderElems();applyFilter();return;
+  }
+  const value=btn.dataset.elem;if(value===undefined)return;
+  pillFilter.elements=pillFilter.elements.includes(value)?pillFilter.elements.filter(x=>x!==value):pillFilter.elements.concat(value);
+  renderElems();applyFilter();
+ };
+ keys.onclick=e=>{
+  const btn=e.target.closest('button');if(!btn)return;
+  const key=btn.dataset.key;if(!key)return;
+  pillFilter.keywords=pillFilter.keywords.includes(key)?pillFilter.keywords.filter(x=>x!==key):pillFilter.keywords.concat(key);
+  renderKeys();applyFilter();
+ };
+ renderChips();renderElems();renderKeys();
+ $('pillq').value=pillFilter.q;
+ $('pillq').oninput=e=>{pillFilter.q=e.target.value;applyFilter()};
+ function applyFilter(){
+  const matched=[];
+  mp.pois.forEach((p,idx)=>{
+   const ok=pillMatch(p,mp);
+   dots[idx].classList.toggle('off',!ok);
+   if(ok)matched.push(p);
+  });
+  // 丹方优先、品阶高的靠前，方便先挑强力丹方
+  matched.sort((a,b)=>a[1]!==b[1]?(a[1]===2?-1:b[1]===2?1:0):a[1]===2?b[3]-a[3]:0);
+  $('pilllist').innerHTML=matched.slice(0,200).map(p=>{
+   const isRecipe=p[1]===2;
+   const rid=isRecipe?String((mp.pool||[])[p[5]]||''):'';
+   const done=isRecipe?learned.has(rid):consumed.has(p[0]);
+   const sub=isRecipe?`${PILL_ELEMENT[p[2]]||''}·${p[3]||0}阶`
+    :(p[1]===1?((mp.effects||{})[String(p[4])]||[])[7]||'丹方属性':(PILL_TYPE[p[1]]||''));
+   const comp=compById.has(p[0])?compById.get(p[0]):-1;
+   const tag=mp.main!==undefined&&comp>=0&&comp!==mp.main?' · 遁':'';
+   return `<div class="pill-item${done?' done':''}" data-id="${p[0]}">`+
+    `<i class="dotmark" style="background:${poiFill(p)}"></i>`+
+    `<span class="nm">${esc(pillName(p,mp))}</span><span class="tp">${esc(sub+tag)}</span></div>`;
+  }).join('')||'<div class="empty" style="border:0">没有匹配的拾取点</div>';
+  $('pilllist').onclick=e=>{
+   const it=e.target.closest('[data-id]');if(!it)return;
+   const p=mp.pois.find(x=>String(x[0])===it.dataset.id);
+   if(p)showPoi(p);
+  };
+ }
+ applyFilter();
+ // 丹方手记
+ const manual=st.manual||[];
+ if(manual.length){
+  const recipePoi={};
+  mp.pois.forEach(p=>{if(p[1]===2){const rid=(mp.pool||[])[p[5]];if(rid)recipePoi[String(rid)]=p}});
+  $('pillmanual').innerHTML=manual.map(r=>`<div class="manual-item" data-recipe="${esc(String(r.id))}">`+
+   `<span class="nm">${esc(r.name)}</span>`+
+   `<span class="tag">${esc(PILL_ELEMENT[r.element]||'')}${r.tier?`·${r.tier}阶`:''}</span>`+
+   `<span class="tag">${r.grade} 品</span><span class="tag">丹毒 ${r.toxin}</span>`+
+   `<span class="tag">药效 ${(r.effects||[]).length}</span></div>`).join('');
+  $('pillmanual').onclick=e=>{
+   const it=e.target.closest('[data-recipe]');if(!it)return;
+   const p=recipePoi[it.dataset.recipe];
+   if(p)showPoi(p);
+   else $('pillinfo').innerHTML='该丹方在当前盘面上没有固定拾取点';
+  };
+ }
+}
+$('warnings').innerHTML=(DATA.warnings||[]).map(esc).join('<br>');initTabs();renderBedroom();initTalent();initItems();initPill();
+
 let polledVersion=INITIAL_VERSION;setInterval(()=>{const script=document.createElement('script');script.src='仙友助手版本.js?t='+Date.now();script.onload=()=>{const next=window.PROGRESS_VERSION||'';if(next&&next!==polledVersion){location.reload();return}polledVersion=next||polledVersion;script.remove()};script.onerror=()=>script.remove();document.head.appendChild(script)},3000);
 </script></body></html>"""
 
@@ -831,7 +1313,7 @@ let polledVersion=INITIAL_VERSION;setInterval(()=>{const script=document.createE
 def build_html(payload):
     data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     data = data.replace("</", "<\\/").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
-    return HTML_TEMPLATE.replace("__CSS__", CSS).replace("__DATA__", data)
+    return HTML_TEMPLATE.replace("__CSS__", CSS).replace("__VER__", APP_VERSION).replace("__DATA__", data)
 
 
 def _atomic_text(path, text):
@@ -861,7 +1343,8 @@ def disk_version():
 
 def write_outputs(payload):
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    version = hashlib.sha256((canonical + "\0" + CSS + "\0" + HTML_TEMPLATE).encode("utf-8")).hexdigest()
+    version = hashlib.sha256(
+        (canonical + "\0" + CSS + "\0" + HTML_TEMPLATE + "\0" + APP_VERSION).encode("utf-8")).hexdigest()
     previous = disk_version()
     changed = version != previous or not os.path.exists(OUT_HTML)
     if changed:
@@ -881,6 +1364,13 @@ def console_summary(payload):
             print("NPC天赋：%d 位 NPC，%d 个槽位，已解锁 %d 个" % (
                 len(rows), sum(len(r["slots"]) for r in rows),
                 sum(1 for r in rows for s in r["slots"] if s["unlocked"])))
+        elif name == "pill":
+            pill_map = (rows.get("map") or {}) if isinstance(rows, dict) else {}
+            maps = pill_map.get("maps") or []
+            pois = maps[0].get("pois") or [] if maps else []
+            print("炼丹：%s 级，%d 张丹方手记，盘面 %d 张 / %d 个拾取点（已拾取 %d）" % (
+                rows.get("level", 0), len(rows.get("manual") or []), len(maps), len(pois),
+                len(rows.get("consumed") or [])))
         else:
             catalog = {str(t["id"]): t for t in module.get("catalog") or []}
             pairs = sum(len(r["items"]) for r in rows)
@@ -900,13 +1390,14 @@ def settings_menu():
         print("  1. 十八摸进度：%s" % ("开启" if cfg["modules"]["bedroom"] else "关闭"))
         print("  2. NPC天赋：%s" % ("开启" if cfg["modules"]["talent"] else "关闭"))
         print("  3. NPC物品：%s" % ("开启" if cfg["modules"]["items"] else "关闭"))
-        print("  4. 重新设置解密存档目录")
+        print("  4. 炼丹：%s" % ("开启" if cfg["modules"]["pill"] else "关闭"))
+        print("  5. 重新设置解密存档目录")
         print("  0. 保存并退出")
         choice = input("请选择: ").strip()
-        if choice in ("1", "2", "3"):
-            name = {"1": "bedroom", "2": "talent", "3": "items"}[choice]
+        if choice in ("1", "2", "3", "4"):
+            name = {"1": "bedroom", "2": "talent", "3": "items", "4": "pill"}[choice]
             cfg["modules"][name] = not cfg["modules"][name]
-        elif choice == "4":
+        elif choice == "5":
             path = input("把 BepInEx\\decrypted 的路径粘贴到这里: ").strip().strip('"')
             if os.path.isdir(path):
                 cfg["decrypted_dir"] = os.path.normpath(path)
@@ -944,7 +1435,7 @@ def main():
             signature = state_signature(dec, cfg)
             if signature != last_signature or not os.path.exists(OUT_HTML):
                 payload = render(dec, cfg) if dec or not any(cfg["modules"].values()) else {
-                    "enabled": [n for n in ("bedroom", "talent", "items") if cfg["modules"][n]],
+                    "enabled": [n for n in ("bedroom", "talent", "items", "pill") if cfg["modules"][n]],
                     "modules": {}, "warnings": ["未设置解密存档目录，请重新安装或运行功能设置。"],
                 }
                 version, changed = write_outputs(payload)
