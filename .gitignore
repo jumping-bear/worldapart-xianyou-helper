@@ -3,7 +3,11 @@
 !.gitignore
 !.gitattributes
 !touch_progress.py
+!meta_update.py
 !bedroom_meta.json
+!talent_meta.json
+!TouchProgress.spec
+!功能设置.bat
 !TouchProgress_最终版.zip
 !SaveDecryptProbe/
 !TouchProgress_v1.1/
@@ -15,5 +19,6 @@ SaveDecryptProbe/*
 
 # 排除本机配置和生成的进度页面
 TouchProgress_v1.1/config.json
-TouchProgress_v1.1/进度.html
-TouchProgress_v1.1/进度-示例.html
+TouchProgress_v1.1/仙友助手.html
+TouchProgress_v1.1/仙友助手版本.js
+TouchProgress_v1.1/仙友助手-示例.html

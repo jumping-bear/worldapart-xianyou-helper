@@ -98,16 +98,35 @@ try {
 }
 
 $configPath = Join-Path $here 'config.json'
-$configJson = @{ decrypted_dir = (Join-Path $game 'BepInEx\decrypted') } | ConvertTo-Json -Compress
+$settings = @{
+    decrypted_dir = (Join-Path $game 'BepInEx\decrypted')
+    game_dir = $game
+    modules = @{ bedroom = $true; talent = $true }
+}
+if (Test-Path $configPath) {
+    try {
+        $old = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($old.modules) {
+            foreach ($name in @('bedroom', 'talent')) {
+                $property = $old.modules.PSObject.Properties[$name]
+                if ($null -ne $property) { $settings.modules[$name] = [bool]$property.Value }
+            }
+        }
+    } catch {
+        Write-Host '旧配置无法读取，将保留默认模块开关。' -ForegroundColor Yellow
+    }
+}
+$configJson = $settings | ConvertTo-Json -Depth 4 -Compress
 [System.IO.File]::WriteAllText($configPath, $configJson, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host ''
 Write-Host '安装完成！接下来：' -ForegroundColor Cyan
 Write-Host '  1) 启动游戏，停在主菜单约 20 秒（会自动导出存档副本）'
-Write-Host '  2) 双击 TouchProgress.exe 查看进度（会打开一个网页）'
+Write-Host '  2) 双击 仙友助手.exe 查看十八摸或 NPC 天赋（会打开一个网页）'
 Write-Host ''
 Write-Host '平时每 60 秒自动同步；保存游戏后按 F8 可立即强制刷新。' -ForegroundColor DarkGray
-Write-Host '查询工具的黑窗口保持开启，网页会自动更新。' -ForegroundColor DarkGray
+Write-Host '查询工具的黑窗口保持开启，网页会在数据变化时自动更新。' -ForegroundColor DarkGray
+Write-Host '可用「功能设置.bat」单独开关十八摸或 NPC 天赋。' -ForegroundColor DarkGray
 Write-Host '卸载：删掉 BepInEx\plugins\SaveDecryptProbe 文件夹即可。' -ForegroundColor DarkGray
 
 
