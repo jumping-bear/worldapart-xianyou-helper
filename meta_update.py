@@ -12,12 +12,27 @@ CACHE_SCHEMA = 3
 TABLES = {
     "tbnpcbasecfg", "tbnpcbedroom", "tbscenepresentationinteraction",
     "tbscenepresentationaction", "tbspace", "tbnpctalent", "tbcultivaterealm",
+    "tbitem", "tbsteal", "tbitemtype",
 }
 MODULE_TABLES = {
     "bedroom": {"tbnpcbasecfg", "tbnpcbedroom", "tbscenepresentationinteraction",
                 "tbscenepresentationaction"},
     "talent": {"tbnpcbasecfg", "tbspace", "tbnpctalent", "tbcultivaterealm"},
+    "items": {"tbnpcbasecfg", "tbspace", "tbcultivaterealm", "tbitem", "tbsteal", "tbitemtype"},
 }
+MODULE_NAMES = {"bedroom": "十八摸", "talent": "NPC天赋", "items": "NPC物品"}
+
+
+def resolve_table(name):
+    """把资源表名映射到规范名；精确匹配优先，其次取最长前缀，兼容后续版本的表名后缀变化。"""
+    name = str(name or "").lower()
+    if name in TABLES:
+        return name
+    best = ""
+    for known in TABLES:
+        if name.startswith(known) and len(known) > len(best):
+            best = known
+    return best
 SLOT_LABELS = {
     "Face": "脸", "Waist": "腰", "Foot": "足", "Leg": "腿", "Armpit": "腋下",
     "Fan": "团扇", "Feather": "灵羽", "Gourd": "灵泉葫芦", "Grass": "草叶",
@@ -109,8 +124,8 @@ def inspect_game(game_dir):
         if not isinstance(asset, dict):
             continue
         asset_path = str(asset.get("AssetPath") or "")
-        table = os.path.basename(asset_path).split(".", 1)[0].lower()
-        if table in TABLES and asset_path.lower().endswith(".json"):
+        table = resolve_table(os.path.basename(asset_path).split(".", 1)[0])
+        if table and asset_path.lower().endswith(".json"):
             try:
                 bundle_ids.add(int(asset["BundleID"]))
             except (KeyError, TypeError, ValueError):
@@ -156,8 +171,8 @@ def _extract_tables(inspection):
         if not isinstance(asset, dict):
             continue
         path = str(asset.get("AssetPath") or "")
-        name = os.path.basename(path).split(".", 1)[0].lower()
-        if name in TABLES and path.lower().endswith(".json"):
+        key = resolve_table(os.path.basename(path).split(".", 1)[0])
+        if key and path.lower().endswith(".json"):
             try:
                 bid = int(asset["BundleID"])
             except (KeyError, TypeError, ValueError):
@@ -178,8 +193,8 @@ def _extract_tables(inspection):
             if obj.type.name != "TextAsset":
                 continue
             item = obj.read()
-            name = str(item.m_Name).lower()
-            if name not in TABLES or name in tables:
+            name = resolve_table(str(item.m_Name))
+            if not name or name in tables:
                 continue
             raw = item.m_Script
             if isinstance(raw, str):
@@ -252,11 +267,15 @@ def build_bedroom(tables):
     return result
 
 
-def build_talent(tables):
+def build_realms(tables):
     realms = {"0": "凡人"}
     for row in _rows(tables["tbcultivaterealm"]):
         if isinstance(row, dict) and row.get("id") is not None:
             realms[str(row["id"])] = _text(row.get("realm_name")) or ("境界 %s" % row["id"])
+    return realms
+
+
+def build_spaces(tables):
     spaces = {}
     for row in _rows(tables["tbspace"]):
         if isinstance(row, dict) and row.get("id") is not None:
@@ -287,6 +306,12 @@ def build_talent(tables):
         path = space_path(space_id) or [space["name"]]
         space["region"] = path[0]
         space["path"] = path
+    return spaces
+
+
+def build_talent(tables):
+    realms = build_realms(tables)
+    spaces = build_spaces(tables)
     npcs = {}
     for row in _rows(tables["tbnpcbasecfg"]):
         if not isinstance(row, dict) or row.get("id") is None:
@@ -331,13 +356,70 @@ def build_talent(tables):
     return {"schema": SCHEMA, "talents": talents, "npcs": npcs, "spaces": spaces, "realms": realms}
 
 
+def build_items(tables):
+    """物品只读元数据：名称、类型、品质、偷窃参数和持有者的可偷状态。"""
+    item_types = {}
+    for row in _rows(tables["tbitemtype"]):
+        if isinstance(row, dict) and row.get("id") is not None:
+            item_types[str(row["id"])] = _text(row.get("typeName"))
+    steals = {str(r.get("id")): r for r in _rows(tables["tbsteal"]) if isinstance(r, dict)}
+    items = {}
+    for row in _rows(tables["tbitem"]):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        rule = steals.get(str(row.get("steal_id"))) if row.get("steal_id") else None
+        steal = None
+        if rule:
+            steal = {
+                "rate": int(round(float(rule.get("rate_base") or 0) * 100)),
+                "count": rule.get("steal_count") or 1,
+                "kill": bool(rule.get("trigger_kill")),
+                "intimacy": rule.get("intimacy_delta_self") or 0,
+                "alignment": rule.get("alignment_delta_success") or 0,
+            }
+        items[str(row["id"])] = {
+            "name": _text(row.get("itemName")) or ("物品 %s" % row["id"]),
+            "type": item_types.get(str(row.get("itemType")), "") or "未分类",
+            "quality": row.get("quality"),
+            "price": row.get("price"),
+            "steal": steal,
+        }
+    realms = build_realms(tables)
+    npc_rows = [r for r in _rows(tables["tbnpcbasecfg"]) if isinstance(r, dict)]
+    # 若整张表都没有 can_steal 字段，视为该版本取消了这层限制，改由物品参数单独判定。
+    has_flag = any("can_steal" in row for row in npc_rows)
+    npcs = {}
+    for row in npc_rows:
+        if row.get("id") is None:
+            continue
+        layer = row.get("propLayerId")
+        npcs[str(row["id"])] = {
+            "name": _text(row.get("npcName")) or _text(row.get("npcTitle")) or ("#%s" % row["id"]),
+            "realm": realms.get(str(layer or 0)) or _text(row.get("layerZeroShowText")) or "凡人",
+            "can_steal": bool(row.get("can_steal", True)) if has_flag else True,
+        }
+    if not items:
+        raise ValueError("物品配置为空")
+    return {"schema": SCHEMA, "items": items, "npcs": npcs,
+            "spaces": build_spaces(tables), "realms": realms}
+
+
+BUILTIN_FILES = {
+    "bedroom": "bedroom_meta.json", "talent": "talent_meta.json", "items": "items_meta.json",
+}
+BUILDERS = {"bedroom": build_bedroom, "talent": build_talent, "items": build_items}
+
+
 def _builtin(directory, module):
-    name = "bedroom_meta.json" if module == "bedroom" else "talent_meta.json"
-    data = _read_json(os.path.join(directory, name))
-    if module == "bedroom" and not isinstance(data, list):
-        raise ValueError("十八摸内置快照无效")
-    if module == "talent" and (not isinstance(data, dict) or not isinstance(data.get("talents"), list)):
-        raise ValueError("天赋内置快照无效")
+    data = _read_json(os.path.join(directory, BUILTIN_FILES[module]))
+    if module == "bedroom":
+        valid = isinstance(data, list)
+    elif module == "talent":
+        valid = isinstance(data, dict) and isinstance(data.get("talents"), list)
+    else:
+        valid = isinstance(data, dict) and isinstance(data.get("items"), dict)
+    if not valid:
+        raise ValueError("%s内置快照无效" % MODULE_NAMES.get(module, module))
     return data
 
 
@@ -383,7 +465,7 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
                     missing = MODULE_TABLES[module] - set(tables)
                     if missing:
                         raise ValueError("缺少配置表：%s" % ", ".join(sorted(missing)))
-                    data = build_bedroom(tables) if module == "bedroom" else build_talent(tables)
+                    data = BUILDERS[module](tables)
                     result[module] = data
                     cache["modules"][module] = {
                         "fingerprint": inspection["fingerprint"], "generated_at": int(time.time()), "data": data,
@@ -422,9 +504,15 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
                 report["modules"][module] = {"source": "builtin", "label": "内置快照"}
             except Exception as e:
                 errors[module] = str(e)
-                result[module] = [] if module == "bedroom" else {
-                    "schema": SCHEMA, "talents": [], "npcs": {}, "spaces": {}, "realms": {"0": "凡人"},
-                }
+                if module == "bedroom":
+                    fallback = []
+                elif module == "talent":
+                    fallback = {"schema": SCHEMA, "talents": [], "npcs": {}, "spaces": {},
+                                "realms": {"0": "凡人"}}
+                else:
+                    fallback = {"schema": SCHEMA, "items": {}, "npcs": {}, "spaces": {},
+                                "realms": {"0": "凡人"}}
+                result[module] = fallback
                 report["modules"][module] = {"source": "missing", "label": "无可用配置"}
         if module in errors:
             report["modules"][module]["warning"] = errors[module]
@@ -433,7 +521,7 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
     for module, message in errors.items():
         if module in modules:
             report["warnings"].append("%s 配置更新失败，已使用兜底数据：%s" % (
-                "十八摸" if module == "bedroom" else "NPC天赋", message))
+                MODULE_NAMES.get(module, module), message))
     return result, report
 
 
@@ -442,6 +530,7 @@ def export_snapshots(game_dir, output_dir):
     tables = _extract_tables(inspection)
     _atomic_json(os.path.join(output_dir, "bedroom_meta.json"), build_bedroom(tables))
     _atomic_json(os.path.join(output_dir, "talent_meta.json"), build_talent(tables))
+    _atomic_json(os.path.join(output_dir, "items_meta.json"), build_items(tables))
     print("已导出当前配置快照：%s" % output_dir)
 
 

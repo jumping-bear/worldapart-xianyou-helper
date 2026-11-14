@@ -19,7 +19,7 @@ BUILTIN_DIR = getattr(sys, "_MEIPASS", HERE)
 CFG = os.path.join(HERE, "config.json")
 OUT_HTML = os.path.join(HERE, "仙友助手.html")
 OUT_VERSION = os.path.join(HERE, "仙友助手版本.js")
-DEFAULT_MODULES = {"bedroom": True, "talent": True}
+DEFAULT_MODULES = {"bedroom": True, "talent": True, "items": True}
 
 
 # ---------------- MessagePack 解码（最小实现） ----------------
@@ -312,6 +312,69 @@ def scan_talent(obj, meta):
     return rows
 
 
+def bag_items(bag):
+    """取出背包持有关系 [(item_id, count)]，兼容列表与字典两种存档形态。"""
+    entries = bag.get("items") if isinstance(bag, dict) else bag
+    result = []
+    if isinstance(entries, list):
+        for entry in entries:
+            if isinstance(entry, (list, tuple)) and len(entry) >= 2 and isinstance(entry[1], dict):
+                entry = entry[1]
+            if not isinstance(entry, dict):
+                continue
+            item_id = entry.get("item_id", entry.get("itemId", entry.get("id")))
+            if item_id is None:
+                continue
+            result.append([item_id, entry.get("count") or entry.get("num") or 1])
+    elif isinstance(entries, dict):
+        for key, entry in entries.items():
+            if isinstance(entry, dict):
+                item_id = entry.get("item_id", entry.get("itemId", entry.get("id", key)))
+                result.append([item_id, entry.get("count") or entry.get("num") or 1])
+            else:
+                try:
+                    result.append([int(key), int(entry)])
+                except (TypeError, ValueError):
+                    continue
+    return result
+
+
+def scan_items(obj, meta):
+    """收集 NPC 背包持有关系；是否可偷由 NPC 的 can_steal 和物品 steal 参数共同决定。"""
+    npc_meta = meta.get("npcs") or {}
+    space_meta = meta.get("spaces") or {}
+    spaces = obj.get("spaces") or {}
+    rows = []
+    for uid, npc in (obj.get("npcs") or {}).items():
+        if not isinstance(npc, dict):
+            continue
+        held = bag_items(npc.get("bag"))
+        if not held:
+            continue
+        merged = {}
+        for item_id, count in held:
+            key = str(item_id)
+            merged[key] = merged.get(key, 0) + (count or 1)
+        held = [[int(key) if key.isdigit() else key, total] for key, total in merged.items()]
+        cfg = npc.get("npcCfgId")
+        info = npc_meta.get(str(cfg)) or {}
+        space = spaces.get(npc.get("currentSpaceUuid")) or {}
+        space_info = space_meta.get(str(space.get("spaceId"))) or {}
+        path = space_info.get("path") or []
+        location = space_info.get("name") or "未知地点"
+        rows.append({
+            "uid": str(uid), "cfg": cfg,
+            "who": info.get("name") or ("#%s" % cfg),
+            "realm": info.get("realm") or "",
+            "location": location, "region": space_info.get("region") or "",
+            "location_path": " / ".join(path) or location,
+            "can_steal": bool(info.get("can_steal")),
+            "items": held,
+        })
+    rows.sort(key=lambda r: (str(r["who"]), str(r["uid"])))
+    return rows
+
+
 def _source_payload(path, stamp, original, rows, meta_info):
     return {
         "rows": rows, "src": os.path.basename(path) if path else "",
@@ -323,10 +386,10 @@ def _source_payload(path, stamp, original, rows, meta_info):
 
 
 def render(dec, cfg):
-    enabled = [name for name in ("bedroom", "talent") if cfg["modules"].get(name)]
+    enabled = [name for name in ("bedroom", "talent", "items") if cfg["modules"].get(name)]
     payload = {"enabled": enabled, "modules": {}, "warnings": []}
     if not enabled:
-        payload["warnings"].append("两个查询模块都已关闭。请运行“功能设置.bat”重新开启。")
+        payload["warnings"].append("查询模块都已关闭。请运行“功能设置.bat”重新开启。")
         return payload
     game_dir = meta_update.game_dir_from_config(cfg, dec)
     if game_dir and game_dir != cfg.get("game_dir"):
@@ -336,58 +399,59 @@ def render(dec, cfg):
     payload["warnings"].extend(report.get("warnings") or [])
     bedroom_meta = {int(r["cfg"]): r for r in metadata.get("bedroom", [])
                     if isinstance(r, dict) and r.get("cfg") is not None}
-    talent_meta = metadata.get("talent") or {"talents": [], "npcs": {}, "spaces": {}, "realms": {}}
+    empty = {"items": {}, "npcs": {}, "spaces": {}, "realms": {"0": "凡人"}}
+    talent_meta = metadata.get("talent") or dict(empty, talents=[])
+    items_meta = metadata.get("items") or dict(empty)
     files = save_files(dec)
     originals = original_save_index(find_save_root())
     timed = [(path,) + source_time(path, originals) for path in files]
-    best_bedroom, latest_talent = None, None
+    best_bedroom, latest_talent, latest_items = None, None, None
     errors = []
 
-    if enabled == ["talent"]:
-        for path, stamp, original in sorted(timed, key=lambda x: x[1], reverse=True):
-            try:
-                with open(path, "rb") as f:
-                    obj = unpack(f.read())
-                if not isinstance(obj, dict) or not isinstance(obj.get("npcs"), dict):
-                    raise ValueError("存档缺少 NPC 数据")
-                rows = scan_talent(obj, talent_meta)
-                latest_talent = _source_payload(path, stamp, original, rows, report["modules"]["talent"])
-                break
-            except Exception as e:
-                errors.append("%s：%s" % (os.path.basename(path), e))
-    else:
-        for path, stamp, original in timed:
-            try:
-                with open(path, "rb") as f:
-                    obj = unpack(f.read())
-                if not isinstance(obj, dict) or not isinstance(obj.get("npcs"), dict):
-                    raise ValueError("存档缺少 NPC 数据")
-                if "bedroom" in enabled:
-                    rows = scan_bedroom(obj, bedroom_meta)
-                    score = sum(r["total"] for r in rows)
-                    if best_bedroom is None or score > best_bedroom[0]:
-                        best_bedroom = (score, _source_payload(
-                            path, stamp, original, rows, report["modules"]["bedroom"]))
-                if "talent" in enabled:
-                    rows = scan_talent(obj, talent_meta)
-                    if latest_talent is None or stamp > latest_talent["stamp"]:
-                        latest_talent = _source_payload(path, stamp, original, rows, report["modules"]["talent"])
-            except Exception as e:
-                errors.append("%s：%s" % (os.path.basename(path), e))
+    for path, stamp, original in timed:
+        try:
+            with open(path, "rb") as f:
+                obj = unpack(f.read())
+            if not isinstance(obj, dict) or not isinstance(obj.get("npcs"), dict):
+                raise ValueError("存档缺少 NPC 数据")
+            if "bedroom" in enabled:
+                rows = scan_bedroom(obj, bedroom_meta)
+                score = sum(r["total"] for r in rows)
+                if best_bedroom is None or score > best_bedroom[0]:
+                    best_bedroom = (score, _source_payload(
+                        path, stamp, original, rows, report["modules"]["bedroom"]))
+            if "talent" in enabled and (latest_talent is None or stamp > latest_talent["stamp"]):
+                latest_talent = _source_payload(
+                    path, stamp, original, scan_talent(obj, talent_meta), report["modules"]["talent"])
+            if "items" in enabled and (latest_items is None or stamp > latest_items["stamp"]):
+                latest_items = _source_payload(
+                    path, stamp, original, scan_items(obj, items_meta), report["modules"]["items"])
+        except Exception as e:
+            errors.append("%s：%s" % (os.path.basename(path), e))
 
     if "bedroom" in enabled:
         payload["modules"]["bedroom"] = best_bedroom[1] if best_bedroom else _source_payload(
             "", 0, "", [], report["modules"]["bedroom"])
     if "talent" in enabled:
-        payload["modules"]["talent"] = latest_talent or _source_payload("", 0, "", [], report["modules"]["talent"])
-        payload["modules"]["talent"]["talents"] = talent_meta.get("talents") or []
-        payload["modules"]["talent"]["realms"] = talent_meta.get("realms") or {"0": "凡人"}
+        module = latest_talent or _source_payload("", 0, "", [], report["modules"]["talent"])
+        module["talents"] = talent_meta.get("talents") or []
+        module["realms"] = talent_meta.get("realms") or {"0": "凡人"}
+        payload["modules"]["talent"] = module
+    if "items" in enabled:
+        module = latest_items or _source_payload("", 0, "", [], report["modules"]["items"])
+        catalog = items_meta.get("items") or {}
+        used = {str(item_id) for row in module["rows"] for item_id, _count in row["items"]}
+        module["catalog"] = [dict(catalog[key], id=int(key)) for key in sorted(used, key=int)
+                             if key in catalog]
+        module["realms"] = items_meta.get("realms") or {"0": "凡人"}
+        payload["modules"]["items"] = module
     if not files:
         payload["warnings"].append("还没有可用存档副本，请先启动游戏并等待插件导出。")
     elif errors:
         payload["warnings"].append("跳过 %d 份无法解析的副本。" % len(errors))
         payload["errors"] = errors[:5]
-    if ("bedroom" in enabled and best_bedroom is None) or ("talent" in enabled and latest_talent is None):
+    if ("bedroom" in enabled and best_bedroom is None) or \
+            (("talent" in enabled and latest_talent is None) or ("items" in enabled and latest_items is None)):
         payload["warnings"].append("暂未找到有效存档，请确认插件已导出 gameworld 副本。")
     return payload
 
@@ -402,12 +466,15 @@ CSS += r"""
 CSS += r"""
 .search-panel{background:#171b23;border:1px solid #293140;border-radius:12px;padding:15px;margin:16px 0 12px}.search-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.search-field>span,.filter-field>span,.advanced-grid label>span{display:block;color:#aeb8c7;font-size:12px;margin:0 0 7px}.search-field:first-child>span{color:#d9c785}.search-field input,.filter-field select,.advanced-grid select{width:100%;background:#10141a;border:1px solid #303949;border-radius:8px;color:#e8eaed;padding:11px 12px;font-size:13px;outline:none}.search-field input:focus,.filter-field select:focus,.advanced-grid select:focus{border-color:#698c78;box-shadow:0 0 0 2px #263b34}.search-field input::placeholder{color:#667182}.filter-bar{display:grid;grid-template-columns:minmax(150px,1fr) minmax(190px,1.35fr) auto;align-items:end;gap:12px;margin:0 2px 14px}.filter-actions{display:flex;gap:8px}.filter-button{background:#1b222c;border:1px solid #35404f;border-radius:8px;color:#c6cfda;padding:10px 14px;min-height:40px;cursor:pointer;white-space:nowrap;font-size:12px}.filter-button:hover{background:#25303d;border-color:#526175}.filter-button.primary{color:#e2d7ac;border-color:#655d3d}.filter-count{color:#e8c76d}.advanced-filters{background:#141820;border:1px solid #293140;border-radius:10px;margin:0 0 14px;padding:0 13px}.advanced-filters summary{cursor:pointer;list-style:none;color:#9da8b7;font-size:12px;padding:11px 1px}.advanced-filters summary::-webkit-details-marker{display:none}.advanced-filters summary:before{content:"›";display:inline-block;margin-right:7px;transition:.15s}.advanced-filters[open] summary:before{transform:rotate(90deg)}.advanced-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;border-top:1px solid #252c37;padding:13px 0 15px}.owner summary .location{line-height:1.6;text-align:right}.category-badge{color:#d8c78f}.search-note{color:#758092;font-size:11px;margin:10px 2px 0}@media(max-width:850px){.filter-bar{grid-template-columns:1fr 1fr}.filter-actions{grid-column:span 2}.advanced-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.owner summary .location{text-align:left}}@media(max-width:560px){.search-panel{padding:12px}.search-fields,.filter-bar,.advanced-grid{grid-template-columns:1fr}.filter-actions{grid-column:span 1}.filter-button{flex:1}.owner summary .location{width:100%;text-align:left}}
 """
+CSS += r"""
+.item-group{background:#15181f;border:1px solid #293140;border-radius:12px;margin:0 0 14px;overflow:hidden}.item-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:11px 12px 0}.sortbtn{background:#1b222c;border:1px solid #35404f;border-radius:7px;color:#9aa3b2;padding:5px 11px;font-size:11px;cursor:pointer}.sortbtn:hover{background:#25303d}.sortbtn.on{background:#263b34;border-color:#3d735b;color:#c9f5dd}.item-tools .meta{margin-left:auto;color:#778292;font-size:11px}.ratebar{width:62px;height:5px;border-radius:3px;background:#232833;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:6px}.ratebar i{display:block;height:100%;background:#4fbf83}.badge.deadly{background:#3a2126;color:#e88b82}.loadmore{display:block;width:calc(100% - 24px);margin:8px 12px 12px;background:#1b222c;border:1px dashed #35404f;border-radius:8px;color:#9aa3b2;padding:9px;font-size:12px;cursor:pointer}.loadmore:hover{background:#25303d;color:#c6cfda}.steal-detail{flex-basis:100%;color:#8b93a1;font-size:11px;line-height:1.7;margin-top:2px}.steal-detail b{color:#b4bdca;font-weight:600}.steal-detail .bad{color:#e88b82}.npc-card .slots{padding:0 14px 12px}.item-group>summary{list-style:none;cursor:pointer}.item-group>summary::-webkit-details-marker{display:none}.item-arrow{color:#6f7787;font-size:17px;transition:.15s;display:inline-block}.item-group[open] .item-arrow{transform:rotate(90deg)}.item-head{padding:16px 18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.item-title{font-size:19px;font-weight:650}.item-stat{margin-left:auto;color:#8b93a1;font-size:12px}.owner .badge.steal{background:#22392e;color:#8ee6b3}.owner .badge.nosteal{background:#2a2d33;color:#8b93a1}.steal-ok{color:#6edda2;font-size:12px;font-weight:600}.steal-risk{color:#e88b82}.filter-bar.four{grid-template-columns:minmax(140px,1fr) minmax(165px,1.3fr) minmax(125px,1fr) auto}@media(max-width:850px){.filter-bar.four{grid-template-columns:1fr 1fr}.filter-bar.four .filter-actions{grid-column:span 2}}@media(max-width:560px){.filter-bar.four{grid-template-columns:1fr}.filter-bar.four .filter-actions{grid-column:span 1}.item-head{padding:13px 12px}.item-title{font-size:17px}.item-stat{margin-left:0;width:100%}}
+"""
 
-HTML_TEMPLATE = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>不问凡尘 · 仙友助手</title><style>__CSS__</style></head><body><div class="wrap"><h1>不问凡尘 · 仙友助手</h1><div class="sub">只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。</div><div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div><section id="bedroom" class="panel"></section><section id="talent" class="panel"></section><div class="tip">游戏保存后按 F8 可立即导出副本，平时插件每 60 秒自动同步。本页仅在数据变化时自动刷新。<br>配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。若存档结构、加密或 Unity 格式大改，仍需更新工具。</div></div><script src="仙友助手版本.js"></script><script>
+HTML_TEMPLATE = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>不问凡尘 · 仙友助手</title><style>__CSS__</style></head><body><div class="wrap"><h1>不问凡尘 · 仙友助手</h1><div class="sub">只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。</div><div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div><section id="bedroom" class="panel"></section><section id="talent" class="panel"></section><section id="items" class="panel"></section><div class="tip">游戏保存后按 F8 可立即导出副本，平时插件每 60 秒自动同步。本页仅在数据变化时自动刷新。<br>配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。若存档结构、加密或 Unity 格式大改，仍需更新工具。</div></div><script src="仙友助手版本.js"></script><script>
 const INITIAL_VERSION=window.PROGRESS_VERSION||'';const DATA=__DATA__;
 const $=id=>document.getElementById(id);const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const labels={bedroom:'十八摸',talent:'NPC天赋'};let active=store.get('worldapart.active.tab.v2',DATA.enabled[0]||'');if(!DATA.enabled.includes(active))active=DATA.enabled[0]||'';
+const labels={bedroom:'十八摸',talent:'NPC天赋',items:'NPC物品'};let active=store.get('worldapart.active.tab.v2',DATA.enabled[0]||'');if(!DATA.enabled.includes(active))active=DATA.enabled[0]||'';
 function sourceHtml(m){return `<div class="source">存档：${esc(m.src||'暂无')} ｜ 原始更新：${esc(m.stamp_text)} ｜ 配置：${esc(m.config)}${m.config_warning?' ｜ '+esc(m.config_warning):''}</div>`}
 function showTab(name){active=name;store.set('worldapart.active.tab.v2',name);document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===name));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name))}
 function initTabs(){$('tabs').innerHTML=DATA.enabled.map(n=>`<button class="tab" data-tab="${n}">${labels[n]}</button>`).join('');document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>showTab(x.dataset.tab));if(!DATA.enabled.length){$('warnings').innerHTML=DATA.warnings.map(esc).join('<br>');return}showTab(active)}
@@ -523,7 +590,240 @@ function renderTalentList(){
  $('tresult').textContent=`筛选结果：${sorted.length} 项天赋，${npcSet.size} 位 NPC，${slotCount} 条槽位记录（共 ${m.rows.length} 位有天赋记录）`;
  $('tlist').innerHTML=cards.length?cards.join(''):'<div class="empty">没有符合组合筛选条件的天赋</div>';
 }
-$('warnings').innerHTML=(DATA.warnings||[]).map(esc).join('<br>');initTabs();renderBedroom();initTalent();
+const ITEM_KEY='worldapart.item.filters.v1';
+const ITEM_DEFAULTS={q:'',npc:'',region:'',location:'',type:'',quality:'',steal:''};
+let itemFilters=Object.assign({},ITEM_DEFAULTS,store.get(ITEM_KEY,{}));
+let itemCache=null;
+let itemRenderState={groups:{},q:'',npcQ:''};
+let itemSort=store.get('worldapart.item.sort.v1','rate');
+let itemPage={};
+function itemRateOf(o){return o.v.ok&&o.t.steal?o.t.steal.rate:-1}
+function itemSortOwners(owners){
+ const list=owners.slice();
+ list.sort((a,b)=>{
+  const okDiff=Number(b.v.ok)-Number(a.v.ok);
+  if(okDiff)return okDiff;
+  if(itemSort==='count'&&b.count!==a.count)return b.count-a.count;
+  const rateDiff=itemRateOf(b)-itemRateOf(a);
+  if(itemSort!=='name'&&rateDiff)return rateDiff;
+  if(itemSort==='rate'&&b.count!==a.count)return b.count-a.count;
+  return String(a.row.who).localeCompare(String(b.row.who),'zh-CN');
+ });
+ return list;
+}
+function stealDetailHtml(rule){
+ if(!rule)return '';
+ const parts=['一次最多 <b>'+rule.count+'</b> 个','善恶值 <b>'+rule.alignment+'</b>','好感 <b>'+rule.intimacy+'</b>'];
+ if(rule.kill)parts.push('<span class="bad">失手触发击杀</span>');
+ return '<span class="steal-detail">'+parts.join(' · ')+'</span>';
+}
+function itemOwnersHtml(iid){
+ const state=itemRenderState,group=state.groups[iid];
+ if(!group)return '';
+ const all=itemSortOwners(group.owners);
+ const limit=30*(itemPage[iid]||1),shown=all.slice(0,limit),rest=all.length-shown.length;
+ const owners=shown.map(o=>{
+  const badge=o.v.ok?'<span class="badge steal">可偷</span>':'<span class="badge nosteal">'+esc(o.v.label)+'</span>';
+  let rate='';
+  if(o.v.ok&&o.t.steal){
+   rate='<span class="steal-ok">'+o.t.steal.rate+'%<span class="ratebar"><i style="width:'+Math.max(0,Math.min(100,o.t.steal.rate))+'%"></i></span></span>';
+   if(o.t.steal.kill)rate+='<span class="badge deadly">致命</span>';
+  }
+  return '<details class="npc owner" data-uid="'+esc(o.row.uid)+'" data-item="'+esc(iid)+'"><summary><span class="who">'+hi(o.row.who,state.npcQ)+'</span>'+(o.row.realm?'<span class="badge">'+esc(o.row.realm)+'</span>':'')+badge+'<span class="badge">×'+esc(o.count)+'</span>'+rate+'<span class="location">'+esc(o.row.location_path||o.row.location||'未知地点')+'</span>'+stealDetailHtml(o.v.ok?o.t.steal:null)+'</summary><div class="slots"></div></details>';
+ }).join('');
+ const blocked=all.filter(o=>!o.v.ok).length;
+ const labels={rate:'按成功率从高到低',count:'按持有数量从多到少',name:'按 NPC 名称排序'};
+ const tools='<div class="item-tools">'
+  +['rate','count','name'].map(k=>'<button type="button" class="sortbtn'+(itemSort===k?' on':'')+'" data-sort="'+k+'">'+({rate:'成功率',count:'数量',name:'名称'})[k]+'</button>').join('')
+  +'<span class="meta">'+esc(labels[itemSort]||labels.rate)+'</span></div>';
+ const head='<div class="owners-label">'+group.stealable+' 位可偷'+(blocked?' · '+blocked+' 位不可偷':'')+'；点击 NPC 可在下方展开其全部持有物品</div>';
+ const more=rest?'<button type="button" class="loadmore" data-more="'+esc(iid)+'">显示更多（还有 '+rest+' 位）</button>':'';
+ return tools+head+owners+more;
+}
+function itemIndex(){
+ const m=DATA.modules.items;
+ if(!itemCache||itemCache.m!==m)itemCache={m:m,cat:Object.fromEntries((m.catalog||[]).map(t=>[String(t.id),t])),rows:new Map(m.rows.map(r=>[r.uid,r]))};
+ return itemCache;
+}
+function itemVerdict(row,t){
+ if(!row.can_steal)return{ok:false,label:'NPC 不可偷'};
+ if(!t.steal)return{ok:false,label:'物品不可偷'};
+ return{ok:true,label:'可偷'};
+}
+function itemRate(group){
+ const rates=group.owners.filter(o=>o.v.ok&&o.t.steal).map(o=>o.t.steal.rate);
+ return rates.length?rates.reduce((a,b)=>a+b,0)/rates.length:0;
+}
+function npcItemsHtml(uid,focus){
+ const idx=itemIndex(),row=idx.rows.get(uid);
+ if(!row)return '';
+ const list=(row.items||[]).map(pair=>{
+  const t=idx.cat[String(pair[0])]||{name:'物品 #'+pair[0],quality:0,type:''};
+  return{o:t,t:t,count:pair[1]||1,v:itemVerdict(row,t)};
+ });
+ list.sort((a,b)=>Number(b.v.ok)-Number(a.v.ok)||String(a.t.name).localeCompare(String(b.t.name),'zh-CN'));
+ return list.map(o=>{
+  const rule=o.t.steal,verdict=o.v.ok?'<span class="steal-ok">可偷</span>':'<span class="muted">'+esc(o.v.label)+'</span>';
+  const current=focus!==undefined&&focus!==null&&String(o.t.id)===String(focus);
+  const effect=o.v.ok&&rule?'<div class="effect">成功率 '+rule.rate+'% · 一次最多 '+rule.count+' 个 · 善恶值 '+rule.alignment+' · 好感 '+rule.intimacy+(rule.kill?' · <span class="steal-risk">失手触发击杀</span>':'')+'</div>':'';
+  return '<div class="slot'+(current?' focus':'')+'"><div class="slot-head"><span class="talent-name q'+esc(o.t.quality??0)+'">'+esc(o.t.name)+'</span>'+(current?'<span class="badge steal">当前物品</span>':'')+'<span class="badge">×'+esc(o.count)+'</span><span class="badge">'+esc(o.t.type||'未分类')+'</span>'+verdict+'</div>'+effect+'</div>';
+ }).join('');
+}
+function renderItemList(){
+ itemPage={};
+ const m=DATA.modules.items,idx=itemIndex();
+ const q=itemFilters.q.trim().toLowerCase(),npcQ=itemFilters.npc.trim().toLowerCase();
+ const groups={},npcSet=new Set();let pairCount=0;
+ for(const row of m.rows){
+  if(itemFilters.region&&(row.region||'未知区域')!==itemFilters.region)continue;
+  if(itemFilters.location&&(row.location||'未知地点')!==itemFilters.location)continue;
+  if(npcQ&&!((row.who+' '+(row.realm||'')).toLowerCase().includes(npcQ)))continue;
+  for(const pair of row.items||[]){
+   const iid=String(pair[0]),t=idx.cat[iid];
+   if(!t)continue;
+   if(q&&!String(t.name).toLowerCase().includes(q))continue;
+   if(itemFilters.type&&(t.type||'未分类')!==(itemFilters.type==='__none__'?'未分类':itemFilters.type))continue;
+   if(itemFilters.quality==='__unknown__'&&t.quality!=null)continue;
+   if(itemFilters.quality&&itemFilters.quality!=='__unknown__'&&String(t.quality??'')!==itemFilters.quality)continue;
+   const v=itemVerdict(row,t);
+   if(itemFilters.steal==='1'&&!v.ok)continue;
+   if(itemFilters.steal==='0'&&v.ok)continue;
+   if(!groups[iid])groups[iid]={t:t,owners:[],stealable:0,total:0};
+   groups[iid].owners.push({row:row,t:t,count:pair[1]||1,v:v});
+   groups[iid].total+=pair[1]||1;
+   if(v.ok){groups[iid].stealable++;const rate=t.steal?t.steal.rate:0;if(rate>(groups[iid].bestRate||0))groups[iid].bestRate=rate;}
+   npcSet.add(row.uid);pairCount++;
+  }
+ }
+ const npcMode=!q&&!!npcQ;
+ if(npcMode){
+  const npcs={};
+  for(const row of m.rows){
+   if(itemFilters.region&&(row.region||'未知区域')!==itemFilters.region)continue;
+   if(itemFilters.location&&(row.location||'未知地点')!==itemFilters.location)continue;
+   if(!(row.who+' '+(row.realm||'')).toLowerCase().includes(npcQ))continue;
+   for(const pair of row.items||[]){
+    const iid=String(pair[0]),t=idx.cat[iid];
+    if(!t)continue;
+    if(itemFilters.type&&(t.type||'未分类')!==(itemFilters.type==='__none__'?'未分类':itemFilters.type))continue;
+    if(itemFilters.quality==='__unknown__'&&t.quality!=null)continue;
+    if(itemFilters.quality&&itemFilters.quality!=='__unknown__'&&String(t.quality??'')!==itemFilters.quality)continue;
+    const v=itemVerdict(row,t);
+    if(itemFilters.steal==='1'&&!v.ok)continue;
+    if(itemFilters.steal==='0'&&v.ok)continue;
+    if(!npcs[row.uid])npcs[row.uid]={row:row,items:0,stealable:0};
+    npcs[row.uid].items++;
+    if(v.ok)npcs[row.uid].stealable++;
+   }
+  }
+  const list=Object.values(npcs).sort((a,b)=>b.stealable-a.stealable||b.items-a.items||String(a.row.who).localeCompare(String(b.row.who),'zh-CN'));
+  const cards=list.map(g=>'<details class="item-group npc-card" data-uid="'+esc(g.row.uid)+'"><summary class="item-head"><span class="item-arrow">›</span><span class="item-title">'+hi(g.row.who,npcQ)+'</span>'+(g.row.realm?'<span class="badge">'+esc(g.row.realm)+'</span>':'')+'<span class="badge steal">可偷 '+g.stealable+' 件</span><span class="item-stat">共 '+g.items+' 件 · '+esc(g.row.location_path||g.row.location||'未知地点')+'</span></summary><div class="slots"></div></details>');
+  itemRenderState={groups:{},q:q,npcQ:npcQ};
+  $('iresult').textContent='筛选结果：'+list.length+' 位 NPC，'+list.reduce((sum,g)=>sum+g.items,0)+' 件物品（正在按 NPC 查看，清空 NPC 搜索即回到物品列表）';
+  $('ilist').innerHTML=cards.length?cards.join(''):'<div class="empty">没有符合条件的 NPC</div>';
+  return;
+ }
+ const sorted=Object.values(groups).sort((a,b)=>b.stealable-a.stealable||itemRate(b)-itemRate(a)||String(a.t.name).localeCompare(String(b.t.name),'zh-CN'));
+ const cards=sorted.map(group=>{
+  const stat='可偷 '+group.stealable+' 处'+(group.bestRate?' · 最高 '+group.bestRate+'%':'')+' · 共 '+group.total+' 个';
+  return '<details class="item-group" data-item="'+esc(group.t.id)+'"><summary class="item-head"><span class="item-arrow">›</span><span class="item-title q'+esc(group.t.quality??0)+'">'+hi(group.t.name,q)+'</span><span class="badge">'+esc(group.t.type||'未分类')+'</span><span class="badge">品质 '+esc(group.t.quality??'未知')+'</span><span class="item-stat">'+stat+'</span></summary><div class="owners"></div></details>';
+ });
+ itemRenderState={groups:Object.fromEntries(sorted.map(g=>[String(g.t.id),g])),q:q,npcQ:npcQ};
+ $('iresult').textContent='筛选结果：'+sorted.length+' 种物品，'+npcSet.size+' 位 NPC，'+pairCount+' 条持有记录（共 '+m.rows.length+' 位 NPC 持有物品）';
+ $('ilist').innerHTML=cards.length?cards.join(''):'<div class="empty">没有符合条件的物品</div>';
+}
+function initItems(){
+ const m=DATA.modules.items;if(!m)return;
+ const catalog=m.catalog||[],regions=uniq(m.rows.map(r=>r.region||'未知区域'));
+ const types=uniq(catalog.map(t=>t.type||'未分类'));
+ const qualities=uniq(catalog.map(t=>t.quality==null?'':String(t.quality)));
+ const opts=(values,kind)=>'<option value="">全部'+kind+'</option>'+values.map(v=>{
+  let label=v,value=v;
+  if(kind==='类型'){label=v||'未分类';value=v||'__none__'}
+  if(kind==='品质'){label=v?'品质 '+v:'未知品质';value=v||'__unknown__'}
+  return '<option value="'+esc(value)+'">'+esc(label)+'</option>'
+ }).join('');
+ $('items').innerHTML=sourceHtml(m)+`
+  <div class="search-panel"><div class="search-fields">
+   <label class="search-field"><span>找物品</span><input id="iq" placeholder="输入物品名称" value="${esc(itemFilters.q)}"></label>
+   <label class="search-field"><span>找 NPC（可选）</span><input id="inpc" placeholder="输入 NPC 名称，与物品条件叠加" value="${esc(itemFilters.npc)}"></label>
+  </div></div>
+  <div class="filter-bar four">
+   <label class="filter-field"><span>区域</span><select id="iregion">${opts(regions,'区域')}</select></label>
+   <label class="filter-field"><span>具体位置</span><select id="ilocation"></select></label>
+   <label class="filter-field"><span>偷窃</span><select id="isteal"><option value="">全部持有者</option><option value="1">只看可偷</option><option value="0">只看不可偷</option></select></label>
+   <div class="filter-actions"><button type="button" id="iclear" class="filter-button">清空筛选</button></div>
+  </div>
+  <details id="iadvanced" class="advanced-filters"><summary>更多筛选 <span id="iadvancedcount" class="filter-count"></span></summary><div class="advanced-grid">
+   <label><span>物品类型</span><select id="itype">${opts(types,'类型')}</select></label>
+   <label><span>物品品质</span><select id="iquality">${opts(qualities,'品质')}</select></label>
+  </div></details>
+  <div id="iresult" class="result-info"></div><div id="ilist"></div>`;
+ const advancedKeys=['type','quality'];
+ function updateCount(){const count=advancedKeys.filter(key=>itemFilters[key]!=='').length;$('iadvancedcount').textContent=count?`（${count}）`:''}
+ function updateItemLocations(){
+  const locations=uniq(m.rows.filter(r=>!itemFilters.region||(r.region||'未知区域')===itemFilters.region).map(r=>r.location||'未知地点'));
+  if(itemFilters.location&&!locations.includes(itemFilters.location))itemFilters.location='';
+  $('ilocation').innerHTML=opts(locations,'具体位置');$('ilocation').value=itemFilters.location||'';
+ }
+ function saveAndRender(){store.set(ITEM_KEY,itemFilters);updateCount();renderItemList()}
+ $('iregion').value=itemFilters.region||'';updateItemLocations();
+ for(const key of ['q','npc','location','type','quality','steal']){
+  const node=$('i'+key);node.value=itemFilters[key]??'';
+  node.addEventListener(node.tagName==='INPUT'?'input':'change',()=>{itemFilters[key]=node.value;saveAndRender()});
+ }
+ $('iregion').addEventListener('change',()=>{itemFilters.region=$('iregion').value;updateItemLocations();saveAndRender()});
+ $('iclear').addEventListener('click',()=>{itemFilters=Object.assign({},ITEM_DEFAULTS);store.set(ITEM_KEY,itemFilters);initItems()});
+ updateCount();renderItemList();
+}
+document.addEventListener('toggle',event=>{
+ const node=event.target;
+ if(!node||!node.classList||!node.open||!node.closest('#items'))return;
+ if(node.classList.contains('npc-card')){
+  const slots=node.querySelector('.slots');
+  if(slots&&!slots.dataset.filled){slots.dataset.filled='1';slots.innerHTML=npcItemsHtml(node.dataset.uid)}
+  return;
+ }
+ if(node.classList.contains('item-group')){
+  const owners=node.querySelector('.owners');
+  if(owners&&!owners.dataset.filled){owners.dataset.filled='1';owners.innerHTML=itemOwnersHtml(node.dataset.item)}
+  return;
+ }
+ if(node.classList.contains('owner')){
+  const box=node.querySelector('.slots');
+  if(!box||box.dataset.filled)return;
+  box.dataset.filled='1';
+  box.innerHTML=npcItemsHtml(node.dataset.uid,node.dataset.item);
+ }
+},true);
+function refreshItemOwners(iid){
+ const nodes=document.querySelectorAll('#items .item-group');
+ for(const node of nodes){
+  if(node.dataset.item!==String(iid))continue;
+  const box=node.querySelector('.owners');
+  if(!box)return;
+  box.dataset.filled='1';
+  box.innerHTML=itemOwnersHtml(String(iid));
+  return;
+ }
+}
+document.addEventListener('click',event=>{
+ if(!event.target.closest('#items'))return;
+ const more=event.target.closest('[data-more]');
+ if(more){
+  const iid=more.dataset.more;
+  itemPage[iid]=(itemPage[iid]||1)+1;
+  refreshItemOwners(iid);
+  return;
+ }
+ const sort=event.target.closest('[data-sort]');
+ if(sort){
+  itemSort=sort.dataset.sort;
+  store.set('worldapart.item.sort.v1',itemSort);
+  document.querySelectorAll('#items .item-group[open]').forEach(node=>refreshItemOwners(node.dataset.item));
+ }
+});
+$('warnings').innerHTML=(DATA.warnings||[]).map(esc).join('<br>');initTabs();renderBedroom();initTalent();initItems();
 let polledVersion=INITIAL_VERSION;setInterval(()=>{const script=document.createElement('script');script.src='仙友助手版本.js?t='+Date.now();script.onload=()=>{const next=window.PROGRESS_VERSION||'';if(next&&next!==polledVersion){location.reload();return}polledVersion=next||polledVersion;script.remove()};script.onerror=()=>script.remove();document.head.appendChild(script)},3000);
 </script></body></html>"""
 
@@ -577,10 +877,17 @@ def console_summary(payload):
         if name == "bedroom":
             print("十八摸：%d 位仙友，已满 18/18：%d 位" % (
                 len(rows), sum(1 for r in rows if r["total"] >= 18)))
-        else:
+        elif name == "talent":
             print("NPC天赋：%d 位 NPC，%d 个槽位，已解锁 %d 个" % (
                 len(rows), sum(len(r["slots"]) for r in rows),
                 sum(1 for r in rows for s in r["slots"] if s["unlocked"])))
+        else:
+            catalog = {str(t["id"]): t for t in module.get("catalog") or []}
+            pairs = sum(len(r["items"]) for r in rows)
+            stealable = sum(1 for r in rows if r["can_steal"]
+                            for item_id, _ in r["items"]
+                            if (catalog.get(str(item_id)) or {}).get("steal"))
+            print("NPC物品：%d 位 NPC，%d 条持有记录，可偷 %d 条" % (len(rows), pairs, stealable))
         print("  来源：%s ｜ %s" % (module.get("src") or "暂无", module.get("stamp_text") or "未知"))
     for warning in payload.get("warnings") or []:
         print("提示：%s" % warning)
@@ -592,13 +899,14 @@ def settings_menu():
         print("\n功能设置（只读工具，不会修改游戏存档）")
         print("  1. 十八摸进度：%s" % ("开启" if cfg["modules"]["bedroom"] else "关闭"))
         print("  2. NPC天赋：%s" % ("开启" if cfg["modules"]["talent"] else "关闭"))
-        print("  3. 重新设置解密存档目录")
+        print("  3. NPC物品：%s" % ("开启" if cfg["modules"]["items"] else "关闭"))
+        print("  4. 重新设置解密存档目录")
         print("  0. 保存并退出")
         choice = input("请选择: ").strip()
-        if choice in ("1", "2"):
-            name = "bedroom" if choice == "1" else "talent"
+        if choice in ("1", "2", "3"):
+            name = {"1": "bedroom", "2": "talent", "3": "items"}[choice]
             cfg["modules"][name] = not cfg["modules"][name]
-        elif choice == "3":
+        elif choice == "4":
             path = input("把 BepInEx\\decrypted 的路径粘贴到这里: ").strip().strip('"')
             if os.path.isdir(path):
                 cfg["decrypted_dir"] = os.path.normpath(path)
@@ -636,7 +944,7 @@ def main():
             signature = state_signature(dec, cfg)
             if signature != last_signature or not os.path.exists(OUT_HTML):
                 payload = render(dec, cfg) if dec or not any(cfg["modules"].values()) else {
-                    "enabled": [n for n in ("bedroom", "talent") if cfg["modules"][n]],
+                    "enabled": [n for n in ("bedroom", "talent", "items") if cfg["modules"][n]],
                     "modules": {}, "warnings": ["未设置解密存档目录，请重新安装或运行功能设置。"],
                 }
                 version, changed = write_outputs(payload)

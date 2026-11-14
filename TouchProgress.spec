@@ -2,7 +2,7 @@
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 
-datas = [('bedroom_meta.json', '.'), ('talent_meta.json', '.')]
+datas = [('bedroom_meta.json', '.'), ('talent_meta.json', '.'), ('items_meta.json', '.')]
 binaries = []
 hiddenimports = []
 # 只读取 TextAsset；压缩、类型树和 UnityPy 原生模块需要随 EXE 一起收集。
