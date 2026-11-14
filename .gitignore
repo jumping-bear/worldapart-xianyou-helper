@@ -10,7 +10,7 @@
 !功能设置.bat
 !TouchProgress_最终版.zip
 !SaveDecryptProbe/
-!TouchProgress_v1.1/
+!仙友助手/
 
 # 插件只保留源码，不重复收录构建目录
 SaveDecryptProbe/*
@@ -18,7 +18,7 @@ SaveDecryptProbe/*
 !SaveDecryptProbe/SaveDecryptProbe.csproj
 
 # 排除本机配置和生成的进度页面
-TouchProgress_v1.1/config.json
-TouchProgress_v1.1/仙友助手.html
-TouchProgress_v1.1/仙友助手版本.js
-TouchProgress_v1.1/仙友助手-示例.html
+仙友助手/config.json
+仙友助手/仙友助手.html
+仙友助手/仙友助手版本.js
+仙友助手/仙友助手-示例.html

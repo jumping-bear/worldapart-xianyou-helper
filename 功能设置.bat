@@ -1,8 +1,8 @@
 @echo off
-chcp 65001 >nul
+chcp 936 >nul
 cd /d "%~dp0"
-if exist "Д╩≥Е▐▀Е┼╘Ф┴▀.exe" (
-    "Д╩≥Е▐▀Е┼╘Ф┴▀.exe" --settings
+if exist "оисяжЗйж.exe" (
+    "оисяжЗйж.exe" --settings
 ) else (
     python touch_progress.py --settings
 )
