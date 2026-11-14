@@ -1,0 +1,19 @@
+# 仅收录可发布项目，排除逆向分析和本机临时文件
+/*
+!.gitignore
+!.gitattributes
+!touch_progress.py
+!bedroom_meta.json
+!TouchProgress_最终版.zip
+!SaveDecryptProbe/
+!TouchProgress_v1.1/
+
+# 插件只保留源码，不重复收录构建目录
+SaveDecryptProbe/*
+!SaveDecryptProbe/Plugin.cs
+!SaveDecryptProbe/SaveDecryptProbe.csproj
+
+# 排除本机配置和生成的进度页面
+TouchProgress_v1.1/config.json
+TouchProgress_v1.1/进度.html
+TouchProgress_v1.1/进度-示例.html
