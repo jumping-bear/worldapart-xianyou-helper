@@ -2,7 +2,7 @@
 /*
 !.gitignore
 !.gitattributes
-!touch_progress.py
+!xianyou_assistant.py
 !meta_update.py
 !app/
 __pycache__/

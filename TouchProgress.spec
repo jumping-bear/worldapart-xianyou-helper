@@ -35,7 +35,7 @@ hiddenimports = [
 ]
 
 a = Analysis(
-    ['touch_progress.py'],
+    ['xianyou_assistant.py'],
     pathex=[],
     binaries=binaries,
     datas=datas,
