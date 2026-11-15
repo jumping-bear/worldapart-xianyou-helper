@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
-"""不问凡尘 · 仙友助手：十八摸、NPC 天赋与 NPC 物品只读查询。"""
-APP_VERSION = "1.3.0"
+"""不问凡尘 · 仙友助手：仙居楼互动（十八摸成就）、NPC 天赋、NPC 物品、炼丹与炼器只读查询。"""
+APP_VERSION = "1.7.0"
 import glob
 import hashlib
 import html
 import json
 import os
 import re
-import struct
 import sys
 import time
 import webbrowser
@@ -20,112 +19,16 @@ BUILTIN_DIR = getattr(sys, "_MEIPASS", HERE)
 CFG = os.path.join(HERE, "config.json")
 OUT_HTML = os.path.join(HERE, "仙友助手.html")
 OUT_VERSION = os.path.join(HERE, "仙友助手版本.js")
-DEFAULT_MODULES = {"bedroom": True, "talent": True, "items": True, "pill": True}
+DEFAULT_MODULES = {"bedroom": True, "talent": True, "items": True, "pill": True,
+                   "forge": True, "event": True}
 
-
-# ---------------- MessagePack 解码（最小实现） ----------------
-class Ext:
-    __slots__ = ("type", "data")
-
-    def __init__(self, t, d):
-        self.type, self.data = t, d
-
-
-def _dec(b, i):
-    c = b[i]
-    i += 1
-    if c <= 0x7F:
-        return c, i
-    if c >= 0xE0:
-        return c - 0x100, i
-    if 0x80 <= c <= 0x8F:
-        return _map(b, i, c & 0x0F)
-    if 0x90 <= c <= 0x9F:
-        return _arr(b, i, c & 0x0F)
-    if 0xA0 <= c <= 0xBF:
-        n = c & 0x1F
-        return b[i:i + n].decode("utf-8", "replace"), i + n
-    if c == 0xC0:
-        return None, i
-    if c in (0xC2, 0xC3):
-        return c == 0xC3, i
-    if c in (0xC4, 0xD9):
-        n = b[i]
-        i += 1
-        v = b[i:i + n] if c == 0xC4 else b[i:i + n].decode("utf-8", "replace")
-        return v, i + n
-    if c in (0xC5, 0xDA):
-        n = struct.unpack_from(">H", b, i)[0]
-        i += 2
-        v = b[i:i + n] if c == 0xC5 else b[i:i + n].decode("utf-8", "replace")
-        return v, i + n
-    if c in (0xC6, 0xDB):
-        n = struct.unpack_from(">I", b, i)[0]
-        i += 4
-        v = b[i:i + n] if c == 0xC6 else b[i:i + n].decode("utf-8", "replace")
-        return v, i + n
-    if c == 0xCA:
-        return struct.unpack_from(">f", b, i)[0], i + 4
-    if c == 0xCB:
-        return struct.unpack_from(">d", b, i)[0], i + 8
-    if c == 0xCC:
-        return b[i], i + 1
-    if c == 0xCD:
-        return struct.unpack_from(">H", b, i)[0], i + 2
-    if c == 0xCE:
-        return struct.unpack_from(">I", b, i)[0], i + 4
-    if c == 0xCF:
-        return struct.unpack_from(">Q", b, i)[0], i + 8
-    if c == 0xD0:
-        return struct.unpack_from(">b", b, i)[0], i + 1
-    if c == 0xD1:
-        return struct.unpack_from(">h", b, i)[0], i + 2
-    if c == 0xD2:
-        return struct.unpack_from(">i", b, i)[0], i + 4
-    if c == 0xD3:
-        return struct.unpack_from(">q", b, i)[0], i + 8
-    if c in (0xD4, 0xD5, 0xD6, 0xD7, 0xD8):
-        n = {0xD4: 1, 0xD5: 2, 0xD6: 4, 0xD7: 8, 0xD8: 16}[c]
-        return Ext(b[i], b[i + 1:i + 1 + n]), i + 1 + n
-    if c in (0xC7, 0xC8, 0xC9):
-        n = {0xC7: b[i], 0xC8: struct.unpack_from(">H", b, i)[0], 0xC9: struct.unpack_from(">I", b, i)[0]}[c]
-        off = {0xC7: 1, 0xC8: 2, 0xC9: 4}[c]
-        t = b[i + off]
-        s = i + off + 1
-        return Ext(t, b[s:s + n]), s + n
-    if c == 0xDC:
-        return _arr(b, i + 2, struct.unpack_from(">H", b, i)[0])
-    if c == 0xDD:
-        return _arr(b, i + 4, struct.unpack_from(">I", b, i)[0])
-    if c == 0xDE:
-        return _map(b, i + 2, struct.unpack_from(">H", b, i)[0])
-    if c == 0xDF:
-        return _map(b, i + 4, struct.unpack_from(">I", b, i)[0])
-    raise ValueError("msgpack 0x%02x" % c)
-
-
-def _arr(b, i, n):
-    out = []
-    for _ in range(n):
-        v, i = _dec(b, i)
-        out.append(v)
-    return out, i
-
-
-def _map(b, i, n):
-    out = {}
-    for _ in range(n):
-        k, i = _dec(b, i)
-        v, i = _dec(b, i)
-        out[k] = v
-    return out, i
-
-
-def unpack(data):
-    return _dec(data, 0)[0]
+unpack = meta_update.unpack
 
 
 # ---------------- 配置与存档定位 ----------------
+STEAM_APPID_A1 = 4209920  # 不问凡尘的 Steam AppID
+
+
 def load_cfg():
     raw = meta_update._read_json(CFG, {}) or {}
     modules = raw.get("modules") if isinstance(raw.get("modules"), dict) else {}
@@ -150,25 +53,186 @@ def save_cfg(cfg):
         return False
 
 
+def _read_registry_value(key_path, value_name):
+    """尝试读取 Windows 注册表值（Python 3 原生实现，不走 winreg 导入）。"""
+    try:
+        import winreg
+        key_map = {
+            "HKLM": winreg.HKEY_LOCAL_MACHINE,
+            "HKCU": winreg.HKEY_CURRENT_USER,
+            "HKLM64": winreg.HKEY_LOCAL_MACHINE,
+        }
+        hive = key_map.get(key_path.split("\\")[0])
+        if hive is None:
+            return None
+        subkey = "\\".join(key_path.split("\\")[1:])
+        access = winreg.KEY_READ | (winreg.KEY_WOW64_64KEY if key_path.startswith("HKLM64") else 0)
+        try:
+            handle = winreg.OpenKey(hive, subkey, 0, access)
+        except OSError:
+            try:
+                handle = winreg.OpenKey(hive, subkey, 0, winreg.KEY_READ)
+            except OSError:
+                return None
+        try:
+            val, _ = winreg.QueryValueEx(handle, value_name)
+            return str(val) if val else None
+        finally:
+            winreg.CloseKey(handle)
+    except Exception:
+        return None
+
+
+def _find_steam_libs():
+    """扫描所有 Steam 库目录。"""
+    libs = set()
+    # 1. 注册表找 Steam 安装目录
+    for reg_key in [r"HKLM64\SOFTWARE\Valve\Steam", r"HKLM\SOFTWARE\Valve\Steam",
+                    r"HKLM64\SOFTWARE\WOW6432Node\Valve\Steam",
+                    r"HKCU\SOFTWARE\Valve\Steam"]:
+        for value_name in ("InstallPath", "SteamPath"):
+            p = _read_registry_value(reg_key, value_name)
+            if p and os.path.isdir(p):
+                libs.add(os.path.normpath(p))
+                # 读 libraryfolders.vdf
+                vdf = os.path.join(p, "steamapps", "libraryfolders.vdf")
+                if os.path.isfile(vdf):
+                    try:
+                        with open(vdf, encoding="utf-8", errors="ignore") as f:
+                            content = f.read()
+                        for m in re.finditer(r'"path"\s+"([^"]+)"', content):
+                            lp = m.group(1).replace("\\\\", "\\")
+                            if os.path.isdir(lp):
+                                libs.add(os.path.normpath(lp))
+                    except Exception:
+                        pass
+    # 2. 硬编码常见路径兜底
+    for drive in "CDEFGH":
+        for suffix in [r"SteamLibrary", r"Program Files\Steam", r"Program Files (x86)\Steam"]:
+            p = drive + ":\\" + suffix
+            if os.path.isdir(p):
+                libs.add(os.path.normpath(p))
+    return list(libs)
+
+
+def _find_game_dir():
+    """自动定位不问凡尘（WorldApart.exe / A1 目录）的安装位置。"""
+    # 优先：所有 Steam 库里的 steamapps\common\A1
+    for lib in _find_steam_libs():
+        candidate = os.path.join(lib, "steamapps", "common", "A1")
+        wa = os.path.join(candidate, "WorldApart.exe")
+        if os.path.isfile(wa):
+            return os.path.normpath(candidate)
+    # 兜底：扫描 exe 同目录及上级的 A1
+    for candidate in [os.path.join(HERE, "A1"), os.path.join(HERE, "..", "A1"),
+                      os.path.join(HERE, "..", "..", "A1")]:
+        if os.path.isfile(os.path.join(candidate, "WorldApart.exe")):
+            return os.path.normpath(candidate)
+    return ""
+
+
 def find_dir(cfg, interactive=True):
-    configured = cfg.get("decrypted_dir") or ""
+    """定位 BepInEx\\decrypted 目录，返回路径（空字符串表示失败）。"""
+    configured = (cfg.get("decrypted_dir") or "").strip()
     if configured and os.path.isdir(configured):
         return configured
-    candidates = [os.path.join(HERE, "decrypted"), os.path.join(HERE, "..", "BepInEx", "decrypted")]
-    candidates += [d + r"\BepInEx\decrypted" for d in ("C:", "D:", "E:", "F:", "G:")]
-    for candidate in candidates:
+
+    # ---- 先确保 game_dir 有值 ----
+    game_dir = (cfg.get("game_dir") or "").strip()
+    if not game_dir or not os.path.isfile(os.path.join(game_dir, "WorldApart.exe")):
+        found = _find_game_dir()
+        if found:
+            game_dir = found
+            cfg["game_dir"] = game_dir
+
+    # ---- 从 game_dir 推断 decrypted ----
+    if game_dir:
+        # 常见情况：游戏目录\BepInEx\decrypted
+        candidate = os.path.join(game_dir, "BepInEx", "decrypted")
         if os.path.isdir(candidate) and glob.glob(os.path.join(candidate, "*gameworld*")):
             cfg["decrypted_dir"] = os.path.normpath(candidate)
             save_cfg(cfg)
             return cfg["decrypted_dir"]
+        # 目录存在但还没存档（玩家没启动过游戏）
+        if os.path.isdir(candidate):
+            # 还是存下来，下次启动就有了
+            cfg["decrypted_dir"] = os.path.normpath(candidate)
+            save_cfg(cfg)
+            if interactive:
+                print("找到 decrypted 目录了，但里面还没有存档副本。")
+                print("请先启动游戏，停在主菜单约 20 秒，让插件导出存档。")
+                print("然后重新运行仙友助手.exe 就行。")
+            return cfg["decrypted_dir"]  # 暂时返回，下次存档就有了
+        # BepInEx 目录都不存在 → 玩家没跑一键安装
+        bepinex = os.path.join(game_dir, "BepInEx")
+        if not os.path.isdir(bepinex) and interactive:
+            print("★ 找到游戏目录了（%s），但还没装 BepInEx 插件！" % game_dir)
+            print("请先运行仙友助手文件夹里的「一键安装.bat」，")
+            print("它会自动安装插件并写好配置。装完后启动游戏停 20 秒，再回来。")
+        elif interactive:
+            # BepInEx 存在但 decrypted 目录不存在 → 玩家没启动过游戏
+            print("BepInEx 插件目录存在，但 decrypted 文件夹还没生成。")
+            print("请启动游戏，停在主菜单约 20 秒，让插件导出存档。")
+        return ""
+
+    # ---- 没找到 game_dir，尝试自动扫盘 ----
+    print("正在自动扫描 Steam 游戏目录……")
+    found = _find_game_dir()
+    if found:
+        cfg["game_dir"] = found
+        dec_candidate = os.path.join(found, "BepInEx", "decrypted")
+        if os.path.isdir(dec_candidate) and glob.glob(os.path.join(dec_candidate, "*gameworld*")):
+            cfg["decrypted_dir"] = os.path.normpath(dec_candidate)
+            save_cfg(cfg)
+            return cfg["decrypted_dir"]
+        elif os.path.isdir(dec_candidate):
+            cfg["decrypted_dir"] = os.path.normpath(dec_candidate)
+            save_cfg(cfg)
+            if interactive:
+                print("★ 找到游戏目录和 decrypted 文件夹了，但里面还没有存档。")
+                print("请先启动游戏，停在主菜单约 20 秒。")
+            return cfg["decrypted_dir"]
+        else:
+            cfg["decrypted_dir"] = os.path.normpath(dec_candidate)
+            save_cfg(cfg)
+            if interactive:
+                print("★ 找到游戏目录了（%s），但还没装插件。" % found)
+                print("请先运行「一键安装.bat」，然后启动游戏停 20 秒。")
+            return ""
+
+    # ---- 全部自动检测失败，交互式引导 ----
     if not interactive:
         return ""
-    print("没找到解密存档目录。请先安装插件并启动一次游戏。")
-    path = input("把 BepInEx\\decrypted 的路径粘贴到这里: ").strip().strip('"')
-    if os.path.isdir(path):
-        cfg["decrypted_dir"] = os.path.normpath(path)
-        save_cfg(cfg)
-        return cfg["decrypted_dir"]
+
+    print()
+    print("── 自动检测失败，需要手动指定 ──")
+    print("我没能在常见位置自动找到你的游戏。请在 Steam 库里右键「不问凡尘」")
+    print("→ 管理 → 浏览本地文件，打开后把地址栏里的路径复制过来（A1 文件夹）。")
+    print()
+    path = input("把不问凡尘的游戏文件夹路径粘贴到这里: ").strip().strip('"').strip("'")
+    if path:
+        # 玩家可能粘贴的是 A1 文件夹
+        if os.path.isfile(os.path.join(path, "WorldApart.exe")):
+            cfg["game_dir"] = os.path.normpath(path)
+            dec = os.path.join(path, "BepInEx", "decrypted")
+            if os.path.isdir(dec) and glob.glob(os.path.join(dec, "*gameworld*")):
+                cfg["decrypted_dir"] = os.path.normpath(dec)
+            elif os.path.isdir(dec):
+                cfg["decrypted_dir"] = os.path.normpath(dec)
+                print("已记住 decrypted 路径，但里面还没有存档。启动游戏停 20 秒就好。")
+            else:
+                cfg["decrypted_dir"] = os.path.normpath(dec)
+                print("路径已记录。请先运行「一键安装.bat」装插件，然后启动游戏停 20 秒。")
+            save_cfg(cfg)
+            return cfg.get("decrypted_dir", "")
+        else:
+            # 也让玩家直接粘贴 decrypted
+            if os.path.isdir(path):
+                cfg["decrypted_dir"] = os.path.normpath(path)
+                cfg["game_dir"] = meta_update.game_dir_from_config(cfg, path) or cfg.get("game_dir", "")
+                save_cfg(cfg)
+                return cfg["decrypted_dir"]
+            print("这个路径里没找到 WorldApart.exe 或 decrypted 文件夹。")
     return ""
 
 
@@ -261,7 +325,7 @@ def scan_bedroom(obj, meta):
 
 
 def scan(path, meta):
-    """兼容旧调用：读取一个副本并返回十八摸进度。"""
+    """兼容旧调用：读取一个副本并返回仙居楼互动进度。"""
     with open(path, "rb") as f:
         return scan_bedroom(unpack(f.read()), meta)
 
@@ -363,6 +427,10 @@ def scan_items(obj, meta):
         space_info = space_meta.get(str(space.get("spaceId"))) or {}
         path = space_info.get("path") or []
         location = space_info.get("name") or "未知地点"
+        try:
+            intimacy = int(npc.get("intimacy") or 0)
+        except (TypeError, ValueError):
+            intimacy = 0
         rows.append({
             "uid": str(uid), "cfg": cfg,
             "who": info.get("name") or ("#%s" % cfg),
@@ -370,10 +438,202 @@ def scan_items(obj, meta):
             "location": location, "region": space_info.get("region") or "",
             "location_path": " / ".join(path) or location,
             "can_steal": bool(info.get("can_steal")),
+            "intimacy": intimacy,
+            "demand": list(info.get("demand") or []),
             "items": held,
         })
     rows.sort(key=lambda r: (str(r["who"]), str(r["uid"])))
     return rows
+
+
+def bag_entries(bag):
+    """展开背包条目：玩家背包是 [索引, 条目] 的嵌套列表，NPC 背包是普通列表。"""
+    entries = bag.get("items") if isinstance(bag, dict) else bag
+    result = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("item_id") is not None:
+                result.append(node)
+                return
+            for child in node.values():
+                walk(child)
+        elif isinstance(node, (list, tuple)):
+            for child in node:
+                walk(child)
+
+    walk(entries)
+    return result
+
+
+def _forge_number(value):
+    try:
+        text = "%.2f" % float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return text.rstrip("0").rstrip(".") or "0"
+
+
+def scan_forge(obj, meta):
+    """整理炼器进度：等级天赋、器胚与材料库存、法宝器契词条与洗练保底。"""
+    player = obj.get("playerModel") or {}
+    alchemy = player.get("alchemy") or {}
+    prototypes = {str(p.get("id")): p for p in (meta.get("prototypes") or []) if isinstance(p, dict)}
+    materials = meta.get("materials") or {}
+    item_meta = meta.get("items") or {}
+    attributes = meta.get("attributes") or {}
+    elements = meta.get("elements") or {}
+    slots = meta.get("slots") or {}
+    realms = meta.get("realms") or {}
+    qualities = meta.get("qualities") or []
+    tier_names = {str(t.get("id")): t.get("name") for t in (meta.get("score_tiers") or [])}
+    affix_pool = meta.get("affix_pool") or {}
+    pity_limit, pity_done = {}, {}
+    for row in meta.get("pity") or []:
+        pity_limit[(int(row.get("realm") or 0), int(row.get("quality") or 0))] = int(row.get("count") or 0)
+    for row in alchemy.get("alchemy_wash_pity_counters") or []:
+        if isinstance(row, dict):
+            pity_done[(int(row.get("realm_id") or 0),
+                       int(row.get("artifact_quality_id") or 0))] = int(row.get("count") or 0)
+
+    def item_info(item_id):
+        info = item_meta.get(str(item_id)) or []
+        name = info[0] if len(info) > 0 else ""
+        quality = int(info[1] or 0) if len(info) > 1 else 0
+        realm_id = int(info[2] or 0) if len(info) > 2 else 0
+        return name or ("物品 %s" % item_id), quality, realm_id
+
+    def realm_name(realm_id):
+        return realms.get(str(realm_id)) or ("境界 %s" % realm_id)
+
+    owned = {}
+    for entry in bag_entries(player.get("bag")):
+        item_id = entry.get("item_id")
+        if item_id is None:
+            continue
+        owned[str(item_id)] = owned.get(str(item_id), 0) + int(entry.get("count") or 1)
+
+    # 材料盘点：按五行汇总件数与灵性
+    material_rows, element_totals = [], {}
+    for material_id, info in materials.items():
+        count = owned.get(material_id, 0)
+        if not count:
+            continue
+        element = int(info.get("element") or 0)
+        material_rows.append({
+            "id": int(material_id), "name": info.get("name") or ("材料 %s" % material_id),
+            "element": element, "spirit": int(info.get("spirit") or 0),
+            "quality": int(info.get("quality") or 0), "realm": int(info.get("realm") or 0),
+            "count": count,
+        })
+        bucket = element_totals.setdefault(str(element), {"count": 0, "spirit": 0})
+        bucket["count"] += count
+        bucket["spirit"] += count * int(info.get("spirit") or 0)
+    material_rows.sort(key=lambda r: (r["element"], -r["spirit"], r["id"]))
+    element_rows = sorted(
+        ({"element": int(key), "name": elements.get(key, ""), "count": value["count"],
+          "spirit": value["spirit"]} for key, value in element_totals.items()),
+        key=lambda r: r["element"])
+
+    # 我的器胚与五行缺口
+    embryos = []
+    for prototype_id, proto in prototypes.items():
+        count = owned.get(prototype_id, 0)
+        if not count:
+            continue
+        need = []
+        for req in proto.get("need") or []:
+            element = str(req.get("e"))
+            have = (element_totals.get(element) or {}).get("count", 0)
+            need.append({"e": int(req.get("e") or 0), "name": elements.get(element, ""),
+                         "need": int(req.get("v") or 0), "have": have,
+                         "gap": max(0, int(req.get("v") or 0) - have)})
+        embryos.append({
+            "id": int(prototype_id), "name": proto.get("name"), "count": count,
+            "realm": int(proto.get("realm") or 0), "realm_name": realm_name(proto.get("realm") or 0),
+            "slot": int(proto.get("slot") or 0), "slot_name": slots.get(str(proto.get("slot")), ""),
+            "board": int(proto.get("board") or 0), "need": need,
+            "rec_total": int(proto.get("rec_total") or 0),
+            "effects": proto.get("effects") or [],
+        })
+    embryos.sort(key=lambda r: (r["realm"], r["slot"], r["id"]))
+
+    # 已炼成的法宝
+    artifacts = []
+    for entry in bag_entries(player.get("bag")):
+        if "alchemy_proto_item_id" not in entry:
+            continue
+        name, quality, item_realm = item_info(entry.get("item_id"))
+        proto = prototypes.get(str(entry.get("alchemy_proto_item_id"))) or {}
+        artifact_realm = int(proto.get("realm") or item_realm or 0)
+        tier_id = int(entry.get("alchemy_tier_id") or 0)
+        affixes = []
+        for pending, saved in ((False, entry.get("alchemy_affixes") or []),
+                               (True, entry.get("pending_alchemy_affixes") or [])):
+            for affix in saved:
+                if not isinstance(affix, dict):
+                    continue
+                config = affix_pool.get(str(affix.get("config_id"))) or {}
+                text = config.get("text") or ("词条 %s" % affix.get("config_id"))
+                affixes.append({"text": text.replace("{0}", _forge_number(affix.get("value"))),
+                                "quality": int(config.get("quality") or 0), "pending": pending})
+        artifact_pity = []
+        for quality_id, label in ((3, qualities[3] if len(qualities) > 3 else "紫"),
+                                  (4, qualities[4] if len(qualities) > 4 else "橙")):
+            total = pity_limit.get((artifact_realm, quality_id)) or 0
+            if total:
+                artifact_pity.append({
+                    "name": label, "count": pity_done.get((artifact_realm, quality_id), 0),
+                    "total": total,
+                })
+        artifacts.append({
+            "uid": entry.get("uid"), "item_id": entry.get("item_id"), "name": name,
+            "quality": quality, "realm": artifact_realm, "realm_name": realm_name(artifact_realm),
+            "slot": int(proto.get("slot") or 0), "slot_name": slots.get(str(proto.get("slot")), ""),
+            "proto": int(entry.get("alchemy_proto_item_id") or 0),
+            "proto_name": proto.get("name") or "", "crafted": bool(entry.get("alchemy_crafted")),
+            "tier": tier_id, "tier_name": tier_names.get(str(tier_id), ""),
+            "score": int(entry.get("alchemy_score") or 0),
+            "equipped": bool(entry.get("is_equipped")),
+            "attrs": [[attributes.get(str(int(attr[0])), str(attr[0])), int(attr[1])]
+                      for attr in (entry.get("alchemy_attrs") or [])
+                      if isinstance(attr, (list, tuple)) and len(attr) >= 2],
+            "affixes": affixes,
+            "wash": [{"e": int(effect.get("e") or 0), "name": elements.get(str(effect.get("e")), ""),
+                      "material": effect.get("mat_name"), "count": int(effect.get("count") or 1)}
+                     for effect in (proto.get("effects") or [])],
+            "pity": artifact_pity,
+        })
+    artifacts.sort(key=lambda r: (not r["equipped"], -r["score"], r["name"]))
+
+    level = int(alchemy.get("alchemy_level") or 0)
+    level_info = {}
+    for row in meta.get("levels") or []:
+        if int(row.get("level") or 0) == level:
+            level_info = row
+    talent_names = {str(t.get("id")): t.get("name") for t in (meta.get("talents") or [])}
+    best_tier = int(alchemy.get("alchemy_highest_crafted_tier_id") or 0)
+    return {
+        "level": level, "exp": int(alchemy.get("alchemy_exp") or 0),
+        "exp_need": int(level_info.get("exp") or 0),
+        "level_title": level_info.get("title") or "",
+        "true_fire": int(level_info.get("true_fire") or 0),
+        "talent_points": int(alchemy.get("alchemy_talent_points") or 0),
+        "unlocked": [{"id": x, "name": talent_names.get(str(x), "")}
+                     for x in (alchemy.get("alchemy_unlocked_talents") or []) if isinstance(x, int)],
+        "learned": [{"id": x, "name": talent_names.get(str(x), "")}
+                    for x in (alchemy.get("alchemy_learned_talents") or []) if isinstance(x, int)],
+        "best_score": int(alchemy.get("alchemy_best_score") or 0),
+        "best_tier": best_tier, "best_tier_name": tier_names.get(str(best_tier), ""),
+        "embryos": embryos,
+        "embryo_total": sum(row["count"] for row in embryos),
+        "materials": material_rows, "elements": element_rows,
+        "artifacts": artifacts,
+        "pity": [{"realm": realm_id, "realm_name": realm_name(realm_id), "quality": quality_id,
+                  "quality_name": qualities[quality_id] if quality_id < len(qualities) else str(quality_id),
+                  "count": pity_done.get((realm_id, quality_id), 0), "total": total}
+                 for (realm_id, quality_id), total in sorted(pity_limit.items())],
+    }
 
 
 def _manual_field(entry, name):
@@ -421,6 +681,112 @@ def scan_pill(obj, meta, mapdata):
     }
 
 
+def _event_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def scan_event(obj, meta):
+    """整理奇遇进度：结算结局、实际所得、对话选择，并合并配置里的结局与奖励。"""
+    player = obj.get("playerModel") or {}
+    settlements = ((player.get("random_event_settlements") or {}).get("quests") or {})
+    choices = ((player.get("dialogue_choice") or {}).get("choices") or {})
+    owned = {}
+    for entry in bag_entries(player.get("bag")):
+        item_id = entry.get("item_id")
+        if item_id is None:
+            continue
+        owned[str(item_id)] = owned.get(str(item_id), 0) + _event_int(entry.get("count"), 1)
+    rows, index = [], {}
+    for event in meta.get("events") or []:
+        if not isinstance(event, dict) or event.get("id") is None:
+            continue
+        quest_id = event["id"]
+        saved = settlements.get(quest_id)
+        if not isinstance(saved, dict):
+            saved = settlements.get(str(quest_id))
+        saved = saved if isinstance(saved, dict) else {}
+        ending_id = _event_int(saved.get("ending"))
+        grants = []
+        for grant in saved.get("grants") or []:
+            if not isinstance(grant, dict) or grant.get("item") is None:
+                continue
+            item_id = _event_int(grant.get("item"))
+            grants.append({"item": item_id, "count": _event_int(grant.get("count"), 1),
+                           "delivered": bool(grant.get("delivered")),
+                           "owned": owned.get(str(item_id), 0)})
+        endings = []
+        for ending in event.get("endings") or []:
+            rewards = [dict(reward, owned=owned.get(str(reward.get("item")), 0))
+                       for reward in (ending.get("rewards") or [])]
+            endings.append(dict(ending, rewards=rewards,
+                                got=bool(ending_id) and ending.get("id") == ending_id))
+        picked = {}
+        dialogue = event.get("dialogue") or {}
+        for key, counter in choices.items():
+            try:
+                dialogue_id = int(key)
+            except (TypeError, ValueError):
+                continue
+            texts = dialogue.get(str(dialogue_id))
+            if not texts or not isinstance(counter, dict):
+                continue
+            for option, count in counter.items():
+                try:
+                    option_index = int(option)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= option_index < len(texts):
+                    text = texts[option_index]
+                    picked[text] = picked.get(text, 0) + max(1, _event_int(count, 1))
+        achieved = bool(ending_id) or bool(saved.get("completed"))
+        row = {key: value for key, value in event.items() if key != "dialogue"}
+        row.update({
+            "endings": endings, "achieved": achieved,
+            "completed": bool(saved.get("completed")),
+            "ending": ending_id,
+            "ending_title": next((ending.get("title") for ending in endings if ending.get("got")), ""),
+            "unknown_ending": bool(ending_id) and not any(ending.get("got") for ending in endings),
+            "grants": grants,
+            "choices": [{"text": text, "count": count} for text, count in picked.items()],
+        })
+        rows.append(row)
+        for ending in endings:
+            for reward in ending.get("rewards") or []:
+                key = str(reward.get("item"))
+                slot = index.setdefault(key, {
+                    "item": reward.get("item"), "name": reward.get("name"),
+                    "quality": reward.get("quality"), "type": reward.get("type"),
+                    "owned": reward.get("owned", 0), "sources": [],
+                })
+                slot["sources"].append({
+                    "event": quest_id, "event_name": event.get("name"),
+                    "ending": ending.get("id"), "ending_title": ending.get("title"),
+                    "grade": ending.get("grade"), "chance": reward.get("chance"),
+                    "min": reward.get("min"), "max": reward.get("max"),
+                    "expected": reward.get("expected"), "got": ending.get("got"),
+                })
+    rows.sort(key=lambda row: (row.get("realm") or 0, row.get("id") or 0))
+    stats = {
+        "events": len(rows),
+        "achieved": sum(1 for row in rows if row["achieved"]),
+        "endings": sum(len(row["endings"]) for row in rows),
+        "got_endings": sum(1 for row in rows for ending in row["endings"] if ending["got"]),
+        "granted": sum(len(row["grants"]) for row in rows),
+        "reward_items": len(index),
+    }
+    catalog = sorted(index.values(), key=lambda row: (row.get("quality") or 0, str(row.get("name"))))
+    realms = meta.get("realms") or {"0": "凡人"}
+    layer = (player.get("combat") or {}).get("cultivate_layer_id")
+    current_realm = _event_int((meta.get("phases") or {}).get(str(layer))) if layer is not None else 0
+    return {"rows": rows, "reward_index": catalog, "stats": stats,
+            "realms": realms, "current_realm": current_realm,
+            "current_realm_name": realms.get(str(current_realm)) or "",
+            "meta_stats": meta.get("stats") or {}, "grades": meta.get("grades") or {}}
+
+
 def _source_payload(path, stamp, original, rows, meta_info):
     return {
         "rows": rows, "src": os.path.basename(path) if path else "",
@@ -432,7 +798,8 @@ def _source_payload(path, stamp, original, rows, meta_info):
 
 
 def render(dec, cfg):
-    enabled = [name for name in ("bedroom", "talent", "items", "pill") if cfg["modules"].get(name)]
+    enabled = [name for name in ("bedroom", "talent", "items", "pill", "forge", "event")
+               if cfg["modules"].get(name)]
     payload = {"enabled": enabled, "modules": {}, "warnings": []}
     if not enabled:
         payload["warnings"].append("查询模块都已关闭。请运行“功能设置.bat”重新开启。")
@@ -449,13 +816,23 @@ def render(dec, cfg):
     talent_meta = metadata.get("talent") or dict(empty, talents=[])
     items_meta = metadata.get("items") or dict(empty)
     pill_meta = metadata.get("pill") or {"recipes": [], "herbs": [], "realms": {"0": "凡人"}, "phases": {}}
+    forge_meta = metadata.get("forge") or {
+        "prototypes": [], "materials": {}, "items": {}, "levels": [], "talents": [],
+        "score_tiers": [], "qualities": ["白", "绿", "蓝", "紫", "橙"],
+        "slots": {"1": "攻击", "2": "防御", "3": "辅助", "4": "速度"},
+        "elements": {}, "attributes": {}, "affix_pool": {}, "pity": [], "realms": {"0": "凡人"},
+    }
+    event_meta = metadata.get("event") or {
+        "events": [], "realms": {"0": "凡人"}, "grades": {}, "stats": {},
+    }
     pill_map, pill_map_info = ({}, {})
     if "pill" in enabled:
         pill_map, pill_map_info = meta_update.load_pill_map(game_dir, BUILTIN_DIR)
     files = save_files(dec)
     originals = original_save_index(find_save_root())
     timed = [(path,) + source_time(path, originals) for path in files]
-    best_bedroom, latest_talent, latest_items, latest_pill = None, None, None, None
+    best_bedroom, latest_talent, latest_items, latest_pill, latest_forge, latest_event = (
+        None, None, None, None, None, None)
     errors = []
 
     for path, stamp, original in timed:
@@ -483,6 +860,12 @@ def render(dec, cfg):
                                                             m.get("name") or "default")
                                for m in (pill_map.get("maps") or [])}
                 latest_pill = _source_payload(path, stamp, original, rows, report["modules"]["pill"])
+            if "forge" in enabled and (latest_forge is None or stamp > latest_forge["stamp"]):
+                latest_forge = _source_payload(
+                    path, stamp, original, scan_forge(obj, forge_meta), report["modules"]["forge"])
+            if "event" in enabled and (latest_event is None or stamp > latest_event["stamp"]):
+                latest_event = _source_payload(
+                    path, stamp, original, scan_event(obj, event_meta), report["modules"]["event"])
         except Exception as e:
             errors.append("%s：%s" % (os.path.basename(path), e))
 
@@ -498,9 +881,11 @@ def render(dec, cfg):
         module = latest_items or _source_payload("", 0, "", [], report["modules"]["items"])
         catalog = items_meta.get("items") or {}
         used = {str(item_id) for row in module["rows"] for item_id, _count in row["items"]}
+        used |= {str(item_id) for row in module["rows"] for item_id in (row.get("demand") or [])}
         module["catalog"] = [dict(catalog[key], id=int(key)) for key in sorted(used, key=int)
                              if key in catalog]
         module["realms"] = items_meta.get("realms") or {"0": "凡人"}
+        module["intimacy"] = items_meta.get("intimacy") or []
         payload["modules"]["items"] = module
     if "pill" in enabled:
         module = latest_pill or _source_payload(
@@ -510,6 +895,18 @@ def render(dec, cfg):
         module["map_config"] = pill_map_info.get("label", "未知")
         module["map_warning"] = pill_map_info.get("warning", "")
         payload["modules"]["pill"] = module
+    if "forge" in enabled:
+        module = latest_forge or _source_payload(
+            "", 0, "", scan_forge({}, forge_meta), report["modules"]["forge"])
+        module["catalog"] = forge_meta.get("prototypes") or []
+        for key in ("levels", "talents", "score_tiers", "qualities", "slots", "elements",
+                    "attributes", "realms"):
+            module[key] = forge_meta.get(key)
+        payload["modules"]["forge"] = module
+    if "event" in enabled:
+        module = latest_event or _source_payload(
+            "", 0, "", scan_event({}, event_meta), report["modules"]["event"])
+        payload["modules"]["event"] = module
     if not files:
         payload["warnings"].append("还没有可用存档副本，请先启动游戏并等待插件导出。")
     elif errors:
@@ -517,7 +914,9 @@ def render(dec, cfg):
         payload["errors"] = errors[:5]
     if ("bedroom" in enabled and best_bedroom is None) or \
             (("talent" in enabled and latest_talent is None) or ("items" in enabled and latest_items is None)
-             or ("pill" in enabled and latest_pill is None)):
+             or ("pill" in enabled and latest_pill is None)
+             or ("forge" in enabled and latest_forge is None)
+             or ("event" in enabled and latest_event is None)):
         payload["warnings"].append("暂未找到有效存档，请确认插件已导出 gameworld 副本。")
     return payload
 
@@ -542,8 +941,9 @@ CSS += r"""
 .poi-dot.dim{opacity:.2}
 .poi-dot.off{display:none}
 #pillfog{display:none}
+#pillherb{display:none}
+.mapbox.showherb #pillherb{display:block}
 .mapbox.showfog #pillfog{display:block}
-.mapbox.showfog #pillherb{display:none}
 .mapbox.showfog .poi-dot.unseen{opacity:0;pointer-events:none}
 .pill-side{display:flex;flex-direction:column;gap:10px;min-width:0}
 .chips{display:flex;gap:7px;flex-wrap:wrap}
@@ -582,17 +982,117 @@ CSS += r"""
 .manual-item:hover{border-color:#3d735b}
 .manual-item .nm{color:#dfe6ef;font-weight:600;margin-right:auto}
 .manual-item .tag{color:#86909e;font-size:11px;background:#1d232c;border-radius:6px;padding:2px 6px}
+.fsec{background:#141820;border:1px solid #232b36;border-radius:10px;padding:9px 11px 11px}
+.fhead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.fhead b{color:#cdd6e2;font-size:12px;font-weight:600}
+.fhint{color:#6f7787;font-size:11px}
+.fops{margin-left:auto;display:flex;gap:5px}
+.fops button{background:#1b222c;border:1px solid #2b3340;color:#8b93a1;border-radius:6px;padding:2px 8px;font-size:11px;line-height:1.6;cursor:pointer;font-family:inherit}
+.fops button:hover{color:#c9f5dd;border-color:#3d735b}
+.frow{display:flex;align-items:flex-start;gap:8px;margin-top:9px}
+.frow>.chip-label{min-width:26px;padding-top:6px}
+.frow .chips{flex:1;min-width:0}
+.frow .fops{margin-left:0;padding-top:4px}
+.chip.zero{opacity:.4}
+.chip.zero.on{opacity:.75}
+#pillcond.off{opacity:.4;pointer-events:none}
+.pill-active{display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:22px}
+.ptag-label{color:#6f7787;font-size:11px}
+.ptag{background:#243430;border:1px solid #3a5f4f;color:#bfe8d3;border-radius:12px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit}
+.ptag b{color:#7fa695;font-weight:400;margin-left:5px}
+.ptag:hover{border-color:#5b8f76}
+.ptag.clear{background:#1b222c;border-color:#35404f;color:#9aa3b2}
+.pill-sum{color:#8b93a1;font-size:11px}
+.pill-sum b{color:#e0e6ed;font-weight:600}
+.pill-list{max-height:430px}
+.pill-item .tp{max-width:56%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:none}
+.pill-group{border-bottom:1px solid #1c222b}
+.pill-group:last-child{border-bottom:0}
+.pghead{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:7px;padding:7px 11px;background:#171d25;border-bottom:1px solid #1e242d}
+.pgname{color:#c9d2df;font-size:11px;font-weight:600}
+.pgcount{font-style:normal;color:#7d8593;font-size:11px}
+.pgonly{margin-left:auto;background:#1b222c;border:1px solid #2b3340;color:#8b93a1;border-radius:10px;padding:2px 8px;font-size:11px;cursor:pointer;font-family:inherit}
+.pgonly:hover{color:#c9f5dd;border-color:#3d735b}
+.pgmore{display:block;width:100%;background:#161b22;border:0;border-top:1px dashed #2b3340;color:#86909e;padding:7px;font-size:11px;cursor:pointer;font-family:inherit}
+.pgmore:hover{color:#c9f5dd}
+.pill-item.focus{background:#1f2b25;box-shadow:inset 2px 0 0 #55c78b}
+.empty-acts{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+.pill-act{background:#1b222c;border:1px solid #35404f;color:#b9c6d6;border-radius:12px;padding:4px 11px;font-size:11px;cursor:pointer;font-family:inherit}
+.pill-act:hover{border-color:#3d735b;color:#c9f5dd}
+#pillring{animation:pillring 1.6s ease-in-out infinite}
+@keyframes pillring{0%,100%{stroke-opacity:1}50%{stroke-opacity:.3}}
+.herb-track polyline{transition:stroke-opacity .15s}
+.herb-track:hover polyline{stroke-opacity:.75}
+.map-tip{position:absolute;left:0;top:0;z-index:4;pointer-events:none;background:#0f1319;border:1px solid #39424f;border-radius:6px;padding:3px 8px;font-size:12px;line-height:1.5;color:#e4e9f1;white-space:nowrap;transform:translate(-50%,-160%);opacity:0;transition:opacity .12s}
+.map-tip.on{opacity:1}
+@media(prefers-reduced-motion:reduce){#pillring{animation:none}}
+"""
+CSS += r"""
+.forge-sec{margin:24px 0 9px;font-size:15px;font-weight:650;color:#d7dee8}
+.forge-sec span{color:#7d8593;font-size:11px;font-weight:400;margin-left:8px}
+.fproto,.fart{background:#15181f;border:1px solid #232833;border-radius:10px;margin:0 0 8px;overflow:hidden}
+.fproto>summary,.fart>summary{list-style:none;cursor:pointer;padding:11px 13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fproto>summary::-webkit-details-marker,.fart>summary::-webkit-details-marker{display:none}
+.fproto[open]>summary,.fart[open]>summary{border-bottom:1px solid #232833}
+.fname{font-size:14px;font-weight:600;color:#e4eaf2}
+.ftiers,.fstat{margin-left:auto;color:#9aa3b2;font-size:11px;font-variant-numeric:tabular-nums}
+.fbody{padding:11px 13px 13px}
+.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.fcol{min-width:0}
+.fcol-t{color:#7d8593;font-size:11px;margin-bottom:6px}
+.fgrid{display:inline-grid;gap:3px}
+.fcell{width:20px;height:20px;border-radius:4px;background:#20262f;display:block}
+.fcell.block{background:#0c0e12;border:1px dashed #39424f}
+.fline{color:#b4bdca;font-size:12px;line-height:1.9}
+.fline b{color:#e8eaed;font-weight:600;margin-right:4px}
+.fchips{display:inline-flex;gap:6px;flex-wrap:wrap;vertical-align:middle}
+.fchip{background:#1a2029;border:1px solid #2b3340;border-radius:7px;padding:2px 8px;font-size:11px;color:#b4bdca}
+.fq0{color:#cfd6df}.fq1{color:#9fd6a9}.fq2{color:#82baf5}.fq3{color:#c7a1ef}.fq4{color:#e8c76d}
+.fgap{color:#e8a17c}.fok{color:#6edda2}.fmat{color:#b4bdca;font-size:12px;line-height:1.7}
+@media(max-width:560px){.ftiers,.fstat{margin-left:0;width:100%}}
 """
 
-HTML_TEMPLATE = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>不问凡尘 · 仙友助手</title><style>__CSS__</style></head><body><div class="wrap"><h1>不问凡尘 · 仙友助手 <span class="appver">v__VER__</span></h1><div class="sub">只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。</div><div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div><section id="bedroom" class="panel"></section><section id="talent" class="panel"></section><section id="items" class="panel"></section><section id="pill" class="panel"></section><div class="tip">游戏保存后按 F8 可立即导出副本，平时插件每 60 秒自动同步。本页仅在数据变化时自动刷新。<br>配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。若存档结构、加密或 Unity 格式大改，仍需更新工具。</div></div><script src="仙友助手版本.js"></script><script>
+CSS += r"""
+.evgroup{display:flex;align-items:center;gap:8px;margin:20px 2px 9px;color:#cfd8e3;font-size:13px;font-weight:600}
+.evgroup span{color:#778292;font-weight:400;font-size:11px}
+.ev{background:#15181f;border:1px solid #232833;border-radius:10px;margin:0 0 8px;overflow:hidden}
+.ev summary{cursor:pointer;padding:12px 14px;list-style:none;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.ev summary::-webkit-details-marker{display:none}
+.ev summary:before{content:"›";color:#6f7787;font-size:20px;transition:.15s}
+.ev[open] summary:before{transform:rotate(90deg)}
+.evname{font-size:15px;font-weight:600}
+.evloc{margin-left:auto;color:#8b93a1;font-size:12px}
+.evbody{border-top:1px solid #232833;padding:11px 14px 14px}
+.evdesc{color:#b4bdca;font-size:12px;line-height:1.85}
+.evline{color:#b4bdca;font-size:12px;line-height:1.9;margin-top:6px}
+.evline b{color:#d9c785;margin-right:7px;font-weight:600}
+.eend{background:#12161c;border:1px solid #212836;border-radius:8px;padding:10px 12px;margin-top:8px}
+.eend.got{border-color:#3d735b;background:#131d18}
+.eend-head{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.egrade{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:6px;font-size:11px;background:#242a34;color:#9aa3b2;padding:0 4px}
+.egrade.g1{background:#22392e;color:#8ee6b3}.egrade.g2{background:#27374a;color:#b9d9ff}.egrade.g3{background:#3a2126;color:#e88b82}
+.eend-title{font-size:13px;font-weight:600}
+.eend-sum{color:#9aa3b2;font-size:12px;line-height:1.75;margin-top:5px}
+.eend-detail{color:#c9a976;font-size:11px;line-height:1.7;margin-top:4px}
+.efchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.efchip{background:#1a2029;border:1px solid #2b3340;border-radius:7px;padding:3px 8px;font-size:11px;color:#b4bdca}
+.efchip i{font-style:normal;color:#7d8593;margin-left:5px}
+.efchip.got{border-color:#3d735b;background:#1a2a22}
+.badge.ok{background:#22392e;color:#8ee6b3}.badge.off{background:#2a2d33;color:#8b93a1}.badge.warn{background:#3a3226;color:#e8c76d}
+.badge.loc-exact{background:#22392e;color:#8ee6b3}.badge.loc-inferred{background:#333026;color:#e8c76d}.badge.loc-unknown{background:#2a2d33;color:#8b93a1}
+.event-chips{margin:0 0 10px}
+@media(max-width:560px){.evloc{margin-left:0;width:100%}.evbody{padding:10px 12px 12px}}
+"""
+
+HTML_TEMPLATE = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>不问凡尘 · 仙友助手</title><style>__CSS__</style></head><body><div class="wrap"><h1>不问凡尘 · 仙友助手 <span class="appver">v__VER__</span></h1><div class="sub">只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。</div><div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div><section id="bedroom" class="panel"></section><section id="talent" class="panel"></section><section id="items" class="panel"></section><section id="pill" class="panel"></section><section id="forge" class="panel"></section><section id="event" class="panel"></section><div class="tip">游戏保存后按 F8 可立即导出副本，平时插件每 60 秒自动同步。本页仅在数据变化时自动刷新。<br>配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。若存档结构、加密或 Unity 格式大改，仍需更新工具。</div></div><script src="仙友助手版本.js"></script><script>
 const INITIAL_VERSION=window.PROGRESS_VERSION||'';const DATA=__DATA__;
 const $=id=>document.getElementById(id);const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const labels={bedroom:'十八摸',talent:'NPC天赋',items:'NPC物品',pill:'炼丹'};let active=store.get('worldapart.active.tab.v2',DATA.enabled[0]||'');if(!DATA.enabled.includes(active))active=DATA.enabled[0]||'';
+const labels={bedroom:'仙居楼互动',talent:'NPC天赋',items:'NPC物品',pill:'炼丹',forge:'炼器',event:'奇遇'};let active=store.get('worldapart.active.tab.v2',DATA.enabled[0]||'');if(!DATA.enabled.includes(active))active=DATA.enabled[0]||'';
 function sourceHtml(m){return `<div class="source">存档：${esc(m.src||'暂无')} ｜ 原始更新：${esc(m.stamp_text)} ｜ 配置：${esc(m.config)}${m.config_warning?' ｜ '+esc(m.config_warning):''}</div>`}
 function showTab(name){active=name;store.set('worldapart.active.tab.v2',name);document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===name));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name))}
 function initTabs(){$('tabs').innerHTML=DATA.enabled.map(n=>`<button class="tab" data-tab="${n}">${labels[n]}</button>`).join('');document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>showTab(x.dataset.tab));if(!DATA.enabled.length){$('warnings').innerHTML=DATA.warnings.map(esc).join('<br>');return}showTab(active)}
-function renderBedroom(){const m=DATA.modules.bedroom;if(!m)return;const rows=m.rows||[],done=rows.filter(r=>r.total>=18).length;const goals=[[1,'十八摸Ⅰ'],[3,'十八摸Ⅱ'],[5,'十八摸Ⅲ'],[10,'十八摸Ⅳ']];let cards=`<div class="card"><div class="k">已完成 18/18</div><div class="v">${done} <span>位</span></div></div>`;for(const [n,name] of goals)cards+=`<div class="card"><div class="k">${name}</div><div class="v">${done>=n?'已达成':'还差 '+(n-done)+' 位'}</div></div>`;const body=rows.map(r=>{const parts=r.parts.map(p=>`<div class="part"><div class="pl">${esc(p.label)}</div><div class="dots">${Array.from({length:6},(_,i)=>`<i class="dot ${p.got.includes(i)?'on':'miss'}">${i}</i>`).join('')}</div></div>`).join('');const pct=Math.min(100,Math.floor(r.total*100/18));return `<tr class="row"><td><div class="who">${esc(r.who)}${r.resident?'':'<span class="badge">未入住</span>'}</div><div class="bed">${esc(r.bed)}</div></td><td><div class="parts">${parts}</div></td><td style="width:150px"><div class="pct ${r.total>=18?'full':''}">${r.total}/18<small>${r.total>=18?'已完成':'进行中'}</small></div><div class="bar"><i style="width:${pct}%"></i></div></td></tr>`}).join('');$('bedroom').innerHTML=sourceHtml(m)+`<div class="cards">${cards}</div>${rows.length?`<table><thead><tr><th>仙友 / 寝室</th><th>各部位 6 段</th><th></th></tr></thead><tbody>${body}</tbody></table>`:'<div class="empty">暂无十八摸数据</div>'}<div class="tip">每个部位 6 段：0~3 为四段升阶，4 为循环段，5 为回落段。18/18 才算 1 位。</div>`}
+function renderBedroom(){const m=DATA.modules.bedroom;if(!m)return;const rows=m.rows||[],done=rows.filter(r=>r.total>=18).length;const goals=[[1,'十八摸Ⅰ'],[3,'十八摸Ⅱ'],[5,'十八摸Ⅲ'],[10,'十八摸Ⅳ']];let cards=`<div class="card"><div class="k">已完成 18/18</div><div class="v">${done} <span>位</span></div></div>`;for(const [n,name] of goals)cards+=`<div class="card"><div class="k">${name}</div><div class="v">${done>=n?'已达成':'还差 '+(n-done)+' 位'}</div></div>`;const body=rows.map(r=>{const parts=r.parts.map(p=>`<div class="part"><div class="pl">${esc(p.label)}</div><div class="dots">${Array.from({length:6},(_,i)=>`<i class="dot ${p.got.includes(i)?'on':'miss'}">${i}</i>`).join('')}</div></div>`).join('');const pct=Math.min(100,Math.floor(r.total*100/18));return `<tr class="row"><td><div class="who">${esc(r.who)}${r.resident?'':'<span class="badge">未入住</span>'}</div><div class="bed">${esc(r.bed)}</div></td><td><div class="parts">${parts}</div></td><td style="width:150px"><div class="pct ${r.total>=18?'full':''}">${r.total}/18<small>${r.total>=18?'已完成':'进行中'}</small></div><div class="bar"><i style="width:${pct}%"></i></div></td></tr>`}).join('');$('bedroom').innerHTML=sourceHtml(m)+`<div class="cards">${cards}</div>${rows.length?`<table><thead><tr><th>仙友 / 寝室</th><th>各部位 6 段</th><th></th></tr></thead><tbody>${body}</tbody></table>`:'<div class="empty">暂无仙居楼互动数据</div>'}<div class="tip">仙居楼互动：进入仙居楼与入住的仙友互动，每位仙友 3 个部位、每个部位 6 段（0~3 为四段升阶，4 为循环段，5 为回落段）；18/18 才算 1 位，对应成就「十八摸 Ⅰ~Ⅳ」。</div>`}
 const FILTER_KEY='worldapart.talent.filters.v3';
 const FILTER_DEFAULTS={q:'',npc:'',region:'',location:'',category:'',quality:'',realm:'',unlocked:'',dao:''};
 let filters=Object.assign({},FILTER_DEFAULTS,store.get('worldapart.talent.filters.v2',{}),store.get(FILTER_KEY,{}));
@@ -705,7 +1205,7 @@ function renderTalentList(){
  $('tlist').innerHTML=cards.length?cards.join(''):'<div class="empty">没有符合组合筛选条件的天赋</div>';
 }
 const ITEM_KEY='worldapart.item.filters.v1';
-const ITEM_DEFAULTS={q:'',npc:'',region:'',location:'',type:'',quality:'',steal:''};
+const ITEM_DEFAULTS={q:'',npc:'',region:'',location:'',type:'',quality:'',steal:'',demand:''};
 let itemFilters=Object.assign({},ITEM_DEFAULTS,store.get(ITEM_KEY,{}));
 let itemCache=null;
 let itemRenderState={groups:{},q:'',npcQ:''};
@@ -743,7 +1243,9 @@ function itemOwnersHtml(iid){
    rate='<span class="steal-ok">'+o.t.steal.rate+'%<span class="ratebar"><i style="width:'+Math.max(0,Math.min(100,o.t.steal.rate))+'%"></i></span></span>';
    if(o.t.steal.kill)rate+='<span class="badge deadly">致命</span>';
   }
-  return '<details class="npc owner" data-uid="'+esc(o.row.uid)+'" data-item="'+esc(iid)+'"><summary><span class="who">'+hi(o.row.who,state.npcQ)+'</span>'+(o.row.realm?'<span class="badge">'+esc(o.row.realm)+'</span>':'')+badge+'<span class="badge">×'+esc(o.count)+'</span>'+rate+'<span class="location">'+esc(o.row.location_path||o.row.location||'未知地点')+'</span>'+stealDetailHtml(o.v.ok?o.t.steal:null)+'</summary><div class="slots"></div></details>';
+  const inPool=(o.row.demand||[]).some(id=>String(id)===String(iid));
+  const demandBadge=!inPool?'':(o.t.demand?'<span class="badge demand">索要 -'+esc(o.t.demand_cost||0)+' 好感</span>':'<span class="badge demand-absent">不可索要</span>');
+  return '<details class="npc owner" data-uid="'+esc(o.row.uid)+'" data-item="'+esc(iid)+'"><summary><span class="who">'+hi(o.row.who,state.npcQ)+'</span>'+(o.row.realm?'<span class="badge">'+esc(o.row.realm)+'</span>':'')+badge+demandBadge+'<span class="badge">×'+esc(o.count)+'</span>'+rate+'<span class="location">'+esc(o.row.location_path||o.row.location||'未知地点')+'</span>'+stealDetailHtml(o.v.ok?o.t.steal:null)+'</summary><div class="slots"></div></details>';
  }).join('');
  const blocked=all.filter(o=>!o.v.ok).length;
  const labels={rate:'按成功率从高到低',count:'按持有数量从多到少',name:'按 NPC 名称排序'};
@@ -768,20 +1270,43 @@ function itemRate(group){
  const rates=group.owners.filter(o=>o.v.ok&&o.t.steal).map(o=>o.t.steal.rate);
  return rates.length?rates.reduce((a,b)=>a+b,0)/rates.length:0;
 }
+function intimacyName(row){
+ const tiers=(DATA.modules.items.intimacy||[]);
+ let name='';
+ for(const t of tiers){if(row.intimacy!=null&&row.intimacy>=t.need)name=t.name}
+ return name;
+}
 function npcItemsHtml(uid,focus){
  const idx=itemIndex(),row=idx.rows.get(uid);
  if(!row)return '';
+ const cat=idx.cat;
  const list=(row.items||[]).map(pair=>{
-  const t=idx.cat[String(pair[0])]||{name:'物品 #'+pair[0],quality:0,type:''};
+  const t=cat[String(pair[0])]||{name:'物品 #'+pair[0],quality:0,type:''};
   return{o:t,t:t,count:pair[1]||1,v:itemVerdict(row,t)};
  });
  list.sort((a,b)=>Number(b.v.ok)-Number(a.v.ok)||String(a.t.name).localeCompare(String(b.t.name),'zh-CN'));
- return list.map(o=>{
+ const bagIds=new Set(list.map(o=>String(o.t.id)));
+ const focusId=focus!==undefined&&focus!==null?String(focus):'';
+ const stealRows=list.map(o=>{
   const rule=o.t.steal,verdict=o.v.ok?'<span class="steal-ok">可偷</span>':'<span class="muted">'+esc(o.v.label)+'</span>';
-  const current=focus!==undefined&&focus!==null&&String(o.t.id)===String(focus);
+  const current=focusId&&String(o.t.id)===focusId;
   const effect=o.v.ok&&rule?'<div class="effect">成功率 '+rule.rate+'% · 一次最多 '+rule.count+' 个 · 善恶值 '+rule.alignment+' · 好感 '+rule.intimacy+(rule.kill?' · <span class="steal-risk">失手触发击杀</span>':'')+'</div>':'';
   return '<div class="slot'+(current?' focus':'')+'"><div class="slot-head"><span class="talent-name q'+esc(o.t.quality??0)+'">'+esc(o.t.name)+'</span>'+(current?'<span class="badge steal">当前物品</span>':'')+'<span class="badge">×'+esc(o.count)+'</span><span class="badge">'+esc(o.t.type||'未分类')+'</span>'+verdict+'</div>'+effect+'</div>';
  }).join('');
+ const demands=(row.demand||[]).map(id=>{
+  const key=String(id),t=cat[key]||{name:'物品 #'+key,quality:0,type:''};
+  return{t:t};
+ });
+ demands.sort((a,b)=>Number(!!b.t.demand)-Number(!!a.t.demand)||(a.t.demand_cost||0)-(b.t.demand_cost||0)||String(a.t.name).localeCompare(String(b.t.name),'zh-CN'));
+ const demandRows=demands.map(o=>{
+  const ok=!!o.t.demand,current=focusId&&String(o.t.id)===focusId;
+  const absent=bagIds.has(String(o.t.id))?'':'<span class="badge demand-absent">不在背包</span>';
+  const value=ok?'<span class="badge demand">好感 -'+esc(o.t.demand_cost||0)+'</span>':'<span class="badge nosteal">不可索要</span>';
+  return '<div class="slot'+(current?' focus':'')+'"><div class="slot-head"><span class="talent-name q'+esc(o.t.quality??0)+'">'+esc(o.t.name)+'</span>'+absent+'<span class="badge">品质 '+esc(o.t.quality??'未知')+'</span>'+value+'</div></div>';
+ }).join('');
+ const fav=row.intimacy!=null?'<div class="item-sec-note">好感 '+esc(row.intimacy)+(intimacyName(row)?'（'+esc(intimacyName(row))+'）':'')+' · 无好感门槛 · 每周期 1 次 · 消耗不随境界折算</div>':'';
+ return '<div class="item-sec"><div class="item-sec-head"><span>偷取</span><span class="meta">'+list.length+' 件 · 来自他的背包</span></div>'+(stealRows||'<div class="empty">他目前没有持有物品</div>')+'</div>'
+  +'<div class="item-sec"><div class="item-sec-head"><span>索要</span><span class="meta">'+demands.length+' 件 · 来自索要模板</span></div>'+fav+(demandRows||'<div class="empty">这个 NPC 没有索要模板</div>')+'</div>';
 }
 function renderItemList(){
  itemPage={};
@@ -802,6 +1327,7 @@ function renderItemList(){
    const v=itemVerdict(row,t);
    if(itemFilters.steal==='1'&&!v.ok)continue;
    if(itemFilters.steal==='0'&&v.ok)continue;
+   if(itemFilters.demand==='1'&&!((row.demand||[]).some(id=>String(id)===iid)&&t.demand))continue;
    if(!groups[iid])groups[iid]={t:t,owners:[],stealable:0,total:0};
    groups[iid].owners.push({row:row,t:t,count:pair[1]||1,v:v});
    groups[iid].total+=pair[1]||1;
@@ -825,13 +1351,14 @@ function renderItemList(){
     const v=itemVerdict(row,t);
     if(itemFilters.steal==='1'&&!v.ok)continue;
     if(itemFilters.steal==='0'&&v.ok)continue;
-    if(!npcs[row.uid])npcs[row.uid]={row:row,items:0,stealable:0};
+    if(itemFilters.demand==='1'&&!((row.demand||[]).some(id=>String(id)===iid)&&t.demand))continue;
+    if(!npcs[row.uid])npcs[row.uid]={row:row,items:0,stealable:0,demandable:(row.demand||[]).filter(did=>{const dt=idx.cat[String(did)];return dt&&dt.demand}).length};
     npcs[row.uid].items++;
     if(v.ok)npcs[row.uid].stealable++;
    }
   }
   const list=Object.values(npcs).sort((a,b)=>b.stealable-a.stealable||b.items-a.items||String(a.row.who).localeCompare(String(b.row.who),'zh-CN'));
-  const cards=list.map(g=>'<details class="item-group npc-card" data-uid="'+esc(g.row.uid)+'"><summary class="item-head"><span class="item-arrow">›</span><span class="item-title">'+hi(g.row.who,npcQ)+'</span>'+(g.row.realm?'<span class="badge">'+esc(g.row.realm)+'</span>':'')+'<span class="badge steal">可偷 '+g.stealable+' 件</span><span class="item-stat">共 '+g.items+' 件 · '+esc(g.row.location_path||g.row.location||'未知地点')+'</span></summary><div class="slots"></div></details>');
+  const cards=list.map(g=>'<details class="item-group npc-card" data-uid="'+esc(g.row.uid)+'"><summary class="item-head"><span class="item-arrow">›</span><span class="item-title">'+hi(g.row.who,npcQ)+'</span>'+(g.row.realm?'<span class="badge">'+esc(g.row.realm)+'</span>':'')+'<span class="badge steal">可偷 '+g.stealable+' 件</span>'+(g.demandable?'<span class="badge demand">可索要 '+g.demandable+' 件</span>':'')+'<span class="item-stat">共 '+g.items+' 件 · '+esc(g.row.location_path||g.row.location||'未知地点')+'</span></summary><div class="slots"></div></details>');
   itemRenderState={groups:{},q:q,npcQ:npcQ};
   $('iresult').textContent='筛选结果：'+list.length+' 位 NPC，'+list.reduce((sum,g)=>sum+g.items,0)+' 件物品（正在按 NPC 查看，清空 NPC 搜索即回到物品列表）';
   $('ilist').innerHTML=cards.length?cards.join(''):'<div class="empty">没有符合条件的 NPC</div>';
@@ -858,6 +1385,14 @@ function initItems(){
   return '<option value="'+esc(value)+'">'+esc(label)+'</option>'
  }).join('');
  $('items').innerHTML=sourceHtml(m)+`
+  <style>
+  .item-sec{margin-top:14px;border-top:1px solid #2a3340;padding-top:10px}
+  .item-sec-head{display:flex;align-items:baseline;gap:8px;margin:2px 0 4px;font-size:13px;font-weight:600}
+  .item-sec-head .meta{font-weight:400;color:#8b93a1;font-size:12px}
+  .item-sec-note{font-size:12px;color:#8b93a1;margin:0 0 6px}
+  .badge.demand{background:rgba(110,221,162,.14);color:#6edda2;border:1px solid rgba(110,221,162,.35)}
+  .badge.demand-absent{background:transparent;color:#8b93a1;border:1px dashed #4a5563}
+  </style>
   <div class="search-panel"><div class="search-fields">
    <label class="search-field"><span>找物品</span><input id="iq" placeholder="输入物品名称" value="${esc(itemFilters.q)}"></label>
    <label class="search-field"><span>找 NPC（可选）</span><input id="inpc" placeholder="输入 NPC 名称，与物品条件叠加" value="${esc(itemFilters.npc)}"></label>
@@ -866,6 +1401,7 @@ function initItems(){
    <label class="filter-field"><span>区域</span><select id="iregion">${opts(regions,'区域')}</select></label>
    <label class="filter-field"><span>具体位置</span><select id="ilocation"></select></label>
    <label class="filter-field"><span>偷窃</span><select id="isteal"><option value="">全部持有者</option><option value="1">只看可偷</option><option value="0">只看不可偷</option></select></label>
+   <label class="filter-field"><span>索要</span><select id="idemand"><option value="">全部物品</option><option value="1">只看可索要</option></select></label>
    <div class="filter-actions"><button type="button" id="iclear" class="filter-button">清空筛选</button></div>
   </div>
   <details id="iadvanced" class="advanced-filters"><summary>更多筛选 <span id="iadvancedcount" class="filter-count"></span></summary><div class="advanced-grid">
@@ -882,7 +1418,7 @@ function initItems(){
  }
  function saveAndRender(){store.set(ITEM_KEY,itemFilters);updateCount();renderItemList()}
  $('iregion').value=itemFilters.region||'';updateItemLocations();
- for(const key of ['q','npc','location','type','quality','steal']){
+ for(const key of ['q','npc','location','type','quality','steal','demand']){
   const node=$('i'+key);node.value=itemFilters[key]??'';
   node.addEventListener(node.tagName==='INPUT'?'input':'change',()=>{itemFilters[key]=node.value;saveAndRender()});
  }
@@ -943,10 +1479,17 @@ const PILL_ELEMENT=['无','金','木','水','火','土'];
 const PILL_ELEMENT_COLOR=['#8b93a1','#e6dcae','#8ccf92','#7fc0ee','#ee9a86','#d8b273'];
 const PILL_TYPES={recipe:[2],effect:[1],cleanse:[3],reward:[4],portal:[5,6]};
 const PILL_TYPE_LABEL={recipe:'丹方',effect:'丹方属性',cleanse:'减毒',reward:'奖励',portal:'传送口'};
-const PILL_KEYWORDS=['攻击','暴击','生命','破韧','防御','速度','灵力','伤害','净化','复活','修为','灼烧','共鸣'];
+const PILL_KEYWORDS=['攻击','暴击','生命','破韧','防御','速度','灵力','伤害','净化','复活','修为','灼烧','共鸣','同道','灵气'];
+const PILL_ORDER=['recipe','effect','cleanse','reward','portal','other'];
+const PILL_FILTER_KEY='worldapart.pill.filters.v3';
+const PILL_DEFAULTS={types:Object.keys(PILL_TYPES),elements:['1','2','3','4','5'],tiers:[],keywords:[],q:'',hideDone:false};
 // 未知类型（游戏新增拾取物）自动归入「其他」，不会从筛选里消失
 let PILL_GROUPS=PILL_TYPES,PILL_LABELS=PILL_TYPE_LABEL;
-let pillFilter={types:Object.keys(PILL_TYPES),elements:['1','2','3','4','5'],keywords:[],q:''};
+let pillFilter=Object.assign({},PILL_DEFAULTS,store.get(PILL_FILTER_KEY,{}));
+if(!Array.isArray(pillFilter.types))pillFilter.types=PILL_DEFAULTS.types.slice();
+if(!Array.isArray(pillFilter.elements))pillFilter.elements=PILL_DEFAULTS.elements.slice();
+if(!Array.isArray(pillFilter.tiers))pillFilter.tiers=[];
+if(!Array.isArray(pillFilter.keywords))pillFilter.keywords=[];
 function poiFill(p){
  return p[1]===2?(PILL_ELEMENT_COLOR[p[2]]||PILL_COLOR[2]):(PILL_COLOR[p[1]]||'#9aa3b0');
 }
@@ -968,17 +1511,10 @@ function pillText(p,mp){
  if(p[1]===1){const e=(mp.effects||{})[String(p[4])];return e?e[3]||'':''}
  return '';
 }
-function pillMatch(p,mp){
- if(!pillFilter.types.some(k=>(PILL_GROUPS[k]||[]).includes(p[1])))return false;
- // 五行、效果只有丹方与丹方属性有，减毒/奖励/传送口不受这两项影响
- if(p[2]>0&&!pillFilter.elements.includes(String(p[2])))return false;
- if(pillFilter.keywords.length){
-  const text=pillText(p,mp);
-  if(text&&!pillFilter.keywords.some(k=>text.includes(k)))return false;
- }
- const q=pillFilter.q.trim();if(!q)return true;
- // 除了名称，也匹配效果文案，新版本新效果直接打字就能搜到
- return pillName(p,mp).includes(q)||pillText(p,mp).includes(q);
+function portalCost(mp,cfg){
+ const pt=(mp.portals||{})[String(cfg)];
+ if(!pt)return '';
+ return pt[5]?`${pt[4]||'妖丹'} ×${pt[5]}`:'无需妖丹';
 }
 function initPill(){
  const m=DATA.modules&&DATA.modules.pill;if(!m)return;const host=$('pill');
@@ -989,7 +1525,6 @@ function initPill(){
  const cols=mp.cols,rowsN=mp.rows,ts=mp.tile_size||20,consumed=new Set(st.consumed||[]);
  const learned=new Set((st.manual||[]).map(r=>String(r.id)));
  const compById=new Map();(mp.pois||[]).forEach((p,i)=>compById.set(p[0],(mp.comps||[])[i]));
- const elemCounts={};mp.pois.forEach(p=>{if(p[2])elemCounts[p[2]]=(elemCounts[p[2]]||0)+1});
  // 游戏新增拾取物类型时不再被筛掉，统一落到「其他」
  const extra=[...new Set(mp.pois.map(p=>p[1]).filter(t=>PILL_COLOR[t]===undefined))].sort((a,b)=>a-b);
  if(extra.length){
@@ -1006,14 +1541,28 @@ function initPill(){
  host.innerHTML=sourceHtml(m)+`<div class="cards">${cards}</div>`+
   (maps.length>1?`<div class="chips" id="pillmaps"><span class="chip-label">盘面</span>`+
    maps.map((x,i)=>`<button class="chip${x===mp?' on':''}" data-map="${i}">${esc(x.name)}<i>${(x.pois||[]).length}</i></button>`).join('')+`</div>`:'')+
-  `<div class="pill-grid"><div class="mapbox"><canvas id="pillmap"></canvas><svg id="pillsvg" viewBox="0 0 ${cols} ${rowsN}" xmlns="http://www.w3.org/2000/svg"></svg></div>`+
-  `<div class="pill-side"><div class="chips" id="pillchips"></div><div class="chips" id="pillelems"></div><div class="chips" id="pillkeys"></div>`+
-  `<input id="pillq" class="pill-search" placeholder="搜索丹方 / 药效 / 奖励名称">`+
-  `<div class="pill-detail" id="pillinfo">点击盘面上的标记或右侧列表查看详情</div>`+
+  `<div class="pill-grid"><div class="mapbox"><canvas id="pillmap"></canvas><svg id="pillsvg" viewBox="0 0 ${cols} ${rowsN}" xmlns="http://www.w3.org/2000/svg"></svg><div class="map-tip" id="pillherbtip"></div></div>`+
+  `<div class="pill-side">`+
+  `<div class="fsec"><div class="fhead"><b>显示对象</b><span class="fhint">Alt+点击 独选</span>`+
+   `<span class="fops"><button type="button" data-op="none" data-row="types">清</button><button type="button" data-op="all" data-row="types">全</button></span></div>`+
+   `<div class="chips" id="pillchips"></div></div>`+
+  `<div class="fsec" id="pillcond"><div class="fhead"><b>筛选条件</b><span class="fhint">仅作用于丹方 / 丹方属性</span></div>`+
+   `<div class="frow"><span class="chip-label">五行</span><div class="chips" id="pillelems"></div>`+
+    `<span class="fops"><button type="button" data-op="none" data-row="elements">清</button><button type="button" data-op="all" data-row="elements">全</button></span></div>`+
+   `<div class="frow"><span class="chip-label">阶数</span><div class="chips" id="pilltiers"></div>`+
+    `<span class="fops"><button type="button" data-op="none" data-row="tiers">清</button><button type="button" data-op="all" data-row="tiers">全</button></span></div>`+
+   `<div class="frow"><span class="chip-label">药效</span><div class="chips" id="pillkeys"></div>`+
+    `<span class="fops"><button type="button" data-op="none" data-row="keywords">清</button></span></div>`+
+  `</div>`+
+  `<div class="fsec"><div class="fhead"><b>视图</b></div><div class="chips" id="pillview"></div></div>`+
+  `<input id="pillq" class="pill-search" placeholder="搜索名称 / 丹方药效 / 奖励说明">`+
+  `<div class="pill-active" id="pillactive"></div>`+
+  `<div class="pill-detail" id="pillinfo">点击盘面上的标记或右侧结果查看详情</div>`+
+  `<div class="pill-sum" id="pillsum"></div>`+
   `<div class="pill-list" id="pilllist"></div>`+
   `<div class="legend">${[1,3,4,5].map(t=>`<span><i style="background:${PILL_COLOR[t]}"></i>${PILL_TYPE[t]}</span>`).join('')}${[1,2,3,4,5].map(t=>`<span><i style="background:${PILL_ELEMENT_COLOR[t]}"></i>${PILL_ELEMENT[t]}丹方</span>`).join('')}<span><i style="background:#5a4a36"></i>山</span><span><i style="background:#26414a"></i>沼泽</span></div></div></div>`+
   `<div class="manual"><div class="manual-head">丹方手记<span>已学会 ${(st.manual||[]).length} 张 · 点击定位盘面</span></div><div class="manual-list" id="pillmanual"></div></div>`+
-  `<div class="tip">盘面为游戏内置固定地图（${cols}×${rowsN} 格，每格 ${ts} 单位），并非随机生成；带删除线的拾取点表示本存档已拾取过。「迷雾」开启后只显示已探索区域，落在迷雾里的拾取点会一起隐藏。</div>`;
+  `<div class="tip">盘面为游戏内置固定地图（${cols}×${rowsN} 格，每格 ${ts} 单位），并非随机生成；带删除线的拾取点表示本存档已拾取过。「迷雾」开启后只显示已探索区域，落在迷雾里的拾取点会一起隐藏。「药材路线」默认关闭，打开后显示盘面自带的 ${(mp.trajectories||[]).length} 条药材分布轨迹，鼠标停在线路上才会显示药材名。</div>`;
  // 地形
  const cv=$('pillmap');cv.width=cols;cv.height=rowsN;
  const ctx=cv.getContext('2d');const img=ctx.createImageData(cols,rowsN);const px=img.data;
@@ -1077,15 +1626,26 @@ function initPill(){
  const herbs=mp.herbs||{};
  const herbLayer=document.createElementNS(NS,'g');herbLayer.setAttribute('id','pillherb');
  svg.appendChild(herbLayer);
+ // 药材轨迹：名字用 HTML 悬浮提示（盘面 500×500 缩放后 SVG 文字只剩几像素，没法看）
+ const herbTip=$('pillherbtip');
  (mp.trajectories||[]).forEach(([hid,,,segs])=>{
   if(!segs||!segs.length)return;const pts=segs.map(s=>`${s[1]/ts},${s[2]/ts}`).join(' ');
+  const name=herbs[String(hid)]||('药材 '+hid);
+  const group=document.createElementNS(NS,'g');group.setAttribute('class','herb-track');
   const line=document.createElementNS(NS,'polyline');line.setAttribute('points',pts);
   line.setAttribute('fill','none');line.setAttribute('stroke','#8f7bd8');line.setAttribute('stroke-opacity','.28');
-  line.setAttribute('stroke-width','.8');herbLayer.appendChild(line);
-  const first=segs[0];const label=document.createElementNS(NS,'text');
-  label.setAttribute('x',first[1]/ts);label.setAttribute('y',first[2]/ts);label.setAttribute('fill','#9a86e6');
-  label.setAttribute('font-size','3.2');label.setAttribute('opacity','.75');
-  label.textContent=herbs[String(hid)]||('药材 '+hid);herbLayer.appendChild(label)});
+  line.setAttribute('stroke-width','.8');group.appendChild(line);
+  const hit=document.createElementNS(NS,'polyline');hit.setAttribute('points',pts);
+  hit.setAttribute('fill','none');hit.setAttribute('stroke','#fff');hit.setAttribute('stroke-opacity','0');
+  hit.setAttribute('stroke-width','4');hit.setAttribute('pointer-events','stroke');group.appendChild(hit);
+  hit.addEventListener('mouseenter',()=>{herbTip.textContent=name;herbTip.classList.add('on')});
+  hit.addEventListener('mousemove',e=>{
+   const r=mapbox.getBoundingClientRect();
+   herbTip.style.left=(e.clientX-r.left)+'px';
+   herbTip.style.top=(e.clientY-r.top)+'px';
+  });
+  hit.addEventListener('mouseleave',()=>herbTip.classList.remove('on'));
+  herbLayer.appendChild(group)});
  // 拾取点
  const dots=[];
  mp.pois.forEach(p=>{
@@ -1096,6 +1656,8 @@ function initPill(){
   c.setAttribute('fill-opacity',p[1]===4?'.75':'.95');
   c.setAttribute('stroke','#0b0d10');c.setAttribute('stroke-width','.4');
   c.classList.add('poi-dot');
+  const tip=document.createElementNS(NS,'title');
+  tip.textContent=pillName(p,mp);c.appendChild(tip);
   if(consumed.has(p[0]))c.classList.add('dim');
   if(strokes.length&&!exploredAt(p[6],p[7]))c.classList.add('unseen');
   c.addEventListener('click',()=>showPoi(p));
@@ -1104,6 +1666,7 @@ function initPill(){
  const routeLayer=document.createElementNS(NS,'g');
  routeLayer.setAttribute('id','pillroute');svg.appendChild(routeLayer);
  const ring=document.createElementNS(NS,'circle');
+ ring.setAttribute('id','pillring');
  ring.setAttribute('fill','none');ring.setAttribute('stroke','#fff');
  ring.setAttribute('stroke-width','.9');ring.setAttribute('r','6');
  ring.style.display='none';svg.appendChild(ring);
@@ -1183,6 +1746,9 @@ function initPill(){
    }
   }
   if(p[1]===5||p[1]===6){
+   const pt=(mp.portals||{})[String(p[10])];
+   html+=`<div class="muted" style="margin-top:4px">${pt&&pt[2]?'双向传送':'单向传送'} · `+
+    `${pt&&pt[5]?`消耗 ${esc(pt[4]||'妖丹')} ×${pt[5]}`:'不需要妖丹'}</div>`;
    const other=mp.pois.find(q=>(q[1]===5||q[1]===6)&&q[10]===p[10]&&q[0]!==p[0]);
    if(other)html+=`<div class="route"><span>${p[1]===5?'出口':'入口'}</span>`+
     `${p[1]===5?'穿过这里就是':'从这里可以回到'} ${Math.round(other[6])},${Math.round(other[7])}`+
@@ -1191,99 +1757,291 @@ function initPill(){
   $('pillinfo').innerHTML=html;
   drawRoute(comp>=0&&comp!==mp.main?steps:[]);
   ring.setAttribute('cx',p[6]/ts);ring.setAttribute('cy',p[7]/ts);ring.style.display='';
+  markSelected(p[0]);
  }
- // 筛选（类型、五行、效果都可多选）
- const chips=$('pillchips'),elems=$('pillelems'),keys=$('pillkeys'),mapbox=cv.parentElement;
- const groupCount={};Object.keys(PILL_GROUPS).forEach(k=>{
-  groupCount[k]=mp.pois.filter(p=>PILL_GROUPS[k].includes(p[1])).length});
- const keyCount={};mp.pois.forEach(p=>{
-  const text=pillText(p,mp);if(!text)return;
-  PILL_KEYWORDS.forEach(k=>{if(text.includes(k))keyCount[k]=(keyCount[k]||0)+1});
- });
+ // 筛选：①显示对象 ②筛选条件（仅丹方/丹方属性） ③视图 ④搜索
+ const mapbox=cv.parentElement,side=host.querySelector('.pill-side');
+ const chips=$('pillchips'),elems=$('pillelems'),tierBox=$('pilltiers'),keys=$('pillkeys'),viewBox=$('pillview');
+ const allElems=['1','2','3','4','5'];
+ const tierValues=[...new Set(mp.pois.filter(p=>p[1]===1||p[1]===2).map(p=>p[3]).filter(t=>t>0))].sort((a,b)=>a-b);
+ const allTypes=()=>Object.keys(PILL_GROUPS);
+ // 还原上次的筛选条件，按当前盘面能力裁剪
+ pillFilter.types=pillFilter.types.filter(k=>PILL_GROUPS[k]);
+ if(!pillFilter.types.length)pillFilter.types=allTypes();
+ pillFilter.elements=pillFilter.elements.map(String).filter(v=>allElems.includes(v));
+ pillFilter.tiers=pillFilter.tiers.map(String).filter(t=>tierValues.includes(+t));
+ // 阶数是「选中即显示」的多选：空集合等于一个都不显示，所以默认全选
+ if(!pillFilter.tiers.length)pillFilter.tiers=tierValues.map(String);
+ pillFilter.keywords=pillFilter.keywords.filter(k=>PILL_KEYWORDS.includes(k));
+ let keyExpanded=false;const expandedGroups=new Set();
  let fogOn=fogLayer?store.get('worldapart.pill.fog.v1',false)===true:false;
  if(fogLayer)mapbox.classList.toggle('showfog',fogOn);
- function renderChips(){
-  const keys=Object.keys(PILL_GROUPS);
-  const all=pillFilter.types.length===keys.length;
-  chips.innerHTML=`<button class="chip${all?' on':''}" data-all="1">${all?'全不选':'全选'}</button>`+
-   keys.map(k=>`<button class="chip${pillFilter.types.includes(k)?' on':''}" data-chip="${k}">${PILL_LABELS[k]}<i>${groupCount[k]}</i></button>`).join('')+
-   (fogLayer?`<button class="chip${fogOn?' on':''}" data-fog="1">迷雾</button>`:'');
+ // 药材轨迹默认隐藏，避免 45 条线在盘面中间叠成一张网
+ let herbOn=store.get('worldapart.pill.herbs.v1',false)===true;
+ mapbox.classList.toggle('showherb',herbOn);
+ function saveFilter(){
+  store.set(PILL_FILTER_KEY,{types:pillFilter.types,elements:pillFilter.elements,
+   tiers:pillFilter.tiers,keywords:pillFilter.keywords,q:pillFilter.q,hideDone:pillFilter.hideDone});
+ }
+ function typeKey(t){for(const k in PILL_GROUPS)if(PILL_GROUPS[k].includes(t))return k;return 'other'}
+ function typeSelected(p){return pillFilter.types.some(k=>(PILL_GROUPS[k]||[]).includes(p[1]))}
+ function isDone(p){return p[1]===2?learned.has(String((mp.pool||[])[p[5]]||'')):consumed.has(p[0])}
+ // skip 表示统计某一组时先忽略该组自身条件，才能看出「勾上它还剩多少」
+ function passBase(p,skip){
+  if(p[1]===1||p[1]===2){
+   if(skip!=='elements'&&p[2]>0&&!pillFilter.elements.includes(String(p[2])))return false;
+   if(skip!=='tiers'&&!pillFilter.tiers.includes(String(p[3])))return false;
+   if(skip!=='keywords'&&pillFilter.keywords.length){
+    const text=pillText(p,mp);
+    if(!pillFilter.keywords.some(k=>text.includes(k)))return false;
+   }
+  }
+  if(pillFilter.hideDone&&consumed.has(p[0]))return false;
+  const q=pillFilter.q.trim();
+  if(q&&!(pillName(p,mp).includes(q)||pillText(p,mp).includes(q)))return false;
+  return true;
+ }
+ function countsByType(){
+  const out={};allTypes().forEach(k=>out[k]=0);
+  mp.pois.forEach(p=>{
+   if(!passBase(p,''))return;
+   for(const k in PILL_GROUPS){if(PILL_GROUPS[k].includes(p[1])){out[k]++;break}}
+  });
+  return out;
+ }
+ function countsByElement(){
+  const out={};
+  mp.pois.forEach(p=>{
+   if((p[1]!==1&&p[1]!==2)||!typeSelected(p)||!p[2]||!passBase(p,'elements'))return;
+   out[p[2]]=(out[p[2]]||0)+1;
+  });
+  return out;
+ }
+ function countsByTier(){
+  const out={};
+  mp.pois.forEach(p=>{
+   if((p[1]!==1&&p[1]!==2)||!typeSelected(p)||!passBase(p,'tiers'))return;
+   out[p[3]]=(out[p[3]]||0)+1;
+  });
+  return out;
+ }
+ function countsByKeyword(){
+  const out={};
+  mp.pois.forEach(p=>{
+   if((p[1]!==1&&p[1]!==2)||!typeSelected(p)||!passBase(p,'keywords'))return;
+   const text=pillText(p,mp);if(!text)return;
+   PILL_KEYWORDS.forEach(k=>{if(text.includes(k))out[k]=(out[k]||0)+1});
+  });
+  return out;
+ }
+ function renderTypes(){
+  const counts=countsByType();
+  chips.innerHTML=allTypes().map(k=>{
+   const n=counts[k]||0;
+   return `<button class="chip${pillFilter.types.includes(k)?' on':''}${n?'':' zero'}" data-chip="${k}">${PILL_LABELS[k]}<i>${n}</i></button>`;
+  }).join('');
  }
  function renderElems(){
-  const all=pillFilter.elements.length===5;
-  elems.innerHTML=`<span class="chip-label">五行</span><button class="chip${all?' on':''}" data-eall="1">${all?'全不选':'全选'}</button>`+
-   [1,2,3,4,5].map(v=>`<button class="chip${pillFilter.elements.includes(String(v))?' on':''}" data-elem="${v}">${PILL_ELEMENT[v]}<i>${elemCounts[v]||0}</i></button>`).join('');
+  const counts=countsByElement();
+  elems.innerHTML=allElems.map(v=>{
+   const n=counts[v]||0;
+   return `<button class="chip${pillFilter.elements.includes(v)?' on':''}${n?'':' zero'}" data-elem="${v}">${PILL_ELEMENT[+v]}<i>${n}</i></button>`;
+  }).join('');
+ }
+ function renderTiers(){
+  const counts=countsByTier();
+  tierBox.innerHTML=tierValues.length?tierValues.map(t=>{
+   const n=counts[t]||0;
+   return `<button class="chip${pillFilter.tiers.includes(String(t))?' on':''}${n?'':' zero'}" data-tier="${t}">${t} 阶<i>${n}</i></button>`;
+  }).join(''):'<span class="fhint">当前盘面没有阶数</span>';
  }
  function renderKeys(){
-  keys.innerHTML=`<span class="chip-label">效果</span>`+
-   PILL_KEYWORDS.filter(k=>keyCount[k]).map(k=>
-    `<button class="chip${pillFilter.keywords.includes(k)?' on':''}" data-key="${k}">${k}<i>${keyCount[k]}</i></button>`).join('');
+  const counts=countsByKeyword();
+  const positive=PILL_KEYWORDS.filter(k=>counts[k]).sort((a,b)=>counts[b]-counts[a]);
+  const pinned=pillFilter.keywords.filter(k=>!positive.includes(k));
+  const shown=keyExpanded?positive.concat(pinned):[...new Set([...positive.slice(0,8),...pinned])];
+  const total=positive.length+pinned.length;
+  keys.innerHTML=shown.map(k=>
+   `<button class="chip${pillFilter.keywords.includes(k)?' on':''}" data-key="${k}">${k}<i>${counts[k]||0}</i></button>`).join('')+
+   (total>8?`<button class="chip more" data-op="more" data-row="keywords">${keyExpanded?'收起':'更多 '+total}</button>`:'');
  }
- chips.onclick=e=>{
-  const btn=e.target.closest('button');if(!btn)return;if(btn.dataset.all){
-   const all=pillFilter.types.length===Object.keys(PILL_GROUPS).length;
-   pillFilter.types=all?[]:Object.keys(PILL_GROUPS);
-   renderChips();applyFilter();return;
+ function renderView(){
+  viewBox.innerHTML=(fogLayer?`<button class="chip${fogOn?' on':''}" data-view="fog">迷雾</button>`:'')+
+   `<button class="chip${herbOn?' on':''}" data-view="herb">药材路线</button>`+
+   `<button class="chip${pillFilter.hideDone?' on':''}" data-view="done">隐藏已拾取</button>`;
+ }
+ function renderCond(){
+  $('pillcond').classList.toggle('off',!(pillFilter.types.includes('recipe')||pillFilter.types.includes('effect')));
+ }
+ function renderActive(){
+  const tags=[];
+  if(pillFilter.types.length!==allTypes().length)
+   pillFilter.types.forEach(k=>tags.push(['types',k,PILL_LABELS[k]]));
+  if(pillFilter.elements.length!==5)
+   pillFilter.elements.forEach(v=>tags.push(['elements',v,PILL_ELEMENT[+v]+'行']));
+  if(pillFilter.tiers.length!==tierValues.length)
+   pillFilter.tiers.forEach(t=>tags.push(['tiers',t,t+' 阶']));
+  pillFilter.keywords.forEach(k=>tags.push(['keywords',k,k]));
+  if(pillFilter.q.trim())tags.push(['q','hidden','搜索 '+pillFilter.q.trim()]);
+  if(pillFilter.hideDone)tags.push(['done','hidden','隐藏已拾取']);
+  if(herbOn)tags.push(['herb','hidden','药材路线']);
+  if(fogOn)tags.push(['fog','hidden','迷雾']);
+  $('pillactive').innerHTML=tags.length?
+   '<span class="ptag-label">已选</span>'+tags.map(([row,v,label])=>
+    `<button class="ptag" data-tagrow="${row}" data-tagval="${esc(v)}">${esc(label)}<b>×</b></button>`).join('')+
+    '<button class="ptag clear" data-tagrow="all">清空</button>'
+   :'<span class="ptag-label">未设筛选，显示全部拾取点</span>';
+ }
+ function itemHtml(p){
+  const isRecipe=p[1]===2,rid=isRecipe?String((mp.pool||[])[p[5]]||''):'';
+  let sub;
+  if(isRecipe){sub=`${PILL_ELEMENT[p[2]]||''}·${p[3]||0}阶`;if(learned.has(rid))sub+=' · 已学会'}
+  else if(p[1]===1){const e=(mp.effects||{})[String(p[4])];sub=(e&&e[7])||'丹方属性';if(p[3])sub+=' · '+p[3]+'阶'}
+  else if(p[1]===4){const r=(mp.rewards||{})[String(p[8])];sub='奖励'+(r?' · 品质 '+r[2]:'')}
+  else if(p[1]===5||p[1]===6)sub='传送口 · '+portalCost(mp,p[10]);
+  else sub=PILL_TYPE[p[1]]||'其他';
+  const comp=compById.has(p[0])?compById.get(p[0]):-1;
+  if(p[1]!==5&&p[1]!==6&&mp.main!==undefined&&comp>=0&&comp!==mp.main)sub+=' · 需传送';
+  return `<div class="pill-item${isDone(p)?' done':''}" data-id="${p[0]}">`+
+   `<i class="dotmark" style="background:${poiFill(p)}"></i>`+
+   `<span class="nm">${esc(pillName(p,mp))}</span><span class="tp">${esc(sub)}</span></div>`;
+ }
+ function renderList(matched){
+  const picked=matched.filter(p=>consumed.has(p[0])).length;
+  $('pillsum').innerHTML=`结果 <b>${matched.length}</b> 项 · 已拾取 ${picked} 项`;
+  if(!matched.length){
+   const acts=[];
+   if(pillFilter.tiers.length<tierValues.length)acts.push('<button type="button" class="pill-act" data-relax="tiers">放宽到全部阶数</button>');
+   if(pillFilter.keywords.length)acts.push('<button type="button" class="pill-act" data-relax="keywords">清空药效</button>');
+   if(pillFilter.elements.length!==5)acts.push('<button type="button" class="pill-act" data-relax="elements">恢复全部五行</button>');
+   if(pillFilter.q.trim())acts.push('<button type="button" class="pill-act" data-relax="q">清空搜索</button>');
+   if(pillFilter.hideDone)acts.push('<button type="button" class="pill-act" data-relax="done">显示已拾取</button>');
+   acts.push('<button type="button" class="pill-act" data-relax="all">清空全部筛选</button>');
+   $('pilllist').innerHTML='<div class="empty" style="margin:0;border:0">没有符合条件的拾取点'+
+    '<div class="empty-acts">'+acts.join('')+'</div></div>';
+   return;
   }
-  if(btn.dataset.fog){
-   fogOn=!fogOn;mapbox.classList.toggle('showfog',fogOn);
-   store.set('worldapart.pill.fog.v1',fogOn);renderChips();return;
+  const groups={};matched.forEach(p=>{const k=typeKey(p[1]);(groups[k]=groups[k]||[]).push(p)});
+  const keysNow=PILL_ORDER.filter(k=>groups[k]);
+  const single=keysNow.length===1;
+  $('pilllist').innerHTML=keysNow.map(k=>{
+   const list=k==='recipe'?groups[k].slice().sort((a,b)=>(b[3]||0)-(a[3]||0)):groups[k];
+   const limit=expandedGroups.has(k)?list.length:60;
+   return '<div class="pill-group"><div class="pghead"><span class="pgname">'+esc(PILL_LABELS[k])+'</span>'+
+    '<i class="pgcount">'+list.length+'</i>'+
+    (single?'':'<button type="button" class="pgonly" data-only="'+k+'">只看这类</button>')+'</div>'+
+    list.slice(0,limit).map(itemHtml).join('')+
+    (list.length>limit?'<button type="button" class="pgmore" data-expand="'+k+'">展开全部 '+list.length+' 项</button>':'')+
+    '</div>';
+  }).join('');
+ }
+ function markSelected(id){
+  document.querySelectorAll('#pilllist .pill-item.focus').forEach(n=>n.classList.remove('focus'));
+  const node=document.querySelector('#pilllist .pill-item[data-id="'+id+'"]');
+  if(node){node.classList.add('focus');node.scrollIntoView({block:'nearest'})}
+ }
+ function resetAll(){
+  pillFilter.types=allTypes();pillFilter.elements=allElems.slice();
+  pillFilter.tiers=tierValues.map(String);pillFilter.keywords=[];pillFilter.q='';pillFilter.hideDone=false;
+  $('pillq').value='';
+ }
+ function applyOp(row,op){
+  if(op==='more'){keyExpanded=!keyExpanded;renderKeys();return}
+  if(row==='types')pillFilter.types=op==='all'?allTypes():[];
+  else if(row==='elements')pillFilter.elements=op==='all'?allElems.slice():[];
+  else if(row==='tiers')pillFilter.tiers=op==='all'?tierValues.map(String):[];
+  else if(row==='keywords')pillFilter.keywords=[];
+  applyFilter();
+ }
+ function removeTag(row,val){
+  if(row==='all')resetAll();
+  else if(row==='q'){pillFilter.q='';$('pillq').value=''}
+  else if(row==='done')pillFilter.hideDone=false;
+  else if(row==='fog'){fogOn=false;if(fogLayer)mapbox.classList.remove('showfog');store.set('worldapart.pill.fog.v1',false)}
+  else if(row==='herb'){herbOn=false;mapbox.classList.remove('showherb');store.set('worldapart.pill.herbs.v1',false)}
+  else if(row==='types')pillFilter.types=pillFilter.types.filter(x=>x!==val);
+  else if(row==='elements')pillFilter.elements=pillFilter.elements.filter(x=>x!==val);
+  else if(row==='tiers')pillFilter.tiers=pillFilter.tiers.filter(x=>x!==val);
+  else if(row==='keywords')pillFilter.keywords=pillFilter.keywords.filter(x=>x!==val);
+  applyFilter();
+ }
+ function relaxFilter(kind){
+  if(kind==='all')resetAll();
+  else if(kind==='tiers')pillFilter.tiers=tierValues.map(String);
+  else if(kind==='keywords')pillFilter.keywords=[];
+  else if(kind==='elements')pillFilter.elements=allElems.slice();
+  else if(kind==='q'){pillFilter.q='';$('pillq').value=''}
+  else if(kind==='done')pillFilter.hideDone=false;
+  applyFilter();
+ }
+ side.addEventListener('click',e=>{
+  const op=e.target.closest('[data-op]');
+  if(op){applyOp(op.dataset.row,op.dataset.op);return}
+  const view=e.target.closest('[data-view]');
+  if(view){
+   if(view.dataset.view==='fog'&&fogLayer){
+    fogOn=!fogOn;mapbox.classList.toggle('showfog',fogOn);
+    store.set('worldapart.pill.fog.v1',fogOn);renderView();renderActive();return;
+   }
+   if(view.dataset.view==='herb'){
+    herbOn=!herbOn;mapbox.classList.toggle('showherb',herbOn);
+    store.set('worldapart.pill.herbs.v1',herbOn);renderView();renderActive();return;
+   }
+   if(view.dataset.view==='done'){pillFilter.hideDone=!pillFilter.hideDone;applyFilter();return}
   }
-  const key=btn.dataset.chip;if(!key)return;
-  pillFilter.types=pillFilter.types.includes(key)?pillFilter.types.filter(x=>x!==key):pillFilter.types.concat(key);
-  renderChips();applyFilter();
- };
+  const tag=e.target.closest('[data-tagrow]');
+  if(tag){removeTag(tag.dataset.tagrow,tag.dataset.tagval);return}
+  const relax=e.target.closest('[data-relax]');
+  if(relax){relaxFilter(relax.dataset.relax);return}
+  const only=e.target.closest('[data-only]');
+  if(only){pillFilter.types=[only.dataset.only];applyFilter();return}
+  const more=e.target.closest('[data-expand]');
+  if(more){expandedGroups.add(more.dataset.expand);applyFilter();return}
+  const item=e.target.closest('[data-id]');
+  if(item&&item.classList.contains('pill-item')){
+   const p=mp.pois.find(x=>String(x[0])===item.dataset.id);
+   if(p)showPoi(p);
+   return;
+  }
+  const btn=e.target.closest('.chip');if(!btn)return;
+  if(btn.dataset.chip!==undefined){
+   const key=btn.dataset.chip;
+   pillFilter.types=e.altKey?[key]:(pillFilter.types.includes(key)?pillFilter.types.filter(x=>x!==key):pillFilter.types.concat(key));
+   applyFilter();return;
+  }
+  if(btn.dataset.elem!==undefined){
+   const v=btn.dataset.elem;
+   pillFilter.elements=e.altKey?[v]:(pillFilter.elements.includes(v)?pillFilter.elements.filter(x=>x!==v):pillFilter.elements.concat(v));
+   applyFilter();return;
+  }
+  if(btn.dataset.tier!==undefined){
+   const t=btn.dataset.tier;
+   pillFilter.tiers=e.altKey?[t]:(pillFilter.tiers.includes(t)?pillFilter.tiers.filter(x=>x!==t):pillFilter.tiers.concat(t));
+   applyFilter();return;
+  }
+  if(btn.dataset.key!==undefined){
+   const k=btn.dataset.key;
+   pillFilter.keywords=e.altKey?[k]:(pillFilter.keywords.includes(k)?pillFilter.keywords.filter(x=>x!==k):pillFilter.keywords.concat(k));
+   applyFilter();return;
+  }
+ });
  const mapChips=$('pillmaps');
  if(mapChips)mapChips.onclick=e=>{
   const btn=e.target.closest('[data-map]');if(!btn)return;
   store.set('worldapart.pill.map.v1',+btn.dataset.map);initPill();
  };
- elems.onclick=e=>{
-  const btn=e.target.closest('button');if(!btn)return;
-  if(btn.dataset.eall){
-   const all=pillFilter.elements.length===5;
-   pillFilter.elements=all?[]:['1','2','3','4','5'];
-   renderElems();applyFilter();return;
-  }
-  const value=btn.dataset.elem;if(value===undefined)return;
-  pillFilter.elements=pillFilter.elements.includes(value)?pillFilter.elements.filter(x=>x!==value):pillFilter.elements.concat(value);
-  renderElems();applyFilter();
- };
- keys.onclick=e=>{
-  const btn=e.target.closest('button');if(!btn)return;
-  const key=btn.dataset.key;if(!key)return;
-  pillFilter.keywords=pillFilter.keywords.includes(key)?pillFilter.keywords.filter(x=>x!==key):pillFilter.keywords.concat(key);
-  renderKeys();applyFilter();
- };
- renderChips();renderElems();renderKeys();
  $('pillq').value=pillFilter.q;
  $('pillq').oninput=e=>{pillFilter.q=e.target.value;applyFilter()};
  function applyFilter(){
   const matched=[];
   mp.pois.forEach((p,idx)=>{
-   const ok=pillMatch(p,mp);
+   const ok=typeSelected(p)&&passBase(p,'');
    dots[idx].classList.toggle('off',!ok);
    if(ok)matched.push(p);
   });
-  // 丹方优先、品阶高的靠前，方便先挑强力丹方
-  matched.sort((a,b)=>a[1]!==b[1]?(a[1]===2?-1:b[1]===2?1:0):a[1]===2?b[3]-a[3]:0);
-  $('pilllist').innerHTML=matched.slice(0,200).map(p=>{
-   const isRecipe=p[1]===2;
-   const rid=isRecipe?String((mp.pool||[])[p[5]]||''):'';
-   const done=isRecipe?learned.has(rid):consumed.has(p[0]);
-   const sub=isRecipe?`${PILL_ELEMENT[p[2]]||''}·${p[3]||0}阶`
-    :(p[1]===1?((mp.effects||{})[String(p[4])]||[])[7]||'丹方属性':(PILL_TYPE[p[1]]||''));
-   const comp=compById.has(p[0])?compById.get(p[0]):-1;
-   const tag=mp.main!==undefined&&comp>=0&&comp!==mp.main?' · 遁':'';
-   return `<div class="pill-item${done?' done':''}" data-id="${p[0]}">`+
-    `<i class="dotmark" style="background:${poiFill(p)}"></i>`+
-    `<span class="nm">${esc(pillName(p,mp))}</span><span class="tp">${esc(sub+tag)}</span></div>`;
-  }).join('')||'<div class="empty" style="border:0">没有匹配的拾取点</div>';
-  $('pilllist').onclick=e=>{
-   const it=e.target.closest('[data-id]');if(!it)return;
-   const p=mp.pois.find(x=>String(x[0])===it.dataset.id);
-   if(p)showPoi(p);
-  };
+  renderTypes();renderElems();renderTiers();renderKeys();renderView();renderCond();renderActive();
+  renderList(matched);
+  saveFilter();
  }
  applyFilter();
  // 丹方手记
@@ -1304,7 +2062,241 @@ function initPill(){
   };
  }
 }
-$('warnings').innerHTML=(DATA.warnings||[]).map(esc).join('<br>');initTabs();renderBedroom();initTalent();initItems();initPill();
+const FORGE_ELEM_COLORS=['#8b93a1','#e6dcae','#8ccf92','#7fc0ee','#ee9a86','#d8b273'];
+const FORGE_FILTER_KEY='worldapart.forge.filters.v1';
+function initForge(){
+ const m=DATA.modules&&DATA.modules.forge;if(!m)return;const host=$('forge'),st=m.rows||{};
+ const elem=id=>(m.elements||{})[String(id)]||'';
+ const slotName=id=>(m.slots||{})[String(id)]||'';
+ const realmName=id=>(m.realms||{})[String(id)]||('境界 '+id);
+ const attrName=id=>(m.attributes||{})[String(id)]||('属性 '+id);
+ const tierName=id=>((m.score_tiers||[]).find(x=>Number(x.id)===Number(id))||{}).name||(id+' 阶');
+ const ratio=(a,b)=>b?Math.min(100,Math.round(a*100/b)):0;
+ function grid(p){
+  const n=Number(p.board)||5,blocked=new Set((p.blocked||[]).map(c=>c[0]+','+c[1])),bonus={};
+  (p.bonus||[]).forEach(c=>bonus[c[0]+','+c[1]]=c[2]);
+  let cells='';
+  for(let y=0;y<n;y++)for(let x=0;x<n;x++){
+   const key=x+','+y;let cls='fcell',style='';
+   if(blocked.has(key))cls+=' block';
+   else if(bonus[key])style='background:'+(FORGE_ELEM_COLORS[bonus[key]]||'#3a4652')+';opacity:.55';
+   cells+='<i class="'+cls+'" style="'+style+'" title="'+x+','+y+'"></i>';
+  }
+  return '<div class="fgrid" style="grid-template-columns:repeat('+n+',20px)">'+cells+'</div>';
+ }
+ const cards=[
+  ['炼器等级','Lv'+st.level,st.level_title||''],
+  ['经验',st.exp+' / '+(st.exp_need||'—'),st.exp_need&&st.exp>=st.exp_need?'已达升级线':'继续炼制积累'],
+  ['真火',st.true_fire,'本级基础值'],
+  ['天赋点',st.talent_points,'已解锁 '+(st.unlocked||[]).length+' · 已领悟 '+(st.learned||[]).length],
+  ['最高器契',st.best_score,st.best_tier_name||'—'],
+  ['器胚库存',(st.embryo_total||0)+' 件',(st.embryos||[]).length+' 种'],
+ ].map(([k,v,s])=>'<div class="card"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'<span> '+esc(s)+'</span></div></div>').join('');
+ const embryoRows=(st.embryos||[]).map(e=>{
+  const need=(e.need||[]).map(r=>esc(elem(r.e))+'×'+r.need+(r.gap?' <span class="fgap">缺 '+r.gap+'</span>':' <span class="fok">足</span>')).join(' · ');
+  const wash=(e.effects||[]).map(x=>esc(elem(x.e))+' '+x.energy+' · '+esc(x.mat_name)+'×'+x.count).join('；')||'—';
+  return '<tr class="row"><td><div class="who">'+esc(e.name)+'</div><div class="bed">'+esc(e.realm_name)+' · '+esc(e.slot_name)+' · '+e.board+'×'+e.board+'</div></td>'+
+   '<td style="width:56px">×'+e.count+'</td><td>'+need+'</td><td class="muted">'+wash+'</td><td style="width:84px">'+e.rec_total+' 灵性</td></tr>';
+ }).join('');
+ const pityRows=(st.pity||[]).map(p=>{
+  const left=Math.max(0,p.total-p.count);
+  return '<tr class="row"><td>'+esc(p.realm_name)+'</td><td>'+esc(p.quality_name)+'：'+p.count+' / '+p.total+'</td>'+
+   '<td class="muted">'+(left?'还差 '+left+' 次':'下一次必出')+'</td><td style="width:150px"><div class="bar"><i style="width:'+ratio(p.count,p.total)+'%"></i></div></td></tr>';
+ }).join('');
+ const elemCards=(st.elements||[]).map(e=>'<div class="card"><div class="k">'+esc(elem(e.element))+'行材料</div><div class="v">'+e.count+' <span>件 · 灵性 '+e.spirit+'</span></div></div>').join('')||'<div class="card"><div class="k">材料</div><div class="v">0 <span>件</span></div></div>';
+ const matRows=(st.materials||[]).map(r=>'<tr class="row"><td><div class="who fq'+r.quality+'">'+esc(r.name)+'</div><div class="bed">'+esc(elem(r.element))+' · '+esc(realmName(r.realm))+'</div></td>'+
+  '<td style="width:56px">×'+r.count+'</td><td style="width:60px">'+r.spirit+'</td><td class="muted">灵性合计 '+(r.count*r.spirit)+'</td></tr>').join('');
+ const artRows=(st.artifacts||[]).map(a=>{
+  const affixes=(a.affixes||[]).map(x=>'<span class="fchip fq'+x.quality+'">'+esc(x.text)+(x.pending?'（未激活）':'')+'</span>').join('')||'<span class="muted">无词条</span>';
+  const attrs=(a.attrs||[]).map(pair=>esc(pair[0])+' +'+pair[1]).join(' · ')||'—';
+  const wash=(a.wash||[]).map(w=>esc(elem(w.e))+' '+esc(w.material)+'×'+w.count).join('；')||'—';
+  const pity=(a.pity||[]).map(p=>esc(p.name)+' '+p.count+'/'+p.total).join(' · ')||'—';
+  return '<details class="fart"><summary><span class="fname">'+esc(a.name)+'</span>'+
+   (a.equipped?'<span class="badge dao">已装备</span>':'')+
+   (a.slot_name?'<span class="badge">'+esc(a.slot_name)+'</span>':'')+
+   '<span class="badge">'+esc(a.realm_name)+'</span>'+
+   '<span class="badge">'+(a.crafted?esc(a.tier_name||'未定阶'):'非炼器所得')+'</span>'+
+   '<span class="fstat">器契 '+a.score+' · '+(a.affixes||[]).length+' 条词条</span></summary>'+
+   '<div class="fbody"><div class="fline"><b>基础属性</b>'+attrs+'</div>'+
+   '<div class="fline"><b>词条</b><span class="fchips">'+affixes+'</span></div>'+
+   '<div class="fline"><b>洗练材料</b>'+wash+'</div>'+
+   '<div class="fline"><b>洗练保底</b>'+pity+'</div></div></details>';
+ }).join('')||'<div class="empty">还没有法宝数据</div>';
+ const realms=uniq((m.catalog||[]).map(p=>String(p.realm)));
+ const slots=uniq((m.catalog||[]).map(p=>String(p.slot)));
+ let state=Object.assign({q:'',realm:'',slot:''},store.get(FORGE_FILTER_KEY,{}));
+ function protoCard(p){
+  const need=(p.need||[]).map(r=>elem(r.e)+'×'+r.v).join(' · ')||'无指定';
+  const rec=(p.rec||[]).map(r=>elem(r.e)+' '+r.v).join(' · ')||'—';
+  const washSlots=(p.effects||[]).map(x=>'<span class="fchip fq3">'+esc(elem(x.e))+' '+x.energy+' · '+esc(x.mat_name)+'×'+x.count+'</span>').join('')||'<span class="muted">无词条槽</span>';
+  const tierHtml=(p.tiers||[]).map(t=>'<div class="fline"><b>'+esc(tierName(t.t))+'</b>门槛 '+t.min+' · '+((t.attrs||[]).map(pair=>esc(attrName(pair[0]))+' +'+pair[1]).join(' / ')||'—')+'</div>').join('');
+  const tiers=(p.tiers||[]).map(t=>tierName(t.t)+' '+t.min).join(' / ');
+  return '<details class="fproto"><summary><span class="fname">'+esc(p.name)+'</span>'+
+   '<span class="badge">'+esc(realmName(p.realm))+'</span>'+
+   '<span class="badge">'+esc(slotName(p.slot))+'</span>'+
+   '<span class="badge">'+p.board+'×'+p.board+'</span>'+
+   '<span class="badge">需 '+esc(need)+'</span>'+
+   '<span class="ftiers">'+esc(tiers)+'</span></summary>'+
+   '<div class="fbody"><div class="fcols">'+
+   '<div class="fcol"><div class="fcol-t">棋盘（虚线＝封炉格，带色格＝聚灵格）</div>'+grid(p)+'</div>'+
+   '<div class="fcol"><div class="fcol-t">炼制要求</div><div class="fline">五行需求 <b>'+esc(need)+'</b></div>'+
+   '<div class="fline">推荐灵蕴 '+esc(rec)+'（合计 '+p.rec_total+'）</div><div class="fline">真火消耗 '+p.energy+'</div></div>'+
+   '<div class="fcol"><div class="fcol-t">词条槽 · 洗练材料</div><div class="fchips">'+washSlots+'</div></div>'+
+   '<div class="fcol"><div class="fcol-t">四阶门槛</div>'+tierHtml+'</div>'+
+   '</div></div></details>';
+ }
+ function renderList(){
+  const q=state.q.trim();
+  const list=(m.catalog||[]).filter(p=>(state.realm===''||String(p.realm)===state.realm)&&
+   (state.slot===''||String(p.slot)===state.slot)&&
+   (!q||p.name.includes(q)||(p.tiers||[]).some(t=>String(t.out_name||'').includes(q))));
+  $('fgcount').textContent='筛选结果：'+list.length+' / '+(m.catalog||[]).length+' 件器胚';
+  $('fglist').innerHTML=list.map(protoCard).join('')||'<div class="empty">没有符合条件的器胚</div>';
+ }
+ function renderRealmChips(){realmBox.innerHTML='<span class="chip-label">境界</span>'+[['','全部']].concat(realms.map(r=>[r,realmName(r)])).map(
+   ([value,label])=>'<button class="chip'+(state.realm===value?' on':'')+'" data-realm="'+esc(value)+'">'+esc(label)+'</button>').join('');
+ }
+ function renderSlotChips(){slotBox.innerHTML='<span class="chip-label">部位</span>'+[['','全部']].concat(slots.map(s=>[s,slotName(s)])).map(
+   ([value,label])=>'<button class="chip'+(state.slot===value?' on':'')+'" data-slot="'+esc(value)+'">'+esc(label)+'</button>').join('');
+ }
+ host.innerHTML=sourceHtml(m)+'<div class="cards">'+cards+'</div>'+
+  '<div class="forge-sec">我的器胚<span>按持有件数与五行缺口</span></div>'+
+  ((st.embryos||[]).length?'<table><thead><tr><th>器胚</th><th>数量</th><th>五行需求 / 缺口</th><th>洗练材料</th><th>推荐灵性</th></tr></thead><tbody>'+embryoRows+'</tbody></table>':'<div class="empty">背包里没有器胚</div>')+
+  '<div class="forge-sec">洗练保底<span>同境界、同品质法宝共享计数</span></div>'+
+  ((st.pity||[]).length?'<table><tbody>'+pityRows+'</tbody></table>':'<div class="empty">暂无洗练保底数据</div>')+
+  '<div class="forge-sec">全部器胚<span>门槛为该阶所需器契分数</span></div>'+
+  '<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找器胚 / 法宝</span><input id="fgq" placeholder="输入器胚或法宝名称"></label></div></div>'+
+  '<div class="chips" id="fgrealm"></div><div class="chips" id="fgslot"></div><div id="fgcount" class="result-info"></div><div id="fglist"></div>'+
+  '<div class="forge-sec">材料盘点<span>按五行统计件数与灵性</span></div>'+
+  '<div class="cards">'+elemCards+'</div>'+
+  ((st.materials||[]).length?'<table><thead><tr><th>材料</th><th>数量</th><th>灵性</th><th></th></tr></thead><tbody>'+matRows+'</tbody></table>':'<div class="empty">背包里没有炼器材料</div>')+
+  '<div class="forge-sec">我的法宝<span>器契即炼器分数，“未激活”为待洗练词条</span></div>'+artRows+
+  '<div class="tip">五行需求按“该五行精粹需占几格”计算；缺口＝背包该五行材料总件数－需求格数，只作库存参考，实际摆盘还受封炉格与聚灵格影响。器契达到凡/玄/地/天四档门槛即对应阶，天阶最高。</div>';
+ const realmBox=$('fgrealm'),slotBox=$('fgslot');
+ $('fgq').value=state.q;
+ $('fgq').oninput=e=>{state.q=e.target.value;renderList()};
+ realmBox.onclick=e=>{const btn=e.target.closest('[data-realm]');if(!btn)return;state.realm=btn.dataset.realm;store.set(FORGE_FILTER_KEY,state);renderRealmChips();renderList()};
+ slotBox.onclick=e=>{const btn=e.target.closest('[data-slot]');if(!btn)return;state.slot=btn.dataset.slot;store.set(FORGE_FILTER_KEY,state);renderSlotChips();renderList()};
+ renderRealmChips();renderSlotChips();renderList();
+}
+const EVENT_FILTER_KEY='worldapart.event.filters.v1';
+function initEvent(){
+ const m=DATA.modules&&DATA.modules.event;if(!m)return;
+ const host=$('event'),st=m.rows||{},rows=st.rows||[],catalog=st.reward_index||[];
+ const stats=st.stats||{},metaStats=st.meta_stats||{};
+ if(!rows.length&&!catalog.length){host.innerHTML=sourceHtml(m)+'<div class="empty">暂无奇遇配置</div>';return}
+ const byId={};rows.forEach(r=>byId[r.id]=r);
+ const itemNames={};catalog.forEach(x=>itemNames[x.item]=x.name);
+ let state=Object.assign({q:'',status:'',realm:'',mode:'event',missing:false},store.get(EVENT_FILTER_KEY,{}));
+ const gradeName=g=>(st.grades||{})[String(g)]||('第'+g+'档');
+ const gradeCls=g=>'g'+(g||0);
+ const confName=c=>c==='exact'?'位置确定':c==='inferred'?'位置推断':'位置未定';
+ const confCls=c=>c==='exact'?'loc-exact':c==='inferred'?'loc-inferred':'loc-unknown';
+ const locText=r=>{const l=r.location;if(!l)return '位置未定';const path=((l.path&&l.path.length)?l.path:[l.name]).join(' / ');return (l.spot?l.spot+' · ':'')+path};
+ const itemName=id=>itemNames[id]||('物品 '+id);
+ const rewardChip=(x,got)=>`<span class="efchip fq${x.quality||0}${got?' got':''}" title="掉率 ${x.chance}%">${esc(x.name)} ×${x.min===x.max?x.min:x.min+'-'+x.max}${x.chance>=100?'':'<i>'+x.chance+'%</i>'}</span>`;
+ const cards=
+  `<div class="card"><div class="k">奇遇达成</div><div class="v">${stats.achieved||0} <span>/ ${stats.events||0}</span></div></div>`+
+  `<div class="card"><div class="k">结局收集</div><div class="v">${stats.got_endings||0} <span>/ ${stats.endings||0}</span></div></div>`+
+  `<div class="card"><div class="k">实际所得</div><div class="v">${stats.granted||0} <span>条奖励</span></div></div>`+
+  `<div class="card"><div class="k">地点定位</div><div class="v">${metaStats.exact||0} <span>确定 · 推断 ${metaStats.inferred||0}</span></div></div>`;
+ function eventCard(r){
+  const endings=r.endings||[];
+  const got=endings.filter(e=>e.got).length;
+  const badges=`<span class="badge ${r.achieved?'ok':'off'}">${r.achieved?'已达成':'未达成'}</span>`+
+   `<span class="badge">结局 ${got}/${endings.length}</span>`+
+   `<span class="badge">${r.one_off?'一次性':'可重复'}</span>`+
+   (r.parent&&byId[r.parent]?`<span class="badge">隶属 ${esc(byId[r.parent].name)}</span>`:'')+
+   `<span class="badge ${confCls((r.location||{}).conf)}">${confName((r.location||{}).conf)}</span>`;
+  const grants=(r.grants||[]).length?`<div class="evline"><b>实际所得</b>${r.grants.map(g=>`${esc(itemName(g.item))} ×${g.count}${g.delivered?'':'（未交付）'}`).join(' · ')}</div>`:'';
+  const picked=(r.choices||[]).length?`<div class="evline"><b>选择记录</b>${r.choices.map(c=>esc(c.text)+(c.count>1?' ×'+c.count:'')).join(' · ')}</div>`:'';
+  const unknown=r.unknown_ending?`<div class="evline"><b>结局</b>#${r.ending}（配置未收录）</div>`:'';
+  const body=endings.map(e=>`<div class="eend${e.got?' got':''}"><div class="eend-head">`+
+   `<span class="egrade ${gradeCls(e.grade)}">${esc(gradeName(e.grade))}</span>`+
+   `<span class="eend-title">${esc(e.title)}</span>`+
+   (e.got?'<span class="badge ok">已达成</span>':'')+
+   (e.reward_ok===false?'<span class="badge warn">奖励未收录</span>':'')+
+   `</div>${e.summary?`<div class="eend-sum">${esc(e.summary)}</div>`:''}`+
+   `${(e.detail||[]).length?`<div class="eend-detail">${e.detail.map(esc).join(' · ')}</div>`:''}`+
+   `<div class="efchips">${e.rewards.length?e.rewards.map(x=>rewardChip(x,e.got)).join(''):'<span class="muted">无奖励记录</span>'}</div></div>`).join('');
+  return `<details class="ev"><summary><span class="evname">${esc(r.name)}</span>${badges}<span class="evloc">${esc(locText(r))}</span></summary>`+
+   `<div class="evbody">${r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:''}${grants}${picked}${unknown}<div>${body}</div></div></details>`;
+ }
+ function itemCard(x){
+  const sources=(x.sources||[]).slice().sort((a,b)=>(b.got?1:0)-(a.got?1:0)||(b.expected||0)-(a.expected||0));
+  const rowsHtml=sources.map(s=>`<div class="evline"><b>${esc(s.event_name)}</b>${esc(s.ending_title)}`+
+   ` <span class="muted">${s.chance>=100?'必得':s.chance+'%'} · 期望 ${s.expected}</span>`+
+   (s.got?' <span class="badge ok">已达成</span>':'')+`</div>`).join('');
+  return `<details class="ev"><summary><span class="evname fq${x.quality||0}">${esc(x.name)}</span>`+
+   `<span class="badge">${esc(x.type||'物品')}</span>`+
+   `<span class="badge ${x.owned?'ok':'off'}">${x.owned?'已拥有 '+x.owned:'未拥有'}</span>`+
+   `<span class="evloc">${sources.length} 个结局产出</span></summary><div class="evbody">${rowsHtml}</div></details>`;
+ }
+ function matchedRows(){
+  const q=state.q.trim();
+  return rows.filter(r=>{
+   if(state.status==='done'&&!r.achieved)return false;
+   if(state.status==='todo'&&r.achieved)return false;
+   if(state.realm==='__current__'){if(Number(r.realm||0)!==Number(st.current_realm||0))return false}
+   else if(state.realm!==''&&String(r.realm||0)!==state.realm)return false;
+   if(state.missing&&!r.endings.some(e=>e.rewards.some(x=>!x.owned)))return false;
+   if(!q)return true;
+   const hay=[r.name,r.desc,locText(r),(r.choices||[]).map(c=>c.text).join(' '),
+    r.endings.map(e=>[e.title,e.summary].join(' ')).join(' '),
+    r.endings.map(e=>e.rewards.map(x=>x.name).join(' ')).join(' ')].join(' ');
+   return hay.includes(q);
+  });
+ }
+ function matchedItems(){
+  const q=state.q.trim();
+  return catalog.filter(x=>(!state.missing||!x.owned)&&
+   (!q||x.name.includes(q)||(x.sources||[]).some(s=>s.event_name.includes(q)||s.ending_title.includes(q))));
+ }
+ function refreshChips(){
+  document.querySelectorAll('#evmode .chip').forEach(b=>b.classList.toggle('on',b.dataset.mode===state.mode));
+  document.querySelectorAll('#evstatus .chip').forEach(b=>b.classList.toggle('on',b.dataset.status===state.status));
+  document.querySelectorAll('#evrealm .chip').forEach(b=>b.classList.toggle('on',b.dataset.realm===state.realm));
+  $('evmiss').classList.toggle('on',!!state.missing);
+  const itemMode=state.mode==='item';
+  $('evstatus').style.display=itemMode?'none':'';
+  $('evrealm').style.display=itemMode?'none':'';
+ }
+ function renderAll(){
+  refreshChips();
+  if(state.mode==='item'){
+   const list=matchedItems();
+   $('evcount').textContent=`筛选结果：${list.length} / ${catalog.length} 种奖励物品`;
+   $('evlist').innerHTML=list.map(itemCard).join('')||'<div class="empty">没有符合条件的奖励物品</div>';
+   return;
+  }
+  const list=matchedRows();
+  $('evcount').textContent=`筛选结果：${list.length} / ${rows.length} 个奇遇`;
+  const groups={};list.forEach(r=>{const key=r.realm_name||'未知境界';(groups[key]=groups[key]||[]).push(r)});
+  $('evlist').innerHTML=Object.keys(groups).map(key=>
+   `<div class="evgroup">${esc(key)}<span>${groups[key].length} 个</span></div>`+groups[key].map(eventCard).join('')
+  ).join('')||'<div class="empty">没有符合条件的奇遇</div>';
+ }
+ const realmNames=[...new Set(rows.map(r=>r.realm_name||'未知境界'))];
+ const realmList=[...new Set(rows.map(r=>String(r.realm||0)))];
+ host.innerHTML=sourceHtml(m)+`<div class="cards">${cards}</div>`+
+  `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找奇遇 / 结局 / 奖励物品</span><input id="evq" placeholder="输入奇遇名、结局名或奖励物品名称"></label></div></div>`+
+  `<div class="chips event-chips" id="evmode"><span class="chip-label">视角</span><button class="chip" data-mode="event">按奇遇</button><button class="chip" data-mode="item">按物品反查</button></div>`+
+  `<div class="chips event-chips" id="evstatus"><span class="chip-label">状态</span><button class="chip" data-status="">全部</button><button class="chip" data-status="todo">未达成</button><button class="chip" data-status="done">已达成</button></div>`+
+  `<div class="chips event-chips" id="evrealm"><span class="chip-label">境界</span><button class="chip" data-realm="">全部</button>`+
+   (st.current_realm?`<button class="chip" data-realm="__current__">当前境界${st.current_realm_name?' · '+esc(st.current_realm_name):''}</button>`:'')+
+   realmList.map((value,i)=>`<button class="chip" data-realm="${esc(value)}">${esc(realmNames[i]||('境界 '+value))}</button>`).join('')+`</div>`+
+  `<div class="chips event-chips"><button class="chip" id="evmiss">只看有未拥有奖励</button></div>`+
+  `<div id="evcount" class="result-info"></div><div id="evlist"></div>`+
+  `<div class="tip">结局按品级排列，奖励掉率取自掉落表；已拥有的数量来自当前背包。“位置推断”表示该奇遇没有独立交互点，地点由场景名或母事件继承得到。奇遇结算与对话选择均为只读读取，不会改动存档。</div>`;
+ $('evq').value=state.q;
+ $('evq').oninput=e=>{state.q=e.target.value;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evmode').onclick=e=>{const b=e.target.closest('[data-mode]');if(!b)return;state.mode=b.dataset.mode;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evstatus').onclick=e=>{const b=e.target.closest('[data-status]');if(!b)return;state.status=b.dataset.status;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evrealm').onclick=e=>{const b=e.target.closest('[data-realm]');if(!b)return;state.realm=b.dataset.realm;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evmiss').onclick=()=>{state.missing=!state.missing;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ renderAll();
+}
+$('warnings').innerHTML=(DATA.warnings||[]).map(esc).join('<br>');initTabs();renderBedroom();initTalent();initItems();initPill();initForge();initEvent();
 
 let polledVersion=INITIAL_VERSION;setInterval(()=>{const script=document.createElement('script');script.src='仙友助手版本.js?t='+Date.now();script.onload=()=>{const next=window.PROGRESS_VERSION||'';if(next&&next!==polledVersion){location.reload();return}polledVersion=next||polledVersion;script.remove()};script.onerror=()=>script.remove();document.head.appendChild(script)},3000);
 </script></body></html>"""
@@ -1358,7 +2350,7 @@ def console_summary(payload):
         module = payload["modules"].get(name) or {}
         rows = module.get("rows") or []
         if name == "bedroom":
-            print("十八摸：%d 位仙友，已满 18/18：%d 位" % (
+            print("仙居楼互动：%d 位仙友，已满 18/18：%d 位" % (
                 len(rows), sum(1 for r in rows if r["total"] >= 18)))
         elif name == "talent":
             print("NPC天赋：%d 位 NPC，%d 个槽位，已解锁 %d 个" % (
@@ -1371,6 +2363,17 @@ def console_summary(payload):
             print("炼丹：%s 级，%d 张丹方手记，盘面 %d 张 / %d 个拾取点（已拾取 %d）" % (
                 rows.get("level", 0), len(rows.get("manual") or []), len(maps), len(pois),
                 len(rows.get("consumed") or [])))
+        elif name == "forge":
+            print("炼器：Lv%s %s，器胚 %d 件，法宝 %d 件，最高器契 %s（%s）" % (
+                rows.get("level", 0), rows.get("level_title") or "",
+                rows.get("embryo_total", 0), len(rows.get("artifacts") or []),
+                rows.get("best_score", 0), rows.get("best_tier_name") or "未定阶"))
+        elif name == "event":
+            stats = rows.get("stats") or {}
+            print("奇遇：%d 个奇遇，已达成 %d 个；结局 %d/%d，实际所得 %d 条" % (
+                stats.get("events", 0), stats.get("achieved", 0),
+                stats.get("got_endings", 0), stats.get("endings", 0),
+                stats.get("granted", 0)))
         else:
             catalog = {str(t["id"]): t for t in module.get("catalog") or []}
             pairs = sum(len(r["items"]) for r in rows)
@@ -1387,17 +2390,20 @@ def settings_menu():
     cfg = load_cfg()
     while True:
         print("\n功能设置（只读工具，不会修改游戏存档）")
-        print("  1. 十八摸进度：%s" % ("开启" if cfg["modules"]["bedroom"] else "关闭"))
+        print("  1. 仙居楼互动（十八摸成就）：%s" % ("开启" if cfg["modules"]["bedroom"] else "关闭"))
         print("  2. NPC天赋：%s" % ("开启" if cfg["modules"]["talent"] else "关闭"))
         print("  3. NPC物品：%s" % ("开启" if cfg["modules"]["items"] else "关闭"))
         print("  4. 炼丹：%s" % ("开启" if cfg["modules"]["pill"] else "关闭"))
-        print("  5. 重新设置解密存档目录")
+        print("  5. 炼器：%s" % ("开启" if cfg["modules"]["forge"] else "关闭"))
+        print("  6. 奇遇：%s" % ("开启" if cfg["modules"]["event"] else "关闭"))
+        print("  7. 重新设置解密存档目录")
         print("  0. 保存并退出")
         choice = input("请选择: ").strip()
-        if choice in ("1", "2", "3", "4"):
-            name = {"1": "bedroom", "2": "talent", "3": "items", "4": "pill"}[choice]
+        if choice in ("1", "2", "3", "4", "5", "6"):
+            name = {"1": "bedroom", "2": "talent", "3": "items", "4": "pill",
+                    "5": "forge", "6": "event"}[choice]
             cfg["modules"][name] = not cfg["modules"][name]
-        elif choice == "5":
+        elif choice == "7":
             path = input("把 BepInEx\\decrypted 的路径粘贴到这里: ").strip().strip('"')
             if os.path.isdir(path):
                 cfg["decrypted_dir"] = os.path.normpath(path)
@@ -1435,7 +2441,8 @@ def main():
             signature = state_signature(dec, cfg)
             if signature != last_signature or not os.path.exists(OUT_HTML):
                 payload = render(dec, cfg) if dec or not any(cfg["modules"].values()) else {
-                    "enabled": [n for n in ("bedroom", "talent", "items", "pill") if cfg["modules"][n]],
+                    "enabled": [n for n in ("bedroom", "talent", "items", "pill", "forge", "event")
+                                if cfg["modules"][n]],
                     "modules": {}, "warnings": ["未设置解密存档目录，请重新安装或运行功能设置。"],
                 }
                 version, changed = write_outputs(payload)

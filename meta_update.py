@@ -9,34 +9,161 @@ import sys
 import time
 
 SCHEMA = 2
-CACHE_SCHEMA = 3
+CACHE_SCHEMA = 7
 TABLES = {
     "tbnpcbasecfg", "tbnpcbedroom", "tbscenepresentationinteraction",
     "tbscenepresentationaction", "tbspace", "tbnpctalent", "tbcultivaterealm",
     "tbitem", "tbsteal", "tbitemtype", "tbpillrecipe", "tbpillherb",
     "tbpillsecretportal", "tbpillfurnace", "tbpilllevel", "tbpillportal",
     "tbpilleffect", "tbpillexplorepoi", "tbattribute",
+    "tbalchemyprototype", "tbalchemymaterial", "tbalchemylayout", "tbalchemylevel",
+    "tbalchemytalent", "tbalchemyscoretier", "tbalchemyartifactaffixpool",
+    "tbalchemywashpity", "tbelement",
+    "tbpassiveskill", "tbskill",
+    "tbnpcbagrule", "tbnpcitemdemandholdtemplate", "tbnpcintimacy",
+    "tbrandomeventending", "tbrewarddrop", "tbquest",
+    "tbrandomeventteleportentry", "tbspaceactiveevent",
+    "tbinteractaction", "tbspaceinteractui", "tbdialogue",
 }
 MODULE_TABLES = {
     "bedroom": {"tbnpcbasecfg", "tbnpcbedroom", "tbscenepresentationinteraction",
                 "tbscenepresentationaction"},
     "talent": {"tbnpcbasecfg", "tbspace", "tbnpctalent", "tbcultivaterealm"},
-    "items": {"tbnpcbasecfg", "tbspace", "tbcultivaterealm", "tbitem", "tbsteal", "tbitemtype"},
+    "items": {"tbnpcbasecfg", "tbspace", "tbcultivaterealm", "tbitem", "tbsteal",
+              "tbitemtype", "tbnpcbagrule", "tbnpcitemdemandholdtemplate",
+              "tbnpcintimacy"},
     "pill": {"tbitem", "tbpillrecipe", "tbpillherb", "tbpillsecretportal",
              "tbpillfurnace", "tbpilllevel", "tbcultivaterealm", "tbpillportal",
              "tbpilleffect", "tbpillexplorepoi", "tbattribute"},
+    "forge": {"tbalchemyprototype", "tbalchemymaterial", "tbalchemylayout",
+              "tbalchemylevel", "tbalchemytalent", "tbalchemyscoretier",
+              "tbalchemyartifactaffixpool", "tbalchemywashpity",
+              "tbitem", "tbattribute", "tbelement", "tbcultivaterealm"},
+    "event": {"tbrandomeventending", "tbrewarddrop", "tbquest", "tbitem",
+              "tbitemtype", "tbspace", "tbcultivaterealm",
+              "tbrandomeventteleportentry", "tbspaceactiveevent",
+              "tbinteractaction", "tbspaceinteractui", "tbdialogue"},
 }
-MODULE_NAMES = {"bedroom": "十八摸", "talent": "NPC天赋", "items": "NPC物品", "pill": "炼丹"}
+MODULE_NAMES = {"bedroom": "仙居楼互动", "talent": "NPC天赋", "items": "NPC物品",
+                "pill": "炼丹", "forge": "炼器", "event": "奇遇"}
+
+
+# ---------------- MessagePack 解码（最小实现） ----------------
+class Ext:
+    __slots__ = ("type", "data")
+
+    def __init__(self, t, d):
+        self.type, self.data = t, d
+
+
+def _dec(b, i):
+    c = b[i]
+    i += 1
+    if c <= 0x7F:
+        return c, i
+    if c >= 0xE0:
+        return c - 0x100, i
+    if 0x80 <= c <= 0x8F:
+        return _map(b, i, c & 0x0F)
+    if 0x90 <= c <= 0x9F:
+        return _arr(b, i, c & 0x0F)
+    if 0xA0 <= c <= 0xBF:
+        n = c & 0x1F
+        return b[i:i + n].decode("utf-8", "replace"), i + n
+    if c == 0xC0:
+        return None, i
+    if c in (0xC2, 0xC3):
+        return c == 0xC3, i
+    if c in (0xC4, 0xD9):
+        n = b[i]
+        i += 1
+        v = b[i:i + n] if c == 0xC4 else b[i:i + n].decode("utf-8", "replace")
+        return v, i + n
+    if c in (0xC5, 0xDA):
+        n = struct.unpack_from(">H", b, i)[0]
+        i += 2
+        v = b[i:i + n] if c == 0xC5 else b[i:i + n].decode("utf-8", "replace")
+        return v, i + n
+    if c in (0xC6, 0xDB):
+        n = struct.unpack_from(">I", b, i)[0]
+        i += 4
+        v = b[i:i + n] if c == 0xC6 else b[i:i + n].decode("utf-8", "replace")
+        return v, i + n
+    if c == 0xCA:
+        return struct.unpack_from(">f", b, i)[0], i + 4
+    if c == 0xCB:
+        return struct.unpack_from(">d", b, i)[0], i + 8
+    if c == 0xCC:
+        return b[i], i + 1
+    if c == 0xCD:
+        return struct.unpack_from(">H", b, i)[0], i + 2
+    if c == 0xCE:
+        return struct.unpack_from(">I", b, i)[0], i + 4
+    if c == 0xCF:
+        return struct.unpack_from(">Q", b, i)[0], i + 8
+    if c == 0xD0:
+        return struct.unpack_from(">b", b, i)[0], i + 1
+    if c == 0xD1:
+        return struct.unpack_from(">h", b, i)[0], i + 2
+    if c == 0xD2:
+        return struct.unpack_from(">i", b, i)[0], i + 4
+    if c == 0xD3:
+        return struct.unpack_from(">q", b, i)[0], i + 8
+    if c in (0xD4, 0xD5, 0xD6, 0xD7, 0xD8):
+        n = {0xD4: 1, 0xD5: 2, 0xD6: 4, 0xD7: 8, 0xD8: 16}[c]
+        return Ext(b[i], b[i + 1:i + 1 + n]), i + 1 + n
+    if c in (0xC7, 0xC8, 0xC9):
+        n = {0xC7: b[i], 0xC8: struct.unpack_from(">H", b, i)[0], 0xC9: struct.unpack_from(">I", b, i)[0]}[c]
+        off = {0xC7: 1, 0xC8: 2, 0xC9: 4}[c]
+        t = b[i + off]
+        s = i + off + 1
+        return Ext(t, b[s:s + n]), s + n
+    if c == 0xDC:
+        return _arr(b, i + 2, struct.unpack_from(">H", b, i)[0])
+    if c == 0xDD:
+        return _arr(b, i + 4, struct.unpack_from(">I", b, i)[0])
+    if c == 0xDE:
+        return _map(b, i + 2, struct.unpack_from(">H", b, i)[0])
+    if c == 0xDF:
+        return _map(b, i + 4, struct.unpack_from(">I", b, i)[0])
+    raise ValueError("msgpack 0x%02x" % c)
+
+
+def _arr(b, i, n):
+    out = []
+    for _ in range(n):
+        v, i = _dec(b, i)
+        out.append(v)
+    return out, i
+
+
+def _map(b, i, n):
+    out = {}
+    for _ in range(n):
+        k, i = _dec(b, i)
+        v, i = _dec(b, i)
+        out[k] = v
+    return out, i
+
+
+def unpack(data):
+    return _dec(data, 0)[0]
 
 
 def resolve_table(name):
-    """把资源表名映射到规范名；精确匹配优先，其次取最长前缀，兼容后续版本的表名后缀变化。"""
+    """把资源表名映射到规范名；精确匹配优先，其次取带版本后缀的最长前缀。
+
+    只接受数字或 _-./ 开头的剩余部分，避免 tbitemuseeffect 这类同前缀表被误认成 tbitem。
+    """
     name = str(name or "").lower()
     if name in TABLES:
         return name
     best = ""
     for known in TABLES:
-        if name.startswith(known) and len(known) > len(best):
+        if not name.startswith(known) or len(known) <= len(best):
+            continue
+        rest = name[len(known):]
+        if rest[:1] in "_-.0123456789":
             best = known
     return best
 SLOT_LABELS = {
@@ -203,16 +330,18 @@ def _extract_tables(inspection):
             if not name or name in tables:
                 continue
             raw = item.m_Script
-            if isinstance(raw, str):
-                text = raw
-            else:
-                raw = bytes(raw)
-                if not raw.lstrip()[:1] in (b"{", b"["):
-                    continue
-                text = raw.decode("utf-8-sig")
-            if not text.lstrip()[:1] in ("{", "["):
+            try:
+                if isinstance(raw, str) and raw.lstrip()[:1] in ("{", "["):
+                    value = json.loads(raw)
+                elif isinstance(raw, (bytes, bytearray)) and bytes(raw).lstrip()[:1] in (b"{", b"["):
+                    value = json.loads(bytes(raw).decode("utf-8-sig"))
+                else:
+                    # 炼器配置表以 MessagePack 二进制存放，按 msgpack 解析。
+                    if not isinstance(raw, (bytes, bytearray)):
+                        raw = str(raw).encode("utf-8", "surrogateescape")
+                    value = unpack(bytes(raw))
+            except (ValueError, UnicodeError, json.JSONDecodeError):
                 continue
-            value = json.loads(text)
             if isinstance(value, (list, dict)):
                 tables[name] = value
     return tables
@@ -252,7 +381,7 @@ PILL_MAP_VERSION = 4
 POI_SIZE = 32
 SEGMENT_SIZE = 32
 FOG_MAGIC = 0x31534746  # "FGS1"
-PILL_MAP_SCHEMA = 5
+PILL_MAP_SCHEMA = 6
 
 
 def _asset_bytes(item):
@@ -463,11 +592,16 @@ def build_pill_map(tables, inspection):
                 _text(row.get("name")), _int(row.get("reward_type")), _int(row.get("quality")),
                 _plain(row.get("desc")), _int(row.get("value_min")), _int(row.get("value_max")),
             ]
+    item_names = {str(_int(r.get("id"))): _text(r.get("itemName"))
+                  for r in _rows(tables.get("tbitem") or []) if isinstance(r, dict)}
     for row in _rows(tables.get("tbpillportal") or []):
         if isinstance(row, dict):
+            cost_id = _int(row.get("cost_item_id"))
             portals[str(_int(row.get("id")))] = [
                 _text(row.get("name")), _int(row.get("element")),
                 bool(row.get("two_way")), _plain(row.get("desc")),
+                item_names.get(str(cost_id), "") if cost_id else "",
+                _int(row.get("cost_count")) if cost_id else 0,
             ]
     for row in _rows(tables.get("tbpillrecipe") or []):
         if not isinstance(row, dict):
@@ -729,8 +863,35 @@ def build_items(tables):
             "quality": row.get("quality"),
             "price": row.get("price"),
             "steal": steal,
+            "demand": bool(row.get("canDemand")),
+            "demand_cost": _int(row.get("intimacy_deduction")),
         }
     realms = build_realms(tables)
+    # 索要：tbnpcbagrule 按 NPC 配置指向索要模板，模板里是该 NPC 可被索要的固定物品池。
+    templates = {str(r.get("id")): r for r in _rows(tables["tbnpcitemdemandholdtemplate"])
+                 if isinstance(r, dict) and r.get("id") is not None}
+    demands = {}
+    for rule in _rows(tables["tbnpcbagrule"]):
+        if not isinstance(rule, dict) or rule.get("npcId") is None:
+            continue
+        template = templates.get(str(rule.get("demandTemplateId")))
+        if not template:
+            continue
+        ids = []
+        for entry in template.get("demandItemList") or []:
+            if isinstance(entry, dict) and entry.get("itemId") is not None:
+                ids.append(_int(entry.get("itemId")))
+        if ids:
+            demands[str(rule.get("npcId"))] = ids
+    tiers = []
+    for row in _rows(tables["tbnpcintimacy"]):
+        if not isinstance(row, dict) or row.get("intimacyRequirement") is None:
+            continue
+        name = _text(row.get("intimacyName")).replace("\u200b", "").strip()
+        if not name:
+            continue
+        tiers.append({"name": name, "need": _int(row.get("intimacyRequirement"))})
+    tiers.sort(key=lambda t: t["need"])
     npc_rows = [r for r in _rows(tables["tbnpcbasecfg"]) if isinstance(r, dict)]
     # 若整张表都没有 can_steal 字段，视为该版本取消了这层限制，改由物品参数单独判定。
     has_flag = any("can_steal" in row for row in npc_rows)
@@ -743,10 +904,11 @@ def build_items(tables):
             "name": _text(row.get("npcName")) or _text(row.get("npcTitle")) or ("#%s" % row["id"]),
             "realm": realms.get(str(layer or 0)) or _text(row.get("layerZeroShowText")) or "凡人",
             "can_steal": bool(row.get("can_steal", True)) if has_flag else True,
+            "demand": demands.get(str(row["id"])) or [],
         }
     if not items:
         raise ValueError("物品配置为空")
-    return {"schema": SCHEMA, "items": items, "npcs": npcs,
+    return {"schema": SCHEMA, "items": items, "npcs": npcs, "intimacy": tiers,
             "spaces": build_spaces(tables), "realms": realms}
 
 
@@ -866,12 +1028,419 @@ def build_pill(tables):
             "phases": phases}
 
 
+FORGE_QUALITY_NAMES = ["白", "绿", "蓝", "紫", "橙"]
+FORGE_SLOT_NAMES = {"1": "攻击", "2": "防御", "3": "辅助", "4": "速度"}
+
+
+def build_forge(tables):
+    """炼器只读元数据：器胚、棋盘布局、器契门槛、五色精粹、词条池与洗练保底。"""
+    items = {str(_int(r.get("id"))): r for r in _rows(tables["tbitem"]) if isinstance(r, dict)}
+    attributes = {str(_int(r.get("id"))): _text(r.get("name"))
+                  for r in _rows(tables["tbattribute"]) if isinstance(r, dict)}
+    elements = {}
+    for row in _rows(tables["tbelement"]):
+        if isinstance(row, dict) and _int(row.get("id")):
+            elements[str(_int(row.get("id")))] = _text(row.get("element_name"))
+    layouts = {str(_int(r.get("id"))): r
+               for r in _rows(tables["tbalchemylayout"]) if isinstance(r, dict)}
+    materials = {}
+    for row in _rows(tables["tbalchemymaterial"]):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        mid = str(_int(row.get("id")))
+        item = items.get(mid) or {}
+        materials[mid] = {
+            "name": _text(item.get("itemName")) or ("材料 %s" % mid),
+            "element": _int(row.get("element_type")),
+            "spirit": _int(row.get("spirit_value")),
+            "quality": _int(item.get("quality")),
+            "realm": _int(item.get("cultivateRealm")),
+        }
+    levels = []
+    for row in _rows(tables["tbalchemylevel"]):
+        if not isinstance(row, dict) or row.get("level") is None:
+            continue
+        levels.append({
+            "level": _int(row.get("level")), "title": _text(row.get("title")),
+            "exp": _int(row.get("required_exp")), "true_fire": _int(row.get("true_fire_base")),
+            "points": _int(row.get("talent_point_reward")),
+            "unlock": [_int(x) for x in (row.get("unlock_talent_ids") or [])],
+        })
+    levels.sort(key=lambda r: r["level"])
+    talents = []
+    for row in _rows(tables["tbalchemytalent"]):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        talents.append({
+            "id": _int(row.get("id")), "name": _text(row.get("name")) or ("天赋 %s" % row["id"]),
+            "desc": _text(row.get("desc")), "level": _int(row.get("required_level")),
+            "cost": _int(row.get("talent_point_cost")), "type": _int(row.get("talent_type")),
+            "params": row.get("effect_params") or [],
+        })
+    talents.sort(key=lambda r: r["id"])
+    score_tiers = []
+    for row in _rows(tables["tbalchemyscoretier"]):
+        if isinstance(row, dict) and row.get("id") is not None:
+            score_tiers.append({"id": _int(row.get("id")), "name": _text(row.get("name"))})
+    score_tiers.sort(key=lambda r: r["id"])
+    pity = []
+    for row in _rows(tables["tbalchemywashpity"]):
+        if isinstance(row, dict):
+            pity.append({"realm": _int(row.get("realm_id")),
+                         "quality": _int(row.get("affix_quality_id")),
+                         "count": _int(row.get("pity_count"))})
+    affix_pool = {}
+    for row in _rows(tables["tbalchemyartifactaffixpool"]):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        affix_pool[str(_int(row.get("id")))] = {
+            "attr": _int(row.get("attribute_id")), "text": _plain(row.get("desc")),
+            "quality": _int(row.get("quality_id")), "pool": _int(row.get("pool_id")),
+            "min": row.get("min_value"), "max": row.get("max_value"),
+        }
+    prototypes = []
+    for row in _rows(tables["tbalchemyprototype"]):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        pid = _int(row.get("id"))
+        item = items.get(str(pid)) or {}
+        layout = layouts.get(str(_int(row.get("board_layout_id")))) or {}
+        effects = []
+        for eff in row.get("effects") or []:
+            if not isinstance(eff, dict):
+                continue
+            material_id = _int(eff.get("material_id"))
+            effects.append({
+                "e": _int(eff.get("element_type")), "energy": _int(eff.get("required_energy")),
+                "mat": material_id,
+                "mat_name": (materials.get(str(material_id)) or {}).get("name")
+                or ("材料 %s" % material_id),
+                "count": _int(eff.get("material_count"), 1), "sort": _int(eff.get("sort")),
+            })
+        effects.sort(key=lambda x: x["sort"])
+        tiers = []
+        for tier in row.get("score_tiers") or []:
+            if not isinstance(tier, dict):
+                continue
+            output_id = _int(tier.get("output_item_id"))
+            output_item = items.get(str(output_id)) or {}
+            tiers.append({
+                "t": _int(tier.get("tier_id")), "min": _int(tier.get("score_min")),
+                "out": output_id, "out_name": _text(output_item.get("itemName")),
+                "attrs": [[_int(a.get("type")), _int(a.get("value"))]
+                          for a in (tier.get("attributes") or []) if isinstance(a, dict)],
+            })
+        tiers.sort(key=lambda x: x["t"])
+        prototypes.append({
+            "id": pid, "name": _text(item.get("itemName")) or ("器胚 %s" % pid),
+            "realm": _int(item.get("cultivateRealm")),
+            "req_cult": _int(item.get("required_cultivation")),
+            "quality": _int(item.get("quality")), "slot": _int(row.get("slot_type")),
+            "board": _int(row.get("board_size")),
+            "blocked": [[_int(c.get("x")), _int(c.get("y"))]
+                        for c in (layout.get("blocked_cells") or []) if isinstance(c, dict)],
+            "bonus": [[_int(c.get("x")), _int(c.get("y")), _int(c.get("element_type"))]
+                      for c in (layout.get("bonus_cells") or []) if isinstance(c, dict)],
+            "need": [{"e": _int(r.get("type")), "v": _int(r.get("value"))}
+                     for r in (row.get("material_requirements") or []) if isinstance(r, dict)],
+            "rec": [{"e": _int(r.get("type")), "v": _int(r.get("value"))}
+                    for r in (row.get("recommended_spirit") or []) if isinstance(r, dict)],
+            "rec_total": _int(row.get("recommended_total_spirit")),
+            "energy": _int(row.get("energy_cost")),
+            "effects": effects, "tiers": tiers,
+        })
+    if not prototypes:
+        raise ValueError("炼器配置为空")
+    used = set(materials) | {str(p["id"]) for p in prototypes}
+    for proto in prototypes:
+        used |= {str(tier["out"]) for tier in proto["tiers"]}
+    item_index = {}
+    for key in used:
+        item = items.get(key)
+        if item:
+            item_index[key] = [_text(item.get("itemName")), _int(item.get("quality")),
+                               _int(item.get("cultivateRealm"))]
+    return {"schema": SCHEMA, "levels": levels, "talents": talents,
+            "score_tiers": score_tiers, "qualities": FORGE_QUALITY_NAMES,
+            "slots": FORGE_SLOT_NAMES, "elements": elements, "attributes": attributes,
+            "realms": build_realms(tables), "materials": materials,
+            "affix_pool": affix_pool, "pity": pity, "items": item_index,
+            "prototypes": prototypes}
+
+
+EVENT_GRADE_NAMES = {1: "上", 2: "中", 3: "下"}
+
+
+def _expr_ints(node):
+    """取表达式树里的整型字面量，用于识别交互点引用的任务 id。"""
+    out = []
+
+    def walk(value):
+        if isinstance(value, dict):
+            for child in value.values():
+                walk(child)
+        elif isinstance(value, (list, tuple)):
+            if len(value) == 2 and isinstance(value[0], str) and isinstance(value[1], dict):
+                item = value[1].get("value")
+                if isinstance(item, int) and not isinstance(item, bool):
+                    out.append(item)
+                walk(value[1])
+            else:
+                for child in value:
+                    walk(child)
+
+    walk(node)
+    return out
+
+
+def _lines(value):
+    """把“善恶值 +10|好感度 -10”这类多段文案拆成列表。"""
+    return [part.strip() for part in re.split(r"[|\n]", _text(value)) if part.strip()]
+
+
+def build_event(tables):
+    """奇遇只读元数据：事件、结局、奖励、地点与对话选项（不含路线推断）。"""
+    ending_rows = [r for r in _rows(tables["tbrandomeventending"]) if isinstance(r, dict)]
+    if not ending_rows:
+        raise ValueError("奇遇结局配置为空")
+    quest_table = tables["tbquest"]
+    quest_rows = quest_table.get("rows") if isinstance(quest_table, dict) else quest_table
+    quests = {}
+    for row in _rows(quest_rows):
+        if isinstance(row, dict) and row.get("id") is not None:
+            quests[_int(row["id"])] = row
+    type_names = {}
+    for row in _rows(tables["tbitemtype"]):
+        if isinstance(row, dict) and row.get("id") is not None:
+            type_names[str(_int(row["id"]))] = _text(row.get("typeName"))
+    items = {}
+    for row in _rows(tables["tbitem"]):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        items[str(_int(row["id"]))] = {
+            "name": _text(row.get("itemName")) or ("物品 %s" % row["id"]),
+            "quality": _int(row.get("quality")),
+            "type": type_names.get(str(_int(row.get("itemType"))), ""),
+        }
+    drops = {str(_int(r.get("id"))): r for r in _rows(tables["tbrewarddrop"]) if isinstance(r, dict)}
+    spaces = build_spaces(tables)
+    realms = build_realms(tables)
+
+    events = {}
+    for row in ending_rows:
+        quest_id = _int(row.get("event_quest_id"))
+        if quest_id:
+            events.setdefault(quest_id, []).append(row)
+    if not events:
+        raise ValueError("奇遇事件配置为空")
+    candidates = set(events)
+    for rows in events.values():
+        for row in rows:
+            stage = _int(row.get("stage_quest_id"))
+            if stage:
+                candidates.add(stage)
+
+    # 交互点：tbinteractaction 表达式里引用任务 id，再经 tbspaceinteractui 落到具体场景。
+    ui_by_action = {}
+    for row in _rows(tables["tbspaceinteractui"]):
+        if isinstance(row, dict):
+            ui_by_action.setdefault(_int(row.get("interactActionId")), []).append(row)
+    interact_hits = {}
+    for row in _rows(tables["tbinteractaction"]):
+        if not isinstance(row, dict):
+            continue
+        matched = {value for value in _expr_ints(row.get("interactExpr")) if value in candidates}
+        if not matched:
+            continue
+        spot = _plain(row.get("textInteract"))
+        for ui in ui_by_action.get(_int(row.get("id")), []):
+            space_id = _int(ui.get("spaceId"))
+            if not space_id:
+                continue
+            for quest_id in matched:
+                interact_hits.setdefault(quest_id, []).append(
+                    (space_id, spot or _plain(ui.get("textName"))))
+
+    teleport = {}
+    for row in _rows(tables["tbrandomeventteleportentry"]):
+        if isinstance(row, dict) and row.get("questId") is not None:
+            teleport[_int(row.get("questId"))] = _int(row.get("activeEventId"))
+    active_spaces = {}
+    for row in _rows(tables["tbspaceactiveevent"]):
+        if isinstance(row, dict) and row.get("id") is not None:
+            active_spaces.setdefault(_int(row.get("id")), []).append(_int(row.get("spaceId")))
+
+    place_names = sorted(
+        ((info["name"], int(space_id)) for space_id, info in spaces.items()
+         if len(info.get("name") or "") >= 2),
+        key=lambda pair: -len(pair[0]))
+
+    def make_location(space_id, spot, conf, via):
+        info = spaces.get(str(space_id)) or {}
+        if not info:
+            return None
+        return {
+            "space": _int(space_id), "name": info.get("name") or "",
+            "path": info.get("path") or [info.get("name") or ""],
+            "region": info.get("region") or info.get("name") or "",
+            "realm": _int(info.get("realm_id")), "spot": spot or "",
+            "conf": conf, "via": via,
+        }
+
+    def direct_location(quest_id, stage_ids, text):
+        hits = []
+        for key in [quest_id] + stage_ids:
+            hits.extend(interact_hits.get(key, []))
+        if hits:
+            space_id, spot = hits[0]
+            location = make_location(space_id, spot, "exact", "interact")
+            if location:
+                return location
+        active = teleport.get(quest_id)
+        if active:
+            for space_id in active_spaces.get(active) or []:
+                location = make_location(space_id, "", "exact", "teleport")
+                if location:
+                    return location
+        for key in [quest_id] + stage_ids:
+            quest = quests.get(key) or {}
+            for value in _expr_ints(quest.get("triggerExpr")):
+                if str(value) in spaces:
+                    location = make_location(value, "", "inferred", "trigger")
+                    if location:
+                        return location
+        for name, space_id in place_names:
+            if name in text:
+                return make_location(space_id, "", "inferred", "text")
+        return None
+
+    names = {quest_id: _plain((quests.get(quest_id) or {}).get("name")) or ("奇遇 %s" % quest_id)
+             for quest_id in events}
+    parents = {}
+    for quest_id, name in names.items():
+        parent = 0
+        if "·" in name:
+            head = name.split("·", 1)[0].strip()
+            parent = next((other for other, other_name in names.items()
+                           if other != quest_id and other_name == head), 0)
+        if not parent and quest_id - 5800 in events:
+            parent = quest_id - 5800
+        parents[quest_id] = parent
+
+    prefixes = {quest_id // 100 for quest_id in events}
+    dialogue = {}
+    for row in _rows(tables["tbdialogue"]):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        dialogue_id = _int(row["id"])
+        if dialogue_id // 100 not in prefixes:
+            continue
+        texts = [_plain(option.get("optionText")) for option in (row.get("options") or [])
+                 if isinstance(option, dict)]
+        texts = [text for text in texts if text]
+        if not texts:
+            continue
+        slot = dialogue.setdefault(dialogue_id, [])
+        for text in texts:
+            if text not in slot:
+                slot.append(text)
+
+    def ending_rewards(drop_id):
+        drop = drops.get(str(drop_id))
+        if not drop:
+            return None
+        out, seen = [], set()
+        for variant in drop.get("variants") or []:
+            if not isinstance(variant, dict):
+                continue
+            entries = [entry for entry in (variant.get("dropList") or []) if isinstance(entry, dict)]
+            weights = [max(0, _int(entry.get("dropWeight"), 1)) for entry in entries]
+            total = sum(weights) or len(entries)
+            for entry, weight in zip(entries, weights):
+                item_id = _int(entry.get("itemId"))
+                if not item_id or item_id in seen:
+                    continue
+                seen.add(item_id)
+                low = _int(entry.get("itemCountMin"), 1)
+                high = _int(entry.get("itemCountMax"), low)
+                chance = (weight * 100.0 / total) if total else 100.0
+                info = items.get(str(item_id)) or {}
+                out.append({
+                    "item": item_id, "name": info.get("name") or ("物品 %s" % item_id),
+                    "quality": info.get("quality") or 0, "type": info.get("type") or "",
+                    "min": low, "max": high, "weight": weight,
+                    "chance": round(chance, 1),
+                    "expected": round(chance / 100.0 * (low + high) / 2.0, 2),
+                })
+        return out
+
+    result, stats = [], {"exact": 0, "inferred": 0, "unknown": 0}
+    resolved = {}
+    for quest_id in sorted(events):
+        rows = events[quest_id]
+        quest = quests.get(quest_id) or {}
+        stage_ids = sorted({_int(row.get("stage_quest_id")) for row in rows
+                            if _int(row.get("stage_quest_id"))})
+        desc = _plain(quest.get("description"))
+        objective_text = "\n".join(_plain(obj.get("description")) for obj in (quest.get("objectives") or [])
+                                   if isinstance(obj, dict))
+        location = direct_location(quest_id, stage_ids, desc + "\n" + objective_text)
+        endings = []
+        for row in sorted(rows, key=lambda r: (_int(r.get("grade")), _int(r.get("id")))):
+            drop_id = _int(row.get("reward_drop_id"))
+            rewards = ending_rewards(drop_id) if drop_id else []
+            endings.append({
+                "id": _int(row.get("id")), "title": _plain(row.get("title"))
+                or ("结局 %s" % row.get("id")), "summary": _plain(row.get("summary")),
+                "detail": _lines(row.get("detail_lines")), "grade": _int(row.get("grade")),
+                "rewards": rewards or [],
+                "reward_ok": True if not drop_id else rewards is not None,
+            })
+        resolved[quest_id] = location
+        result.append({
+            "id": quest_id, "name": names[quest_id], "desc": desc,
+            "one_off": bool(quest.get("oneOff")), "parent": parents[quest_id],
+            "endings": endings,
+            "dialogue": {str(key): value for key, value in dialogue.items()
+                         if key // 100 == quest_id // 100},
+        })
+
+    by_id = {event["id"]: event for event in result}
+    for event in result:
+        location = resolved.get(event["id"])
+        if location is None and event["parent"] in by_id:
+            parent_event = by_id[event["parent"]]
+            parent_location = resolved.get(parent_event["id"])
+            if parent_location:
+                location = dict(parent_location, conf="inferred", via="parent")
+        event["location"] = location
+        realm = _int(location.get("realm")) if location else 0
+        event["realm"] = realm
+        event["realm_name"] = realms.get(str(realm)) or ("境界 %s" % realm if realm else "未知境界")
+        key = (location or {}).get("conf") or "unknown"
+        stats[key] = stats.get(key, 0) + 1
+    stats["events"] = len(result)
+    stats["endings"] = sum(len(event["endings"]) for event in result)
+    stats["endings_with_rewards"] = sum(
+        1 for event in result for ending in event["endings"] if ending["rewards"])
+    stats["endings_missing_rewards"] = sum(
+        1 for event in result for ending in event["endings"] if not ending["reward_ok"])
+    phases = {}
+    for row in _rows(tables["tbcultivaterealm"]):
+        if isinstance(row, dict):
+            realm_id = _int(row.get("id"))
+            for phase in row.get("phases") or []:
+                phases[str(_int(phase))] = realm_id
+    return {"schema": SCHEMA, "events": result, "realms": realms,
+            "grades": EVENT_GRADE_NAMES, "phases": phases, "stats": stats}
+
+
 BUILTIN_FILES = {
     "bedroom": "bedroom_meta.json", "talent": "talent_meta.json", "items": "items_meta.json",
-    "pill": "pill_meta.json",
+    "pill": "pill_meta.json", "forge": "forge_meta.json", "event": "event_meta.json",
 }
 BUILDERS = {"bedroom": build_bedroom, "talent": build_talent, "items": build_items,
-            "pill": build_pill}
+            "pill": build_pill, "forge": build_forge, "event": build_event}
 
 
 def _builtin(directory, module):
@@ -882,6 +1451,10 @@ def _builtin(directory, module):
         valid = isinstance(data, dict) and isinstance(data.get("talents"), list)
     elif module == "pill":
         valid = isinstance(data, dict) and isinstance(data.get("recipes"), list)
+    elif module == "forge":
+        valid = isinstance(data, dict) and isinstance(data.get("prototypes"), list)
+    elif module == "event":
+        valid = isinstance(data, dict) and isinstance(data.get("events"), list)
     else:
         valid = isinstance(data, dict) and isinstance(data.get("items"), dict)
     if not valid:
@@ -978,6 +1551,16 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
                 elif module == "pill":
                     fallback = {"schema": SCHEMA, "recipes": [], "herbs": [], "portals": [],
                                 "furnaces": [], "levels": {}, "realms": {"0": "凡人"}}
+                elif module == "forge":
+                    fallback = {"schema": SCHEMA, "prototypes": [], "materials": {},
+                                "items": {}, "levels": [], "talents": [], "score_tiers": [],
+                                "qualities": FORGE_QUALITY_NAMES, "slots": FORGE_SLOT_NAMES,
+                                "elements": {}, "attributes": {}, "affix_pool": {},
+                                "pity": [], "realms": {"0": "凡人"}}
+                elif module == "event":
+                    fallback = {"schema": SCHEMA, "events": [], "realms": {"0": "凡人"},
+                                "grades": EVENT_GRADE_NAMES,
+                                "stats": {"events": 0, "endings": 0}}
                 else:
                     fallback = {"schema": SCHEMA, "items": {}, "npcs": {}, "spaces": {},
                                 "realms": {"0": "凡人"}}
@@ -1002,6 +1585,8 @@ def export_snapshots(game_dir, output_dir):
     _atomic_json(os.path.join(output_dir, "items_meta.json"), build_items(tables))
     _atomic_json(os.path.join(output_dir, "pill_meta.json"), build_pill(tables))
     _atomic_json(os.path.join(output_dir, "pill_map.json"), build_pill_map(tables, inspection))
+    _atomic_json(os.path.join(output_dir, "forge_meta.json"), build_forge(tables))
+    _atomic_json(os.path.join(output_dir, "event_meta.json"), build_event(tables))
     print("已导出当前配置快照：%s" % output_dir)
 
 
