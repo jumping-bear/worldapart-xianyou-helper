@@ -4,6 +4,8 @@
 !.gitattributes
 !touch_progress.py
 !meta_update.py
+!app/
+__pycache__/
 !bedroom_meta.json
 !talent_meta.json
 !items_meta.json
