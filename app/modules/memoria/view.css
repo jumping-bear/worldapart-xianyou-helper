@@ -1,0 +1,63 @@
+/* 留影石（忆海回溯）：仅本模块选择器 */
+.mem-cards{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0 18px}
+.mem-cards .card{min-width:132px}
+.mem-cards .card .v small{display:block;font-size:11px;color:#7d8593;font-weight:400;margin-top:3px}
+.mem-click{cursor:pointer;transition:border-color .15s}
+.mem-click:hover{border-color:#3d735b}
+.mem-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.mem-tab{border:1px solid #29303c;background:#171a21;color:#9aa3b2;border-radius:20px;padding:7px 15px;cursor:pointer;font-size:12px;font-family:inherit}
+.mem-tab:hover{border-color:#3d735b;color:#c9f5dd}
+.mem-tab.on{background:#263b34;border-color:#3d735b;color:#c9f5dd}
+.mem-tab i{font-style:normal;color:#7d8593;margin-left:5px;font-size:11px}
+.mem-tab.on i{color:#8fd0a9}
+.mem-filters{display:grid;grid-template-columns:minmax(190px,1fr) repeat(2,minmax(120px,.55fr)) auto;align-items:end;gap:11px;background:#171b23;border:1px solid #293140;border-radius:12px;padding:12px 14px;margin:0 0 13px}
+.mem-filters.five{grid-template-columns:minmax(170px,1.3fr) repeat(3,minmax(110px,.55fr)) auto}
+.mem-f>span{display:block;color:#aeb8c7;font-size:11px;margin:0 0 6px}
+.mem-f input,.mem-f select{width:100%;background:#10141a;border:1px solid #303949;border-radius:8px;color:#e8eaed;padding:9px 10px;font-size:12px;outline:none;font-family:inherit}
+.mem-f input:focus,.mem-f select:focus{border-color:#698c78;box-shadow:0 0 0 2px #263b34}
+.mem-actions{display:flex;gap:7px;flex-wrap:wrap}
+.mem-btn{background:#1b222c;border:1px solid #35404f;border-radius:8px;color:#c6cfda;padding:9px 12px;min-height:36px;cursor:pointer;font-size:12px;font-family:inherit;white-space:nowrap}
+.mem-btn:hover{background:#25303d;border-color:#526175}
+.mem-result{color:#8b93a1;font-size:11px;margin:0 2px 10px}
+.mem-npc{background:#15181f;border:1px solid #232833;border-radius:11px;margin:0 0 9px;overflow:hidden}
+.mem-npc>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:11px;padding:12px 14px;flex-wrap:wrap}
+.mem-npc>summary::-webkit-details-marker{display:none}
+.mem-npc>summary:before{content:"›";color:#6f7787;font-size:18px;flex:none;transition:.15s}
+.mem-npc[open]>summary:before{transform:rotate(90deg)}
+.mem-npc>summary:hover{background:#171d27}
+.mem-avatar{width:36px;height:36px;border-radius:50%;background:#243430;border:1px solid #3a5f4f;color:#bfe8d3;display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;flex:none;position:relative;overflow:hidden}
+.mem-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.mem-avatar.has-img{background:#11161c}
+.mem-id{flex:1;min-width:150px;display:flex;flex-direction:column;gap:4px}
+.mem-name{color:#e4eaf2;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mem-name .badge{margin-left:0}
+.mem-sub{color:#8b93a1;font-size:11px;line-height:1.6}
+.mem-bar{height:5px;border-radius:3px;background:#232833;overflow:hidden;display:block;margin-top:2px}
+.mem-bar i{display:block;height:100%;background:linear-gradient(90deg,#3ddc84,#2f9e6b)}
+.mem-pct{flex:none;text-align:right;color:#e0e6ed;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.mem-pct small{display:block;color:#7d8593;font-size:11px;font-weight:400;margin-top:2px}
+.mem-segs{border-top:1px solid #232833;padding:2px 14px 9px}
+.mem-seg{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:9px 0;border-bottom:1px solid #20252e}
+.mem-seg:last-child{border-bottom:0}
+.mem-segname{color:#c9d2df;font-size:12px;font-weight:600;min-width:74px}
+.mem-seg.on .mem-segname{color:#8ee6b3}
+.mem-date{color:#8b93a1;font-size:11px;font-variant-numeric:tabular-nums}
+.mem-hint{color:#778292;font-size:11px;line-height:1.6;margin-left:auto;text-align:right}
+.mem-group{display:flex;align-items:center;gap:8px;margin:18px 2px 8px;color:#cfd8e3;font-size:13px;font-weight:600}
+.mem-group span{margin-left:auto;color:#778292;font-size:11px;font-weight:400}
+.mem-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#15181f;border:1px solid #232833;border-radius:9px;padding:10px 12px;margin:0 0 7px}
+.mem-row .mem-name{font-size:13px}
+.mem-row .mem-desc{flex:1;min-width:180px;color:#9aa3b2;font-size:11px;line-height:1.6}
+.mem-row .mem-date{margin-left:auto}
+.mem-timeline{border-top:1px solid #232833;padding:4px 14px 10px}
+.mem-rec{display:flex;gap:9px;padding:8px 0;border-bottom:1px solid #1e242d}
+.mem-rec:last-child{border-bottom:0}
+.mem-day{flex:none;width:70px;color:#7d8593;font-size:11px;padding-top:2px;font-variant-numeric:tabular-nums}
+.mem-txt{color:#b4bdca;font-size:12px;line-height:1.7}
+.mem-x{font-style:normal;color:#e8c76d;font-size:11px;margin-left:5px}
+.mem-stats{display:flex;gap:5px;flex-wrap:wrap;margin-top:2px}
+.mem-stats .badge{margin-left:0;background:#1d232c;color:#b9c6d6}
+.mem-tip{background:#16202b;border:1px solid #2d4356;border-radius:8px;color:#a9c4d8;font-size:12px;line-height:1.8;padding:9px 12px;margin:0 0 12px}
+.mem-tip b{color:#d7e9f7}
+@media(max-width:850px){.mem-filters{grid-template-columns:1fr 1fr}.mem-filters.five{grid-template-columns:1fr 1fr}.mem-actions{grid-column:span 2}.mem-filters.five .mem-actions{grid-column:span 2}}
+@media(max-width:560px){.mem-filters,.mem-filters.five{grid-template-columns:1fr;padding:11px}.mem-actions,.mem-filters.five .mem-actions{grid-column:span 1}.mem-actions .mem-btn{flex:1}.mem-hint{margin-left:0;text-align:left;width:100%}.mem-day{width:58px}.mem-row .mem-date{margin-left:0}}

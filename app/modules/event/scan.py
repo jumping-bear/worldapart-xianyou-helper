@@ -57,6 +57,35 @@ def _score_item(item):
     return round(score), reasons
 
 
+def _apply_branches(rows):
+    """把子奇遇归到母奇遇下：任一分支达成即视为整条奇遇完成，其余分支不再计入未完成。"""
+    by_id = {row.get("id"): row for row in rows}
+    children = {}
+    for row in rows:
+        parent_id = row.get("parent")
+        if parent_id and parent_id in by_id and parent_id != row.get("id"):
+            children.setdefault(parent_id, []).append(row)
+            row["branch"] = True
+    for parent_id, branches in children.items():
+        parent = by_id[parent_id]
+        own_achieved = bool(parent.get("achieved"))
+        achieved = own_achieved or any(branch.get("achieved") for branch in branches)
+        # 只有历史记录达成、当前存档没有结算时，母奇遇仍标为“历史达成”。
+        history_only = achieved and not any(
+            member.get("achieved") and not member.get("history_only") for member in [parent] + branches)
+        parent["achieved"] = achieved
+        parent["achieved_via_branch"] = achieved and not own_achieved
+        parent["group_achieved"] = achieved
+        parent["group_size"] = len(branches) + 1
+        if achieved:
+            parent["history_only"] = history_only
+        for branch in branches:
+            branch["branch_selected"] = bool(branch.get("achieved"))
+            branch["branch_closed"] = achieved and not branch.get("achieved")
+            branch["group_achieved"] = achieved
+    return children
+
+
 def scan_event(obj, meta):
     """整理奇遇进度，并标注选项条件是否满足当前角色。"""
     player = obj.get("playerModel") or {}
@@ -204,15 +233,18 @@ def scan_event(obj, meta):
             except Exception:
                 pass
 
+    children = _apply_branches(rows)
     rows.sort(key=lambda row: (row.get("realm") or 0, row.get("id") or 0))
     for slot in index.values():
         slot["score"], slot["reasons"] = _score_item(slot)
     catalog = sorted(index.values(), key=lambda row: (-(row.get("score") or 0), str(row.get("name"))))
 
+    top_rows = [row for row in rows if not row.get("branch")]
     stats = {
-        "events": len(rows),
-        "achieved": sum(1 for row in rows if row["achieved"]),
-        "history": sum(1 for row in rows if row.get("history_only")),
+        "events": len(top_rows),
+        "achieved": sum(1 for row in top_rows if row["achieved"]),
+        "history": sum(1 for row in top_rows if row.get("history_only")),
+        "branches": sum(len(items) for items in children.values()),
         "endings": sum(len(row["endings"]) for row in rows),
         "got_endings": sum(1 for row in rows for ending in row["endings"]
                            if ending.get("got") or ending.get("history_got")),

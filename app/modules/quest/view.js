@@ -15,20 +15,12 @@ function initQuest(){
  const linkName=id=>byId[id]?byId[id].name:('#'+id);
  const rewardTip=x=>[(x.sources||[]).join('/'),x.type?('类型：'+x.type):'',x.price?('参考价 '+x.price):'',x.desc||''].filter(Boolean).join(' · ');
  const rewardChip=x=>`<span class="efchip fq${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)} ×${x.min===x.max?x.min:x.min+'-'+x.max}<span class="q">${esc(x.sources.join('/'))}</span></span>`;
- function itemDescs(list){
-  const seen={},items=[];
-  (list||[]).forEach(x=>{if(!x.desc||seen[x.item])return;seen[x.item]=1;items.push(x)});
-  if(!items.length)return '';
-  return `<div class="qitemdescs">`+items.map(x=>`<div class="qitemdesc"><b>${esc(x.name)}</b>`+
-   (x.type?`<span class="qtype">${esc(x.type)}</span>`:'')+esc(x.desc)+
-   (x.price?`<span class="qnum">参考价 ${x.price}</span>`:'')+`</div>`).join('')+`</div>`;
- }
  function detailBody(r){
   const link=(r.prev?esc(linkName(r.prev))+' › ':'')+esc(r.name)+(r.next.length?' › '+r.next.map(linkName).map(esc).join(' / '):'');
   return (r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:'')+
    (giverName(r)?`<div class="qline"><b>委托人</b>${esc(giverName(r))}${r.npc_retired?'<span class="badge warn">已退隐</span>':''}</div>`:'')+
    (r.objectives.length?`<div class="qline"><b>目标</b>${r.objectives.slice(0,3).map(o=>esc(o.text)).join(' · ')}</div>`:'')+
-   (r.rewards.length?`<div class="qline"><b>奖励</b><div class="efchips">${r.rewards.map(rewardChip).join('')}</div></div>`+itemDescs(r.rewards):`<div class="qline"><b>奖励</b><span class="muted">剧情向，无固定奖励</span></div>`)+
+   (r.rewards.length?`<div class="qline"><b>奖励</b><div class="efchips">${r.rewards.map(rewardChip).join('')}</div></div>`:`<div class="qline"><b>奖励</b><span class="muted">剧情向，无固定奖励</span></div>`)+
    (r.unreachable?`<div class="qline"><b>不可达</b>${esc(r.unreachable_text)}</div>`:'')+
    (!r.accepted&&r.status_hint?`<div class="qline"><b>接取</b>${esc(r.status_hint)}</div>`:'')+
    (r.branch&&r.branch_with.length?`<div class="qline"><b>分支</b>与「${esc(r.branch_with.join('」「'))}」二选一，实际以选择为准</div>`:'')+
@@ -229,7 +221,7 @@ function initQuest(){
   `<div class="chips" id="qgroups"><span class="chip-label">剧情线</span><button class="chip" data-group="">全部</button>`+
    groups.map(name=>`<button class="chip" data-group="${esc(name)}">${esc(name)}</button>`).join('')+`</div>`+
   `<div id="qcount" class="result-info"></div><div id="qlist"></div>`+
-  `<div class="tip">奖励来自任务提交、阶段目标与剧情流水，全部实时读取游戏配置，任务或奖励改动后无需更新模块。奖励物品悬停可看类型与说明，展开任务也能看到物品描述。`+
+  `<div class="tip">奖励来自任务提交、阶段目标与剧情流水，全部实时读取游戏配置，任务或奖励改动后无需更新模块。奖励物品悬停可看类型、参考价与物品说明。`+
   `「待触发」表示有明确触发条件（前置任务、进入指定场景、修炼层数或好感度达标等），满足后自动出现；「疑似已触发」表示触发条件已满足但本环没有记录，可能已经触发过或记录缺失；`+
   `「剧情接取」表示要在剧情对话里接取，没有固定入口；「触发未知」表示配置里没有触发条件，只能靠剧情脚本触发，游戏内不一定有入口；`+
   `「疑似已跳过」表示同一段剧情流程里接取了几个任务，其中一个已完成、这个没有记录，多半是同源分支被跳过，也可能是记录缺失；`+

@@ -24,6 +24,82 @@ def _lines(value):
     return [part.strip() for part in re.split(r"[|\n]", _text(value)) if part.strip()]
 
 
+_RETRY_NOTES = {
+    "木桩已拔、不可逆，不走暂离": "木桩已被拔起，无法重来",
+    "旗已毁不可逆，不做暂离": "旗已毁，无法重来",
+    "战前已逆吸毁石，不做暂离": "石头已在战前被毁，无法重来",
+    "战前已断脉取矿、不可逆，不走暂离": "矿脉已在战前被取走，无法重来",
+}
+_BATTLE_NODES = {"B1": "小火灵"}
+
+
+def _retry_note(match):
+    text = match.group(1)
+    return "（%s）" % _RETRY_NOTES.get(text, "此战失败后无法重来")
+
+
+def _battle_fail_note(match):
+    note = match.group(2).replace("摊已拍散", "摊子已被拍散").replace("不可回访", "无法再来")
+    return "与%s战斗失败或逃走（%s）" % (match.group(1), note)
+
+
+def _polish_path_step(step):
+    """把策划备注里的内部术语整理成玩家能看懂的路径。"""
+    step = step.split("｜", 1)[0].strip()
+    step = re.sub(r"（([^（）]*?)≥(\d+)，不足置灰）", r"（需\1≥\2）", step)
+    step = re.sub(r"（([^（）]*?)≥(\d+)，不足置灰$", r"（需\1≥\2）", step)
+    step = re.sub(r"（\s*([^（）]*?)\s*在选项上即改）", r"（\1）", step)
+    step = step.replace("选项上已扣押注", "已扣押注")
+    step = re.sub(r"（原案【[^】]*】= \d+）", "", step)
+    step = step.replace("（原案带神识+/善恶+，保留为一次性结局）", "（一次性结局）")
+    step = step.replace("（无门槛，一次性收口）", "（无门槛，一次性结局）")
+    step = step.replace("（一次性收口，无奖励）", "（一次性结局，无奖励）")
+    step = step.replace("（带奖惩的一次性收口）", "（带奖惩的一次性结局）")
+    step = step.replace("（带灵机经验的一次性收口）", "（带灵机经验的一次性结局）")
+    step = step.replace("（一次性收口）", "（一次性结局）")
+    step = step.replace("神识检定成功（含第一轮赢局暂存）", "神识检定成功（第一轮赢下的押注也一并发放）")
+    step = step.replace("神识检定成功（≥4）", "神识检定成功（需≥4）")
+    step = step.replace("神识检定失败（≥4）", "神识检定失败（需≥4）")
+    step = re.sub(r"神识检定成功（1003 要求 (\d+) 级，成功率按常量表 ATTR_CHECK_\*）",
+                  r"神识检定成功（需神识 \1 级）", step)
+    step = step.replace("战前扣生命 70%", "战前扣除当前生命的 70%")
+    step = re.sub(r"战前 flow \d+ 扣当前生命 (\d+)%", r"战前扣除当前生命的 \1%", step)
+    step = re.sub(r"灵机检定成功（押注赢局暂存 \d+，本结局一并发放）",
+                  "灵机检定成功（赢下的押注会一并发放）", step)
+    step = re.sub(r"（败/逃走暂离 [^）]*，回访直达 [^）]*）", "（失败或逃走会暂时离开，可回访再战）", step)
+    step = re.sub(r"（败/逃走暂离 [^）]*，回访重播首屏）", "（失败或逃走会暂时离开，可回访再战）", step)
+    step = re.sub(r"（败/逃走暂离 [^）]*）", "（失败或逃走会暂时离开，可回访再战）", step)
+    step = re.sub(r"（([^（）]*(?:不可逆|不[做走]暂离)[^（）]*)）", _retry_note, step)
+    step = step.replace("不可回访", "无法再来")
+    step = step.replace("（不可逃，无暂离）", "（此战无法逃跑）")
+    step = step.replace("（不可逃）", "（此战无法逃跑）")
+    step = re.sub(r"（不可逃$", "（此战无法逃跑）", step)
+    step = re.sub(r"（补写结局.*$", "", step)
+    step = re.sub(r"（新增结局.*$", "", step)
+    step = re.sub(r"^战斗·(.+?)\s+胜$", r"战胜\1", step)
+    step = re.sub(r"^战斗·(.+?)\s+败/逃（([^）]*)）$", _battle_fail_note, step)
+    step = re.sub(r"^B(\d+)\s*胜$",
+                  lambda m: "战胜%s" % _BATTLE_NODES.get("B" + m.group(1), "对手"), step)
+    step = re.sub(r"^B(\d+)\s*败或逃.*$",
+                  lambda m: "与%s战斗失败或逃走" % _BATTLE_NODES.get("B" + m.group(1), "对手"), step)
+    step = step.replace("战败/逃", "战斗失败或逃走")
+    step = re.sub(r"(?<!战斗)战败", "战斗失败", step)
+    step = step.replace("逃跑", "逃走")
+    return step.strip()
+
+
+_PATH_OVERRIDES = {
+    5120901: ["首次滴血献祭，且本次未引出祭坛里的血魔"],
+    5120906: ["祭坛已被使用过，再次滴血也不会再有回应"],
+    5160903: ["逐幅看完展览中的所有画卷"],
+}
+
+
+def _ending_path(ending_id, note):
+    override = _PATH_OVERRIDES.get(_int(ending_id))
+    return list(override) if override else _designer_path(note)
+
+
 def _designer_path(note):
     """从策划备注里取出结局达成路径（“路径：A > B > C”）。"""
     text = _text(note)
@@ -32,7 +108,7 @@ def _designer_path(note):
         return []
     tail = re.split(r"[；;]", match.group(1))[0]
     steps = [part.strip(" 　。") for part in re.split(r"\s*[>＞]\s*", tail)]
-    return [step for step in steps if step]
+    return [_polish_path_step(step) for step in steps if step]
 
 
 def _operand_text(node, attrs, quest_names=None):
@@ -610,7 +686,7 @@ def build_event(tables):
                 or ("结局 %s" % row.get("id")), "summary": _plain(row.get("summary")),
                 "detail": _lines(row.get("detail_lines")), "grade": grade,
                 "grade_name": EVENT_GRADE_NAMES.get(grade, "第%s档" % grade),
-                "path": _designer_path(row.get("designer_note")),
+                "path": _ending_path(row.get("id"), row.get("designer_note")),
                 "rewards": rewards or [],
                 "reward_ok": True if not drop_id else rewards is not None,
             })

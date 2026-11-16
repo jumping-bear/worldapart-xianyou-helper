@@ -481,7 +481,9 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
         migrated = False
         if not entry:
             old = (legacy.get("modules") or {}).get(module) or {}
-            if isinstance(old, dict) and old.get("data") is not None:
+            # 旧版全局缓存没有模块级版本号；模块自有版本已变化时不能再沿用，否则新快照永远不生效。
+            if (isinstance(old, dict) and old.get("data") is not None
+                    and legacy.get("schema") == schema):
                 entry = {"schema": schema, "fingerprint": old.get("fingerprint"),
                          "generated_at": old.get("generated_at"), "data": old.get("data")}
                 migrated = True

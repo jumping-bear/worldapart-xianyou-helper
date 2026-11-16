@@ -1,0 +1,10 @@
+/* 奇遇：母奇遇下的子分支折叠展示 */
+.evbranches{margin-top:12px;padding-top:9px;border-top:1px dashed #2b3340}
+.evbranch-head{color:#8b93a1;font-size:11px;line-height:1.7;margin:0 2px 8px}
+.evbranch{margin:0 0 7px 12px;border-left:2px solid #2b3340}
+.evbranch>summary{padding:9px 12px}
+.evbranch .evname{font-size:13px}
+.evbranch.branch-done{border-left-color:#3d735b}
+.evbranch.branch-closed{border-left-color:#3a2126;opacity:.72}
+.evbranch.branch-closed .evname{color:#9aa3b2}
+@media(max-width:560px){.evbranch{margin-left:4px}}
