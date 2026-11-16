@@ -150,9 +150,9 @@ def generate_pages(out_dir, version):
     html = os.path.join(out_dir, "仙友助手.html")
     if not os.path.isfile(html):
         raise SystemExit("页面生成失败：%s 不存在" % html)
-    head = _read(html)[:4000]
-    if "__VER__" in head or version not in head:
-        print("提示：页面标题区未注入版本 %s，请确认 APP_VERSION 替换正常" % version)
+    html_text = _read(html)
+    if "__VER__" in html_text or ("v%s" % version) not in html_text:
+        print("提示：页面标题区未注入版本 v%s，请确认 APP_VERSION 替换正常" % version)
     return True
 
 
