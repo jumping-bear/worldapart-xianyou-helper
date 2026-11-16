@@ -7,7 +7,7 @@ import sys
 
 import meta_update
 
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.8.1"
 FROZEN = getattr(sys, "frozen", False)
 if FROZEN:
     HERE = os.path.dirname(sys.executable)
@@ -19,7 +19,7 @@ CFG = os.path.join(HERE, "config.json")
 OUT_HTML = os.path.join(HERE, "仙友助手.html")
 OUT_VERSION = os.path.join(HERE, "仙友助手版本.js")
 DEFAULT_MODULES = {"bedroom": True, "talent": True, "items": True, "pill": True,
-                   "forge": True, "event": True}
+                   "forge": True, "event": True, "quest": True}
 
 unpack = meta_update.unpack
 
@@ -34,6 +34,7 @@ def load_cfg():
     return {
         "decrypted_dir": str(raw.get("decrypted_dir") or ""),
         "game_dir": str(raw.get("game_dir") or ""),
+        "save_file": str(raw.get("save_file") or ""),
         "modules": {name: bool(modules.get(name, default)) for name, default in DEFAULT_MODULES.items()},
     }
 
@@ -41,6 +42,7 @@ def load_cfg():
 def save_cfg(cfg):
     data = {
         "decrypted_dir": cfg.get("decrypted_dir", ""), "game_dir": cfg.get("game_dir", ""),
+        "save_file": cfg.get("save_file", ""),
         "modules": {name: bool((cfg.get("modules") or {}).get(name, default))
                     for name, default in DEFAULT_MODULES.items()},
     }

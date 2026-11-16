@@ -36,6 +36,13 @@ def render(dec, cfg):
     files = common.save_files(dec)
     originals = common.original_save_index(common.find_save_root())
     timed = [(path,) + common.source_time(path, originals) for path in files]
+    save_file = (cfg.get("save_file") or "").strip()
+    if save_file:
+        pinned = [item for item in timed if os.path.basename(item[2] or "") == save_file]
+        if pinned:
+            timed = pinned
+        else:
+            payload["warnings"].append("配置的存档角色已不存在，本次临时跟随最近存档。")
     chosen, errors = {}, []
 
     for path, stamp, original in timed:
@@ -66,6 +73,9 @@ def render(dec, cfg):
             rows = spec.scan({}, metas[key], prepared[key])
             item = _source_payload("", 0, "", rows, report["modules"][key])
         payload["modules"][key] = spec.enrich(item, metas[key], prepared[key])
+    event_rows = ((payload["modules"].get("event") or {}).get("rows") or {})
+    if isinstance(event_rows, dict) and event_rows.get("character"):
+        payload["character"] = event_rows["character"]
     if not files:
         payload["warnings"].append("还没有可用存档副本，请先启动游戏并等待插件导出。")
     elif errors:

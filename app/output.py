@@ -151,29 +151,146 @@ CSS += r"""
 .evdesc{color:#b4bdca;font-size:12px;line-height:1.85}
 .evline{color:#b4bdca;font-size:12px;line-height:1.9;margin-top:6px}
 .evline b{color:#d9c785;margin-right:7px;font-weight:600}
-.eend{background:#12161c;border:1px solid #212836;border-radius:8px;padding:10px 12px;margin-top:8px}
+.eend{background:#12161c;border:1px solid #212836;border-radius:9px;padding:10px 12px;margin-top:8px}
 .eend.got{border-color:#3d735b;background:#131d18}
 .eend-head{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.egrade{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:6px;font-size:11px;background:#242a34;color:#9aa3b2;padding:0 4px}
+.egrade{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:20px;border-radius:6px;font-size:11px;background:#242a34;color:#9aa3b2;padding:0 5px}
 .egrade.g1{background:#22392e;color:#8ee6b3}.egrade.g2{background:#27374a;color:#b9d9ff}.egrade.g3{background:#3a2126;color:#e88b82}
 .eend-title{font-size:13px;font-weight:600}
 .eend-sum{color:#9aa3b2;font-size:12px;line-height:1.75;margin-top:5px}
 .eend-detail{color:#c9a976;font-size:11px;line-height:1.7;margin-top:4px}
-.efchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
-.efchip{background:#1a2029;border:1px solid #2b3340;border-radius:7px;padding:3px 8px;font-size:11px;color:#b4bdca}
+.erewards{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.erewards>b,.epath>b{flex:none;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:#2b2415;border:1px solid #4a3f24;color:#e8c76d;font-size:11px;font-weight:600}
+.efchips{flex:1;min-width:0;display:flex;gap:6px;flex-wrap:wrap}
+.epath{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:#9aa3b2;font-size:11px;line-height:1.7;margin-top:8px;background:#101720;border:1px solid #1f2b3a;border-radius:7px;padding:6px 8px}
+.psteps{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.parrow{color:#6f9ec9;font-size:13px;font-weight:700}
+.pstep{display:inline-flex;align-items:center;gap:5px;color:#d5dee8;background:#18222d;border-radius:6px;padding:2px 7px 2px 3px}
+.pstep i{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#2d4a63;color:#cfe8ff;font-size:10px}
+.efchips{display:flex;gap:6px;flex-wrap:wrap}
+.efchip{display:inline-flex;align-items:center;height:22px;box-sizing:border-box;background:#1a2029;border:1px solid #2b3340;border-radius:7px;padding:0 8px;font-size:11px;color:#b4bdca}
 .efchip i{font-style:normal;color:#7d8593;margin-left:5px}
+.efchip .q{font-size:10px;color:#7d8593;margin-left:4px}
 .efchip.got{border-color:#3d735b;background:#1a2a22}
+.efchip.fq1{background:#18261c;border-color:#31543c;color:#a8dfb4}
+.efchip.fq2{background:#172330;border-color:#2f4e69;color:#a6cff0}
+.efchip.fq3{background:#221a2e;border-color:#4a3566;color:#cbb2ee}
+.efchip.fq4{background:#2b2415;border-color:#65552a;color:#f0d38a}
+.efchip.fq5{background:#2e1a1a;border-color:#6b3232;color:#f0a6a6}
 .badge.ok{background:#22392e;color:#8ee6b3}.badge.off{background:#2a2d33;color:#8b93a1}.badge.warn{background:#3a3226;color:#e8c76d}
 .badge.loc-exact{background:#22392e;color:#8ee6b3}.badge.loc-inferred{background:#333026;color:#e8c76d}.badge.loc-unknown{background:#2a2d33;color:#8b93a1}
 .event-chips{margin:0 0 10px}
 @media(max-width:560px){.evloc{margin-left:0;width:100%}.evbody{padding:10px 12px 12px}}
+.charline{background:#141820;border:1px solid #232b36;border-radius:10px;padding:9px 13px;color:#b4bdca;font-size:12px;line-height:1.8;margin:0 0 12px}
+.charline b{color:#e8eaed}
+.notice{background:#16202b;border:1px solid #2d4356;border-radius:8px;color:#a9c4d8;font-size:12px;line-height:1.8;padding:8px 11px;margin:0 0 10px}
+.notice b{color:#d7e9f7}
+.card .s{color:#778292;font-size:11px;margin-top:3px}
+.small{font-size:11px}
+.badge.score{background:#2c2a1f;color:#e8c76d}
+.reasons{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 8px}
+.reason{background:#1d232c;border:1px solid #2b3340;border-radius:7px;padding:2px 8px;font-size:11px;color:#c9d2df}
+.reason.use{background:#17242c;border-color:#2d4f5f;color:#a9dbe8}
+.itemdesc{color:#9aa3b2;font-size:12px;line-height:1.8;margin:2px 0 8px;background:#10141a;border-radius:7px;padding:7px 9px}
+.itemdesc b{color:#c9d2df;font-weight:600}
+.itemselect{background:#15181f;border:1px solid #29303c;border-radius:8px;color:#e8eaed;padding:5px 9px;font-size:12px;outline:none;min-height:28px}
+.itemselect:focus{border-color:#527c69}
+.cchip{display:inline-flex;align-items:center;gap:4px;border-radius:7px;padding:2px 7px;font-size:11px;background:#242a34;color:#9aa3b2;border:1px solid #2b3340;line-height:1.6}
+.cchip.ok{background:#1a2a22;border-color:#3d735b;color:#8ee6b3}
+.cchip.bad{background:#2e1d21;border-color:#6b3a44;color:#e88b82}
+.condopts{display:flex;flex-direction:column;gap:5px;margin-top:5px}
+.condopt{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.condname{color:#c9d2df;font-size:11px;background:#1b222c;border-radius:6px;padding:2px 7px;max-width:100%}
+.effchip{display:inline-block;border-radius:7px;padding:2px 7px;font-size:11px;background:#1b2230;color:#9fc3e8;border:1px solid #2b3a4d}
+.etree{margin-top:10px;border:1px solid #232833;border-radius:9px;background:#12161c;overflow:hidden}
+.etree>summary{cursor:pointer;padding:9px 12px;color:#b9c6d6;font-size:12px;list-style:none}
+.etree>summary::-webkit-details-marker{display:none}
+.etree>summary:before{content:"›";display:inline-block;margin-right:6px;transition:.15s}
+.etree[open]>summary:before{transform:rotate(90deg)}
+.treewrap{padding:4px 12px 12px;border-top:1px solid #20252e}
+.tnode{border-left:2px solid #2b3a33;padding:6px 0 2px 10px;margin-top:6px}
+.ttext{color:#9aa3b2;font-size:11px;line-height:1.7;background:#0f1319;border-radius:6px;padding:5px 7px}
+.topt{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#d5dce6;font-size:12px;margin-top:6px;background:#151b23;border:1px solid #232c38;border-radius:7px;padding:5px 8px}
+.topt b{color:#e8eaed;font-weight:600}
+.tarrow{color:#6f9ec9;font-weight:700}
+.topt.picked{border-color:#3d735b;background:#152019}
+.topt.picked b{color:#8ee6b3}
+.topt.picked b:before{content:"已选 ";color:#6edda2;font-size:10px}
+.tbranch{margin-left:14px;border-left:1px dashed #2b3340;padding-left:8px}
+.tend{color:#9aa3b2;font-size:12px;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#101720;border-radius:6px;padding:5px 8px}
+.tend b{color:#e8eaed}
+.tloop{color:#778292;font-size:11px;margin-top:5px}
+.jumpbtn{background:#2d4a63;border:1px solid #4f7fa6;color:#d7efff;border-radius:7px;padding:4px 11px;font-size:11px;cursor:pointer;font-weight:600;white-space:nowrap}
+.jumpbtn:hover{background:#3a5f7e;color:#fff}
+.jumpbtn:after{content:" →"}
+.ev.flash{animation:evflash 1.6s ease-out}
+@keyframes evflash{0%{box-shadow:0 0 0 2px #4f7fa6;background:#1a2530}100%{box-shadow:0 0 0 0 transparent}}
+.fq5{color:#f0a6a6}
+.qgroup{display:flex;align-items:center;gap:8px;margin:20px 2px 9px;color:#cfd8e3;font-size:13px;font-weight:600}
+.qgroup .gmeta{margin-left:auto;color:#778292;font-weight:400;font-size:11px}
+.qline{color:#b4bdca;font-size:12px;line-height:1.9;margin-top:6px}
+.qline b{color:#d9c785;margin-right:7px;font-weight:600}
+.qchain{border:1px solid #232833;border-radius:10px;margin:10px 0;background:#12171f;overflow:hidden}
+.qchain>summary{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;list-style:none}
+.qchain>summary::-webkit-details-marker{display:none}
+.qchain>summary:hover{background:#171d27}
+.qchain[open]>summary{border-bottom:1px solid #232833}
+.qchainbody{padding:10px 14px 14px}
+.qstep{border-left:2px solid #2b3340;margin:7px 0 7px 6px;padding-left:12px}
+.qstep>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:4px 0}
+.qstep>summary::-webkit-details-marker{display:none}
+.qstep .stepno{width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:#232b37;color:#9fb0c4;font-size:11px;flex:none}
+.qstep .evbody{padding:2px 0 6px 28px}
+.qbranch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:9px 0 9px 18px}
+.qbranch.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.qopt{border:1px solid #2a303c;border-radius:8px;background:#11161f;padding:9px 11px;min-width:0}
+.qopt.chosen{border-color:#4d7a5f;background:#15211a}
+.qopt.missed{opacity:.72}
+.qopt .qname{font-weight:600;color:#e6edf5;font-size:13px}
+.qopt .rw{font-size:11px;color:#b9c2cf;margin-top:5px;line-height:1.6}
+.qopt .why{font-size:11px;color:#d3ae74;margin-top:5px;line-height:1.6}
+.qopt .qoptmeta{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.qchain>summary{flex-wrap:wrap}
+.qsechd{display:flex;align-items:center;gap:8px;margin:16px 0 4px;font-size:11px;color:#93a0b1}
+.qsechd:before{content:"";width:3px;height:11px;border-radius:2px;background:#3d735b;flex:none}
+.qsechd i{margin-left:auto;font-style:normal;color:#6f7787}
+.qwalk .qstep{border-left-color:#2f6b4c}
+.qstep>summary{flex-wrap:wrap}
+.qstep .qact{font-size:11px;color:#8fd0a9}
+.rwline{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-left:2px}
+.rwq{font-size:11px;padding:1px 6px;border-radius:5px;background:#1c222c;border:1px solid #2b3441;color:#c3cbd7;white-space:nowrap}
+.rwq.f1{color:#a8dfb4;border-color:#33513f}.rwq.f2{color:#a6cff0;border-color:#2e455c}
+.rwq.f3{color:#cbb2ee;border-color:#453a5c}.rwq.f4{color:#f0d38a;border-color:#5a4c2a}
+.rwq.f5{color:#f0a6a6;border-color:#5c3535}.rwq.more{color:#7d8593}
+.rwstone{font-size:11px;color:#e8c76d}
+.qitemdescs{margin:4px 0 8px;display:flex;flex-direction:column;gap:6px}
+.qitemdesc{background:#10141a;border:1px solid #222a35;border-radius:7px;padding:6px 9px;font-size:12px;line-height:1.7;color:#9aa3b2}
+.qitemdesc b{color:#c9d2df;font-weight:600;margin-right:6px}
+.qitemdesc .qtype{font-size:10px;color:#7d8593;border:1px solid #2b3441;border-radius:4px;padding:0 4px;margin-right:6px;white-space:nowrap}
+.qitemdesc .qnum{color:#e8c76d;margin-left:6px}
+.mutedsm{font-size:11px;color:#6f7787}
+.qnext{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#16231c;border:1px solid #2f5b45;border-radius:8px;padding:8px 11px;margin:2px 0 6px;font-size:12px;color:#c9f5dd}
+.qnext b{color:#8fd0a9;font-weight:600}
+.qnext span{color:#8b93a1;font-size:11px}
+.qfold{border:1px dashed #2b3441;border-radius:8px;margin:8px 0;background:#10151c}
+.qfold>summary{display:flex;align-items:center;gap:8px;padding:9px 11px;cursor:pointer;list-style:none;font-size:12px;color:#9aa3b2}
+.qfold>summary::-webkit-details-marker{display:none}
+.qfold>summary:before{content:"›";color:#6f7787;font-size:16px;transition:.15s}
+.qfold[open]>summary:before{transform:rotate(90deg)}
+.qfold .qfoldn{color:#c3cbd7}
+.qfold .qfoldx{margin-left:auto;color:#6f7787;font-size:11px;text-align:right}
+.qfoldbody{padding:0 11px 8px}
+.qopt .rwline{margin-top:6px}
+.qfinal b{color:#d9c785;font-weight:600;margin-right:2px;font-size:11px}
+@media(max-width:640px){.qbranch,.qbranch.three{grid-template-columns:1fr;margin-left:0}}
+@media(max-width:560px){.topt{font-size:11px}.tbranch{margin-left:6px;padding-left:6px}.epath{flex-direction:column;gap:4px}}
 """
 
-HTML_TEMPLATE = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>不问凡尘 · 仙友助手</title><style>__CSS__</style></head><body><div class="wrap"><h1>不问凡尘 · 仙友助手 <span class="appver">v__VER__</span></h1><div class="sub">只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。</div><div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div><section id="bedroom" class="panel"></section><section id="talent" class="panel"></section><section id="items" class="panel"></section><section id="pill" class="panel"></section><section id="forge" class="panel"></section><section id="event" class="panel"></section><div class="tip">游戏保存后按 F8 可立即导出副本，平时插件每 60 秒自动同步。本页仅在数据变化时自动刷新。<br>配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。若存档结构、加密或 Unity 格式大改，仍需更新工具。</div></div><script src="仙友助手版本.js"></script><script>
+HTML_TEMPLATE = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>不问凡尘 · 仙友助手</title><style>__CSS__</style></head><body><div class="wrap"><h1>不问凡尘 · 仙友助手 <span class="appver">v__VER__</span></h1><div class="sub">只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。</div><div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div><section id="bedroom" class="panel"></section><section id="talent" class="panel"></section><section id="items" class="panel"></section><section id="pill" class="panel"></section><section id="forge" class="panel"></section><section id="event" class="panel"></section><section id="quest" class="panel"></section><div class="tip">游戏保存后按 F8 可立即导出副本，平时插件每 60 秒自动同步。本页仅在数据变化时自动刷新。<br>配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。若存档结构、加密或 Unity 格式大改，仍需更新工具。</div></div><script src="仙友助手版本.js"></script><script>
 const INITIAL_VERSION=window.PROGRESS_VERSION||'';const DATA=__DATA__;
 const $=id=>document.getElementById(id);const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const labels={bedroom:'仙居楼互动',talent:'NPC天赋',items:'NPC物品',pill:'炼丹',forge:'炼器',event:'奇遇'};let active=store.get('worldapart.active.tab.v2',DATA.enabled[0]||'');if(!DATA.enabled.includes(active))active=DATA.enabled[0]||'';
+const labels={bedroom:'仙居楼互动',talent:'NPC天赋',items:'NPC物品',pill:'炼丹',forge:'炼器',event:'奇遇',quest:'支线'};let active=store.get('worldapart.active.tab.v2',DATA.enabled[0]||'');if(!DATA.enabled.includes(active))active=DATA.enabled[0]||'';
 function sourceHtml(m){return `<div class="source">存档：${esc(m.src||'暂无')} ｜ 原始更新：${esc(m.stamp_text)} ｜ 配置：${esc(m.config)}${m.config_warning?' ｜ '+esc(m.config_warning):''}</div>`}
 function showTab(name){active=name;store.set('worldapart.active.tab.v2',name);document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===name));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name))}
 function initTabs(){$('tabs').innerHTML=DATA.enabled.map(n=>`<button class="tab" data-tab="${n}">${labels[n]}</button>`).join('');document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>showTab(x.dataset.tab));if(!DATA.enabled.length){$('warnings').innerHTML=DATA.warnings.map(esc).join('<br>');return}showTab(active)}
@@ -1272,50 +1389,141 @@ function initEvent(){
  if(!rows.length&&!catalog.length){host.innerHTML=sourceHtml(m)+'<div class="empty">暂无奇遇配置</div>';return}
  const byId={};rows.forEach(r=>byId[r.id]=r);
  const itemNames={};catalog.forEach(x=>itemNames[x.item]=x.name);
- let state=Object.assign({q:'',status:'',realm:'',mode:'event',missing:false},store.get(EVENT_FILTER_KEY,{}));
- const gradeName=g=>(st.grades||{})[String(g)]||('第'+g+'档');
+ const attrs=st.attrs||{},money=st.money||0,ch=st.character||DATA.character||{};
+ let state=Object.assign({q:'',status:'',realm:'',mode:'event',missing:false,condOnly:false,itemQuality:'',itemType:'',itemUse:false,itemSort:'score',focus:0},store.get(EVENT_FILTER_KEY,{}));
+ const gradeName=g=>(st.grades||{})[String(g)]||('第'+(g||'?')+'档');
  const gradeCls=g=>'g'+(g||0);
  const confName=c=>c==='exact'?'位置确定':c==='inferred'?'位置推断':'位置未定';
  const confCls=c=>c==='exact'?'loc-exact':c==='inferred'?'loc-inferred':'loc-unknown';
  const locText=r=>{const l=r.location;if(!l)return '位置未定';const path=((l.path&&l.path.length)?l.path:[l.name]).join(' / ');return (l.spot?l.spot+' · ':'')+path};
  const itemName=id=>itemNames[id]||('物品 '+id);
- const rewardChip=(x,got)=>`<span class="efchip fq${x.quality||0}${got?' got':''}" title="掉率 ${x.chance}%">${esc(x.name)} ×${x.min===x.max?x.min:x.min+'-'+x.max}${x.chance>=100?'':'<i>'+x.chance+'%</i>'}</span>`;
+ const cmp=(a,op,b)=>{if(a===null||a===undefined)return null;switch(op){case'>=':return a>=b;case'>':return a>b;case'<=':return a<=b;case'<':return a<b;case'==':return a===b;case'!=':return a!==b;default:return null}};
+ const condPass=c=>{
+  if(!c||!c.checks||!c.checks.length)return null;
+  let ok=true;
+  for(const k of c.checks){
+   let value=null;
+   if(k.t==='attr')value=(attrs[k.a]||{}).level||0;
+   else if(k.t==='money')value=money;
+   else return null;
+   const part=cmp(value,k.op,k.v);if(part===null)return null;ok=ok&&part;
+  }
+  return ok;
+ };
+ const condSummary=r=>{
+  const seen=new Set(),list=[];
+  for(const n of Object.values((r.tree||{}).nodes||{})){
+   for(const o of n.options||[])for(const c of o.conds||[])for(const k of c.checks||[]){
+    let value=null,label='';
+    if(k.t==='attr'){const a=attrs[k.a]||{};value=a.level||0;label=`${a.name||('属性'+k.a)} ${k.op} ${k.v}（当前 ${value}）`}
+    else if(k.t==='money'){value=money;label=`灵石 ${k.op} ${k.v}（当前 ${value}）`}
+    else continue;
+    const opt=o.t||'继续',key=opt+'|'+label;
+    if(seen.has(key))continue;seen.add(key);
+    list.push({opt,label,ok:cmp(value,k.op,k.v),gate:['>=','>','=='].includes(k.op)});
+   }
+  }
+  return list;
+ };
+ const checkText=k=>k.t==='attr'?`${(attrs[k.a]||{}).name||('属性'+k.a)} ${k.op} ${k.v}`:k.t==='money'?`灵石 ${k.op} ${k.v}`:`物品 ${k.i} ${k.op} ${k.v}`;
+ const rewardChip=(x,got)=>`<span class="efchip fq${x.quality||0}${got?' got':''}" title="${esc((x.desc||'')+' · 掉率 '+x.chance+'%')}">${esc(x.name)} ×${x.min===x.max?x.min:x.min+'-'+x.max}${x.chance>=100?'':'<i>'+x.chance+'%</i>'}<span class="q">品质${x.quality||0}</span></span>`;
+ const realmRows=rows.filter(r=>Number(r.realm||0)===Number(st.current_realm||0));
+ const gateRows=rows.filter(r=>!r.achieved&&condSummary(r).some(c=>c.gate&&c.ok===false));
  const cards=
-  `<div class="card"><div class="k">奇遇达成</div><div class="v">${stats.achieved||0} <span>/ ${stats.events||0}</span></div></div>`+
-  `<div class="card"><div class="k">结局收集</div><div class="v">${stats.got_endings||0} <span>/ ${stats.endings||0}</span></div></div>`+
-  `<div class="card"><div class="k">实际所得</div><div class="v">${stats.granted||0} <span>条奖励</span></div></div>`+
-  `<div class="card"><div class="k">地点定位</div><div class="v">${metaStats.exact||0} <span>确定 · 推断 ${metaStats.inferred||0}</span></div></div>`;
+  `<div class="card"><div class="k">奇遇达成</div><div class="v">${stats.achieved||0} <span>/ ${stats.events||0}</span></div>${stats.history?`<div class="s">含历史记录 ${stats.history} 个</div>`:''}</div>`+
+  `<div class="card"><div class="k">当前境界可做</div><div class="v">${realmRows.filter(r=>!r.achieved).length} <span>/ ${realmRows.length}</span></div><div class="s">${esc(st.current_realm_name||'当前境界')} 还未达成</div></div>`+
+  `<div class="card"><div class="k">属性门槛不足</div><div class="v">${gateRows.length} <span>个</span></div><div class="s">出发前优先补属性</div></div>`+
+  `<div class="card"><div class="k">奖励图鉴</div><div class="v">${catalog.length} <span>种</span></div><div class="s">未拥有 ${catalog.filter(x=>!x.owned).length} 种</div></div>`;
+ 
+ function treeHtml(r,id,seen,depth){
+  const t=r.tree||{},n=(t.nodes||{})[id];
+  if(!n)return '';
+  if(seen.has(id))return '<div class="tloop">↩ 回到上文</div>';
+  if(depth>8)return '<div class="tloop">…分支过深，已省略</div>';
+  seen.add(id);
+  const picked=new Set((r.choices||[]).map(c=>c.text));
+  const narration=n.text||'';
+  let html=`<div class="tnode">${narration?`<div class="ttext" title="${esc(narration)}">${esc(narration.length>90?narration.slice(0,90)+'…':narration)}</div>`:''}`;
+  (n.options||[]).forEach(o=>{
+   const seenText=new Set(),chips=[];
+   (o.conds||[]).forEach(c=>{
+    const full=c.text||'条件';if(seenText.has(full))return;seenText.add(full);
+    const p=condPass(c);
+    const brief=(c.checks&&c.checks.length)?c.checks.map(checkText).join(' 且 '):full;
+    const short=brief.length>40?brief.slice(0,40)+'…':brief;
+    chips.push(`<span class="cchip ${p===true?'ok':p===false?'bad':'unk'}" title="${esc(full)}">${p===true?'✓':p===false?'✗':'?'} ${esc(short)}</span>`);
+   });
+   const shown=chips.slice(0,4),more=chips.length-shown.length;
+   html+=`<div class="topt${picked.has(o.t)?' picked':''}"><span class="tarrow">↳</span>${o.t?`<b>${esc(o.t)}</b>`:'<span class="muted">继续</span>'}`+
+    shown.join('')+(more?`<span class="cchip unk">+${more} 条条件</span>`:'')+(o.eff||[]).map(e=>`<span class="effchip">${esc(e)}</span>`).join('')+`</div>`;
+   if(o.to&&o.to.startsWith('e:')){
+    const eid=+o.to.slice(2),e=(r.endings||[]).find(x=>x.id===eid);
+    html+=`<div class="tend">结局：${e?`<b>${esc(e.title)}</b><span class="egrade ${gradeCls(e.grade)}">${esc(e.grade_name||gradeName(e.grade))}</span>${e.rewards.map(x=>rewardChip(x,e.got)).join('')}`:'#'+eid}</div>`;
+   }else if(o.to){
+    html+=`<div class="tbranch">${treeHtml(r,o.to,seen,depth+1)}</div>`;
+   }
+   (o.after||[]).forEach(tid=>{
+    const eid=+tid.slice(2),e=(r.endings||[]).find(x=>x.id===eid);
+    html+=`<div class="tend">结算结局：${e?`<b>${esc(e.title)}</b>${e.rewards.map(x=>rewardChip(x,e.got)).join('')}`:'#'+eid}</div>`;
+   });
+  });
+  seen.delete(id);
+  return html+'</div>';
+ }
  function eventCard(r){
   const endings=r.endings||[];
-  const got=endings.filter(e=>e.got).length;
+  const got=endings.filter(e=>e.got||e.history_got).length;
+  const conds=condSummary(r);
+  const unmet=conds.some(c=>c.ok===false);
   const badges=`<span class="badge ${r.achieved?'ok':'off'}">${r.achieved?'已达成':'未达成'}</span>`+
    `<span class="badge">结局 ${got}/${endings.length}</span>`+
    `<span class="badge">${r.one_off?'一次性':'可重复'}</span>`+
+   (r.history_only?'<span class="badge">历史达成</span>':'')+
    (r.parent&&byId[r.parent]?`<span class="badge">隶属 ${esc(byId[r.parent].name)}</span>`:'')+
    `<span class="badge ${confCls((r.location||{}).conf)}">${confName((r.location||{}).conf)}</span>`;
+  const condHtml=conds.length?(()=>{
+   const groups={};conds.forEach(c=>{(groups[c.opt]=groups[c.opt]||[]).push(c)});
+   return `<div class="evline"><b>选项条件</b><div class="condopts">`+Object.keys(groups).map(opt=>
+    `<div class="condopt"><span class="condname">${esc(opt)}</span>`+
+    groups[opt].map(c=>`<span class="cchip ${c.ok===false?'bad':c.ok===true?'ok':'unk'}">${c.ok===false?'✗':c.ok===true?'✓':'?'} ${esc(c.label)}</span>`).join('')+
+    `</div>`).join('')+`</div></div>`;
+  })():'';
   const grants=(r.grants||[]).length?`<div class="evline"><b>实际所得</b>${r.grants.map(g=>`${esc(itemName(g.item))} ×${g.count}${g.delivered?'':'（未交付）'}`).join(' · ')}</div>`:'';
-  const picked=(r.choices||[]).length?`<div class="evline"><b>选择记录</b>${r.choices.map(c=>esc(c.text)+(c.count>1?' ×'+c.count:'')).join(' · ')}</div>`:'';
+  const picked=(r.choices||[]).length?`<div class="evline"><b>选择记录</b>${r.choices.map(c=>esc(c.text)+(c.count>1?`<span class="muted">（累计选 ${c.count} 次）</span>`:'')).join(' · ')}</div>`+
+   `<div class="muted small">括号里是存档累计点击次数，不是奖励倍数。</div>`:'';
   const unknown=r.unknown_ending?`<div class="evline"><b>结局</b>#${r.ending}（配置未收录）</div>`:'';
   const body=endings.map(e=>`<div class="eend${e.got?' got':''}"><div class="eend-head">`+
-   `<span class="egrade ${gradeCls(e.grade)}">${esc(gradeName(e.grade))}</span>`+
+   `<span class="egrade ${gradeCls(e.grade)}">${esc(e.grade_name||gradeName(e.grade))}</span>`+
    `<span class="eend-title">${esc(e.title)}</span>`+
    (e.got?'<span class="badge ok">已达成</span>':'')+
+   (e.history_got&&!e.got?'<span class="badge">历史达成</span>':'')+
    (e.reward_ok===false?'<span class="badge warn">奖励未收录</span>':'')+
-   `</div>${e.summary?`<div class="eend-sum">${esc(e.summary)}</div>`:''}`+
-   `${(e.detail||[]).length?`<div class="eend-detail">${e.detail.map(esc).join(' · ')}</div>`:''}`+
-   `<div class="efchips">${e.rewards.length?e.rewards.map(x=>rewardChip(x,e.got)).join(''):'<span class="muted">无奖励记录</span>'}</div></div>`).join('');
-  return `<details class="ev"><summary><span class="evname">${esc(r.name)}</span>${badges}<span class="evloc">${esc(locText(r))}</span></summary>`+
-   `<div class="evbody">${r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:''}${grants}${picked}${unknown}<div>${body}</div></div></details>`;
+   `</div>${e.rewards.length?`<div class="erewards"><b>奖励</b><div class="efchips">${e.rewards.map(x=>rewardChip(x,e.got)).join('')}</div></div>`:'<div class="muted small">无奖励记录</div>'}`+
+   `${(e.path||[]).length?`<div class="epath"><b>达成路径</b><div class="psteps">${e.path.map((step,i)=>`<span class="pstep"><i>${i+1}</i>${esc(step)}</span>`).join('<span class="parrow">›</span>')}</div></div>`:''}`+
+   `${e.summary?`<div class="eend-sum">${esc(e.summary)}</div>`:''}`+
+   `${(e.detail||[]).length?`<div class="eend-detail">${e.detail.map(esc).join(' · ')}</div>`:''}</div>`).join('');
+  const tree=r.tree?`<details class="etree"><summary>完整对话分支（可选） <span class="muted">静态可确认 ${r.tree_endings||0}/${endings.length} 条结局</span></summary>`+
+   `<div class="treewrap">${treeHtml(r,r.tree.root,new Set(),0)}</div>`+
+   `<div class="muted small">分支只作补充；优先看上方每条结局的奖励和「达成路径」。✓/✗ 表示当前角色是否满足条件，未标结局的分支由结算判定。</div></details>`:'';
+  return `<details class="ev" data-event="${r.id}"${state.focus===r.id?' open':''}><summary><span class="evname">${esc(r.name)}</span>${badges}<span class="evloc">${esc(locText(r))}</span></summary>`+
+   `<div class="evbody">${r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:''}${condHtml}${grants}${picked}${unknown}<div>${body}</div>${tree}</div></details>`;
  }
  function itemCard(x){
   const sources=(x.sources||[]).slice().sort((a,b)=>(b.got?1:0)-(a.got?1:0)||(b.expected||0)-(a.expected||0));
   const rowsHtml=sources.map(s=>`<div class="evline"><b>${esc(s.event_name)}</b>${esc(s.ending_title)}`+
    ` <span class="muted">${s.chance>=100?'必得':s.chance+'%'} · 期望 ${s.expected}</span>`+
-   (s.got?' <span class="badge ok">已达成</span>':'')+`</div>`).join('');
+   (s.got?' <span class="badge ok">已达成</span>':'')+
+   ` <button class="jumpbtn" data-jump="${s.event}">查看奇遇</button></div>`).join('');
+  const useHint=t=>({'炼丹药材':'可作炼丹配方材料','炼丹成品':'成品丹药，可用于服用、任务或 NPC 求购','炼器材料':'可作炼器材料','NPC 求购':'NPC 会收购，或任务需要它'}[t]||t);
+  const reasons=(x.reasons||[]).map(t=>`<span class="reason" title="评分理由">${esc(t)}</span>`).join('');
+  const uses=(x.use||[]).length?`<div class="reasons">${x.use.map(t=>`<span class="reason use" title="${esc(useHint(t))}">${esc(t)}</span>`).join('')}</div>`:'';
   return `<details class="ev"><summary><span class="evname fq${x.quality||0}">${esc(x.name)}</span>`+
-   `<span class="badge">${esc(x.type||'物品')}</span>`+
+   `<span class="badge">品质 ${x.quality||0} · ${esc(x.type||'物品')}</span>`+
    `<span class="badge ${x.owned?'ok':'off'}">${x.owned?'已拥有 '+x.owned:'未拥有'}</span>`+
-   `<span class="evloc">${sources.length} 个结局产出</span></summary><div class="evbody">${rowsHtml}</div></details>`;
+   `<span class="badge score">参考价值 ${x.score||0}</span>`+
+   `<span class="evloc">${sources.length} 个结局产出</span></summary>`+
+   `<div class="evbody">${x.desc?`<div class="itemdesc"><b>物品描述：</b>${esc(x.desc)}</div>`:''}`+
+   `${reasons?`<div class="reasons">${reasons}</div>`:''}${uses}${rowsHtml}</div></details>`;
  }
  function matchedRows(){
   const q=state.q.trim();
@@ -1325,63 +1533,388 @@ function initEvent(){
    if(state.realm==='__current__'){if(Number(r.realm||0)!==Number(st.current_realm||0))return false}
    else if(state.realm!==''&&String(r.realm||0)!==state.realm)return false;
    if(state.missing&&!r.endings.some(e=>e.rewards.some(x=>!x.owned)))return false;
+   if(state.condOnly&&!condSummary(r).some(c=>c.gate&&c.ok===false))return false;
    if(!q)return true;
    const hay=[r.name,r.desc,locText(r),(r.choices||[]).map(c=>c.text).join(' '),
-    r.endings.map(e=>[e.title,e.summary].join(' ')).join(' '),
+    r.endings.map(e=>[e.title,e.summary,(e.path||[]).join(' ')].join(' ')).join(' '),
     r.endings.map(e=>e.rewards.map(x=>x.name).join(' ')).join(' ')].join(' ');
    return hay.includes(q);
   });
  }
  function matchedItems(){
   const q=state.q.trim();
-  return catalog.filter(x=>(!state.missing||!x.owned)&&
-   (!q||x.name.includes(q)||(x.sources||[]).some(s=>s.event_name.includes(q)||s.ending_title.includes(q))));
+  const list=catalog.filter(x=>{
+   if(state.missing&&x.owned)return false;
+   if(state.itemQuality!==''&&String(x.quality||0)!==state.itemQuality)return false;
+   if(state.itemType&&(x.type||'未分类')!==state.itemType)return false;
+   if(state.itemUse&&!(x.use||[]).length)return false;
+   if(!q)return true;
+   return x.name.includes(q)||(x.desc||'').includes(q)||(x.use||[]).some(u=>u.includes(q))||
+    (x.sources||[]).some(s=>s.event_name.includes(q)||s.ending_title.includes(q));
+  });
+  if(state.itemSort==='quality')list.sort((a,b)=>(b.quality||0)-(a.quality||0)||(b.score||0)-(a.score||0));
+  else if(state.itemSort==='name')list.sort((a,b)=>a.name.localeCompare(b.name,'zh'));
+  else list.sort((a,b)=>(b.score||0)-(a.score||0));
+  return list;
+ }
+ const qualityList=[...new Set(catalog.map(x=>x.quality||0))].sort((a,b)=>a-b);
+ const typeList=[...new Set(catalog.map(x=>x.type||'未分类'))].sort((a,b)=>a.localeCompare(b,'zh'));
+ function renderItemChips(){
+  $('evitemq').innerHTML='<span class="chip-label">品质</span><button class="chip'+(state.itemQuality===''?' on':'')+'" data-itemq="">全部</button>'+
+   qualityList.map(q=>`<button class="chip${String(state.itemQuality)===String(q)?' on':''}" data-itemq="${q}">品质 ${q}</button>`).join('');
+  const sel=$('evitemtype');
+  if(sel)sel.innerHTML='<option value="">全部类别</option>'+typeList.map(t=>`<option value="${esc(t)}"${state.itemType===t?' selected':''}>${esc(t)}</option>`).join('');
+  document.querySelectorAll('#evitemuse [data-isort]').forEach(b=>b.classList.toggle('on',b.dataset.isort===state.itemSort));
+  $('evuseonly').classList.toggle('on',!!state.itemUse);
+  $('evunowned').classList.toggle('on',!!state.missing);
  }
  function refreshChips(){
   document.querySelectorAll('#evmode .chip').forEach(b=>b.classList.toggle('on',b.dataset.mode===state.mode));
   document.querySelectorAll('#evstatus .chip').forEach(b=>b.classList.toggle('on',b.dataset.status===state.status));
   document.querySelectorAll('#evrealm .chip').forEach(b=>b.classList.toggle('on',b.dataset.realm===state.realm));
   $('evmiss').classList.toggle('on',!!state.missing);
+  $('evcond').classList.toggle('on',!!state.condOnly);
   const itemMode=state.mode==='item';
   $('evstatus').style.display=itemMode?'none':'';
   $('evrealm').style.display=itemMode?'none':'';
+  $('evcond').style.display=itemMode?'none':'';
+  $('evmiss').style.display=itemMode?'none':'';
+  $('evitemq').style.display=itemMode?'':'none';
+  $('evitemuse').style.display=itemMode?'':'none';
+  renderItemChips();
  }
  function renderAll(){
   refreshChips();
+  $('evq').value=state.q;
   if(state.mode==='item'){
    const list=matchedItems();
-   $('evcount').textContent=`筛选结果：${list.length} / ${catalog.length} 种奖励物品`;
-   $('evlist').innerHTML=list.map(itemCard).join('')||'<div class="empty">没有符合条件的奖励物品</div>';
+   const sortName={'score':'参考价值','quality':'品质','name':'名称'}[state.itemSort]||'参考价值';
+   $('evcount').textContent=`筛选结果：${list.length} / ${catalog.length} 种奖励物品 · 按${sortName}排序 · 未拥有 ${catalog.filter(x=>!x.owned).length} 种 · “NPC 求购”＝NPC 会收购或任务需要`;
+   $('evlist').innerHTML=list.map(itemCard).join('')||'<div class="empty">没有符合条件的奖励物品，试试放宽品质或用途筛选。</div>';
    return;
   }
   const list=matchedRows();
   $('evcount').textContent=`筛选结果：${list.length} / ${rows.length} 个奇遇`;
   const groups={};list.forEach(r=>{const key=r.realm_name||'未知境界';(groups[key]=groups[key]||[]).push(r)});
+  const empty=state.condOnly?'<div class="empty">当前没有“属性门槛不足”的奇遇；点「挑奖励」可以查看全部奖励与路线。</div>':'<div class="empty">没有符合条件的奇遇</div>';
   $('evlist').innerHTML=Object.keys(groups).map(key=>
    `<div class="evgroup">${esc(key)}<span>${groups[key].length} 个</span></div>`+groups[key].map(eventCard).join('')
-  ).join('')||'<div class="empty">没有符合条件的奇遇</div>';
+  ).join('')||empty;
+  if(state.focus){
+   const card=document.querySelector(`#evlist [data-event="${state.focus}"]`);
+   state.focus=0;
+   if(card){card.open=true;card.classList.add('flash');card.scrollIntoView({block:'center',behavior:'smooth'});setTimeout(()=>card.classList.remove('flash'),1700)}
+  }
  }
  const realmNames=[...new Set(rows.map(r=>r.realm_name||'未知境界'))];
  const realmList=[...new Set(rows.map(r=>String(r.realm||0)))];
- host.innerHTML=sourceHtml(m)+`<div class="cards">${cards}</div>`+
+ host.innerHTML=sourceHtml(m)+`<div class="notice"><b>境界提示：</b>奇遇绑定所在地点，配置里没有“境界高就关闭低阶奇遇”的硬限制；突破后低境界奇遇仍需回到对应地点才会遇到。当前境界的奇遇建议先清。</div>`+`<div class="cards">${cards}</div>`+
+  `<div class="legend"><span>奖励颜色：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span><span>越靠右越稀有</span></div>`+
+  `<div class="legend"><span>结局品级：</span><span><i style="background:#8ee6b3"></i>上品</span><span><i style="background:#b9d9ff"></i>中品</span><span><i style="background:#e88b82"></i>下品</span><span>只代表结局平均奖励高低，具体看掉落</span></div>`+
+  `<div class="chips event-chips" id="evgoals"><span class="chip-label">我想…</span>`+
+   `<button class="chip" data-goal="check">出发前检查</button>`+
+   `<button class="chip" data-goal="reward">挑奖励</button>`+
+   `<button class="chip" data-goal="item">奖励图鉴</button>`+
+   `<button class="chip" data-goal="collect">看收集</button><button class="chip" id="evreset">重置筛选</button></div>`+
   `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找奇遇 / 结局 / 奖励物品</span><input id="evq" placeholder="输入奇遇名、结局名或奖励物品名称"></label></div></div>`+
   `<div class="chips event-chips" id="evmode"><span class="chip-label">视角</span><button class="chip" data-mode="event">按奇遇</button><button class="chip" data-mode="item">按物品反查</button></div>`+
   `<div class="chips event-chips" id="evstatus"><span class="chip-label">状态</span><button class="chip" data-status="">全部</button><button class="chip" data-status="todo">未达成</button><button class="chip" data-status="done">已达成</button></div>`+
   `<div class="chips event-chips" id="evrealm"><span class="chip-label">境界</span><button class="chip" data-realm="">全部</button>`+
    (st.current_realm?`<button class="chip" data-realm="__current__">当前境界${st.current_realm_name?' · '+esc(st.current_realm_name):''}</button>`:'')+
    realmList.map((value,i)=>`<button class="chip" data-realm="${esc(value)}">${esc(realmNames[i]||('境界 '+value))}</button>`).join('')+`</div>`+
-  `<div class="chips event-chips"><button class="chip" id="evmiss">只看有未拥有奖励</button></div>`+
+  `<div class="chips event-chips"><button class="chip" id="evcond">只看属性门槛不足</button><button class="chip" id="evmiss">只看有未拥有奖励</button></div>`+
+  `<div class="chips event-chips" id="evitemq" style="display:none"></div>`+
+  `<div class="chips event-chips" id="evitemuse" style="display:none"><button class="chip" id="evuseonly">只看有用途</button><button class="chip" id="evunowned">只看未拥有</button><select id="evitemtype" class="itemselect"></select><span class="chip-label">排序</span><button class="chip" data-isort="score">参考价值</button><button class="chip" data-isort="quality">品质</button><button class="chip" data-isort="name">名称</button></div>`+
   `<div id="evcount" class="result-info"></div><div id="evlist"></div>`+
-  `<div class="tip">结局按品级排列，奖励掉率取自掉落表；已拥有的数量来自当前背包。“位置推断”表示该奇遇没有独立交互点，地点由场景名或母事件继承得到。奇遇结算与对话选择均为只读读取，不会改动存档。</div>`;
+  `<div class="tip">选择记录里的“累计选 N 次”是存档里的点击次数，不是奖励倍数。`+
+  `「NPC 求购」表示该物品可被 NPC 收购或用于 NPC 需求任务；「炼丹药材 / 炼器材料」表示可作对应配方材料。`+
+  ` 当前角色属性：${Object.values(attrs).map(a=>`${esc(a.name)} Lv${a.level}（${a.exp}/${a.next||'—'}）`).join(' · ')||'未读取到探索属性'}；灵石 ${money}。`+
+  ` 结局的「达成路径」来自配置里的设计备注，共 ${metaStats.endings_with_path||0}/${stats.endings||0} 条；静态能连到结局的分支共 ${metaStats.tree_endings||0} 条，其余由游戏结算判定。`+
+  ` 奇遇按地点境界分组；配置里没有“角色境界高于某值就关闭奇遇”的硬条件，能否再遇到主要取决于还能不能回到该地点。`+
+  ` 历史达成按角色保存在本地，不写入游戏存档。</div>`;
  $('evq').value=state.q;
- $('evq').oninput=e=>{state.q=e.target.value;store.set(EVENT_FILTER_KEY,state);renderAll()};
- $('evmode').onclick=e=>{const b=e.target.closest('[data-mode]');if(!b)return;state.mode=b.dataset.mode;store.set(EVENT_FILTER_KEY,state);renderAll()};
- $('evstatus').onclick=e=>{const b=e.target.closest('[data-status]');if(!b)return;state.status=b.dataset.status;store.set(EVENT_FILTER_KEY,state);renderAll()};
- $('evrealm').onclick=e=>{const b=e.target.closest('[data-realm]');if(!b)return;state.realm=b.dataset.realm;store.set(EVENT_FILTER_KEY,state);renderAll()};
- $('evmiss').onclick=()=>{state.missing=!state.missing;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evq').oninput=e=>{state.q=e.target.value;state.focus=0;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evmode').onclick=e=>{const b=e.target.closest('[data-mode]');if(!b)return;state.mode=b.dataset.mode;state.focus=0;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evstatus').onclick=e=>{const b=e.target.closest('[data-status]');if(!b)return;state.status=b.dataset.status;state.focus=0;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evrealm').onclick=e=>{const b=e.target.closest('[data-realm]');if(!b)return;state.realm=b.dataset.realm;state.focus=0;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evcond').onclick=()=>{state.condOnly=!state.condOnly;state.focus=0;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evmiss').onclick=()=>{state.missing=!state.missing;state.focus=0;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evitemq').onclick=e=>{const b=e.target.closest('[data-itemq]');if(!b)return;state.itemQuality=b.dataset.itemq;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evitemtype').onchange=e=>{state.itemType=e.target.value;store.set(EVENT_FILTER_KEY,state);renderAll()};
+ $('evitemuse').onclick=e=>{
+  const sort=e.target.closest('[data-isort]');
+  if(sort){state.itemSort=sort.dataset.isort;store.set(EVENT_FILTER_KEY,state);renderAll();return}
+  if(e.target.closest('#evuseonly')){state.itemUse=!state.itemUse;store.set(EVENT_FILTER_KEY,state);renderAll()}
+  if(e.target.closest('#evunowned')){state.missing=!state.missing;store.set(EVENT_FILTER_KEY,state);renderAll()}
+ };
+ $('evlist').onclick=e=>{
+  const b=e.target.closest('[data-jump]');if(!b)return;
+  const r=byId[Number(b.dataset.jump)];if(!r)return;
+  state.mode='event';state.q=r.name;state.status='';state.realm='';
+  state.condOnly=false;state.missing=false;state.focus=r.id;
+  store.set(EVENT_FILTER_KEY,state);renderAll();
+ };
+ $('evgoals').onclick=e=>{
+  const b=e.target.closest('[data-goal]');if(!b)return;
+  const goal=b.dataset.goal;state.focus=0;state.q='';
+  if(goal==='check'){state.mode='event';state.status='todo';state.condOnly=true;state.missing=false;state.realm=''}
+  else if(goal==='reward'){state.mode='event';state.status='todo';state.condOnly=false;state.missing=false;if(st.current_realm)state.realm='__current__'}
+  else if(goal==='item'){state.mode='item';state.missing=false;state.condOnly=false;state.itemQuality='';state.itemType='';state.itemUse=false;state.itemSort='score'}
+  else{state.mode='event';state.status='done';state.condOnly=false;state.missing=false;state.realm=''}
+  store.set(EVENT_FILTER_KEY,state);renderAll();
+ };
+ $('evreset').onclick=()=>{
+  state={q:'',status:'',realm:'',mode:'event',missing:false,condOnly:false,itemQuality:'',itemType:'',itemUse:false,itemSort:'score',focus:0};
+  store.set(EVENT_FILTER_KEY,state);renderAll();
+ };
  renderAll();
 }
-$('warnings').innerHTML=(DATA.warnings||[]).map(esc).join('<br>');initTabs();renderBedroom();initTalent();initItems();initPill();initForge();initEvent();
+const QUEST_FILTER_KEY='worldapart.quest.filters.v2';
+function initQuest(){
+ const m=DATA.modules&&DATA.modules.quest;if(!m)return;
+ const host=$('quest'),st=m.rows||{},rows=st.rows||[],stats=st.stats||{};
+ if(!rows.length){host.innerHTML=sourceHtml(m)+'<div class="empty">暂无支线配置</div>';return}
+ const byId={};rows.forEach(r=>byId[r.id]=r);
+ let state=Object.assign({q:'',status:'all',group:'',view:'chain'},store.get(QUEST_FILTER_KEY,{}));
+ const groups=[...new Set(rows.map(r=>r.group||'其他支线'))];
+ const giverName=r=>(r.giver&&r.giver.name)||'';
+ const locText=r=>{const l=r.location;if(!l){if(r.place_text)return r.place_text;return r.spot||'位置未定'}const path=((l.path&&l.path.length)?l.path:[l.name]).join(' / ');return (r.spot?r.spot+' · ':'')+path};
+ const statusText=r=>r.status_label||(!r.accepted?'未接取':r.state_name);
+ const statusCls=r=>r.status_cls||(r.done?'ok':r.state===4?'warn':'');
+ const linkName=id=>byId[id]?byId[id].name:('#'+id);
+ const rewardTip=x=>[(x.sources||[]).join('/'),x.type?('类型：'+x.type):'',x.price?('参考价 '+x.price):'',x.desc||''].filter(Boolean).join(' · ');
+ const rewardChip=x=>`<span class="efchip fq${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)} ×${x.min===x.max?x.min:x.min+'-'+x.max}<span class="q">${esc(x.sources.join('/'))}</span></span>`;
+ function itemDescs(list){
+  const seen={},items=[];
+  (list||[]).forEach(x=>{if(!x.desc||seen[x.item])return;seen[x.item]=1;items.push(x)});
+  if(!items.length)return '';
+  return `<div class="qitemdescs">`+items.map(x=>`<div class="qitemdesc"><b>${esc(x.name)}</b>`+
+   (x.type?`<span class="qtype">${esc(x.type)}</span>`:'')+esc(x.desc)+
+   (x.price?`<span class="qnum">参考价 ${x.price}</span>`:'')+`</div>`).join('')+`</div>`;
+ }
+ function detailBody(r){
+  const link=(r.prev?esc(linkName(r.prev))+' › ':'')+esc(r.name)+(r.next.length?' › '+r.next.map(linkName).map(esc).join(' / '):'');
+  return (r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:'')+
+   (giverName(r)?`<div class="qline"><b>委托人</b>${esc(giverName(r))}${r.npc_retired?'<span class="badge warn">已退隐</span>':''}</div>`:'')+
+   (r.objectives.length?`<div class="qline"><b>目标</b>${r.objectives.slice(0,3).map(o=>esc(o.text)).join(' · ')}</div>`:'')+
+   (r.rewards.length?`<div class="qline"><b>奖励</b><div class="efchips">${r.rewards.map(rewardChip).join('')}</div></div>`+itemDescs(r.rewards):`<div class="qline"><b>奖励</b><span class="muted">剧情向，无固定奖励</span></div>`)+
+   (r.unreachable?`<div class="qline"><b>不可达</b>${esc(r.unreachable_text)}</div>`:'')+
+   (!r.accepted&&r.status_hint?`<div class="qline"><b>接取</b>${esc(r.status_hint)}</div>`:'')+
+   (r.branch&&r.branch_with.length?`<div class="qline"><b>分支</b>与「${esc(r.branch_with.join('」「'))}」二选一，实际以选择为准</div>`:'')+
+   `<div class="qline"><b>链路</b>${link}</div>`+
+   (r.chain_name?`<div class="qline"><b>剧情线</b>${esc(r.chain_name)}</div>`:'');
+ }
+ function rewardChips(r,limit){
+  const list=(r.rewards||[]).filter(x=>x.name!=='灵石'),stone=r.reward_stone||0;
+  if(!list.length)return stone?`<span class="rwstone">灵石 ${stone}</span>`:'';
+  const shown=list.slice(0,limit||3);
+  return shown.map(x=>`<span class="rwq f${x.quality||0}" title="${esc([(x.sources||[]).join('/'),x.type||'',x.desc||''].filter(Boolean).join(' · '))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}</span>`).join('')+
+   (list.length>shown.length?`<span class="rwq more">+${list.length-shown.length}</span>`:'')+
+   (stone?`<span class="rwstone">灵石 ${stone}</span>`:'');
+ }
+ function actHint(r){
+  return (!r.accepted&&['可接取','条件不足','剧情接取'].indexOf(r.status_label)>=0)
+   ?`<span class="qact">${esc(r.status_hint)}</span>`:'';
+ }
+ function card(r){
+  return `<details class="ev" data-quest="${r.id}"><summary>`+
+   `<span class="evname">${esc(r.name)}</span>`+
+   `<span class="badge ${statusCls(r)}">${esc(statusText(r))}</span>`+
+   (r.hidden?'<span class="badge">隐藏</span>':'')+
+   `<span class="rwline">${rewardChips(r,2)}</span>`+
+   actHint(r)+
+   `<span class="evloc">${esc(locText(r))}</span></summary>`+
+   `<div class="evbody">${detailBody(r)}</div></details>`;
+ }
+ function stepRow(r,cls){
+  return `<details class="qstep ${cls||''}"><summary>`+
+   `<span class="stepno">${r.chain_index||1}</span>`+
+   `<span class="evname">${esc(r.name)}</span>`+
+   `<span class="badge ${statusCls(r)}">${esc(statusText(r))}</span>`+
+   (r.hidden?'<span class="badge">隐藏</span>':'')+
+   `<span class="rwline">${rewardChips(r,3)}</span>`+
+   actHint(r)+
+   `<span class="evloc">${esc(locText(r))}</span></summary>`+
+   `<div class="evbody">${detailBody(r)}</div></details>`;
+ }
+ function optionCard(r,chosen,missed){
+  return `<div class="qopt ${chosen?'chosen':''} ${missed?'missed':''}">`+
+   `<div class="qname">${esc(r.name)}</div>`+
+   `<div class="qoptmeta"><span class="badge ${statusCls(r)}">${esc(statusText(r))}</span>`+
+   (r.unreachable?'<span class="badge warn">不可达</span>':'')+`</div>`+
+   `<div class="rwline">${rewardChips(r,2)||'<span class="mutedsm">剧情向，无固定奖励</span>'}</div>`+
+   (r.unreachable?`<div class="why">${esc(r.unreachable_text)}</div>`:'')+
+   (r.branch_missed?`<div class="why">未选：${esc(r.status_hint||r.branch_chosen)}</div>`:'')+
+   `</div>`;
+ }
+ function chainBlock(items,full){
+  const source=(full&&full.length)?full:items;
+  const sorted=[...items].sort((a,b)=>(a.chain_index||0)-(b.chain_index||0)||a.id-b.id);
+  const groups={};
+  sorted.forEach(r=>{if(r.branch_key)(groups[r.branch_key]=groups[r.branch_key]||[]).push(r)});
+  const taken={},walked=[],todo=[],missed=[],dead=[];
+  sorted.forEach(r=>{
+   if(r.branch_key&&taken[r.branch_key])return;
+   const peers=r.branch_key?groups[r.branch_key]:[r];
+   if(r.branch_key)taken[r.branch_key]=1;
+   if(peers.some(x=>x.done||x.doing))walked.push(peers);
+   else if(peers.every(x=>x.unreachable))dead.push(peers);
+   else if(peers.every(x=>x.branch_missed))missed.push(peers);
+   else todo.push(peers);
+  });
+  const flat=list=>list.reduce((acc,cur)=>acc.concat(cur),[]);
+  const doneRows=source.filter(r=>r.done),total=source.length;
+  const got=doneRows.reduce((sum,r)=>sum+(r.reward_stone||0),0);
+  const left=source.filter(r=>!r.done).reduce((sum,r)=>sum+(r.reward_stone||0),0);
+  const todoN=flat(todo).length,missN=flat(missed).length,deadN=flat(dead).length;
+  const next=[...flat(todo)].sort((a,b)=>statusRank(a)-statusRank(b))[0];
+  const block=peers=>peers.length<2?stepRow(peers[0]):`<div class="qbranch ${peers.length>2?'three':''}">`+
+   peers.map(x=>optionCard(x,x.done||x.doing,peers.some(y=>y.done||y.doing)&&!(x.done||x.doing))).join('')+`</div>`;
+  const secHead=(label,meta)=>`<div class="qsechd"><span>${label}</span><i>${meta||''}</i></div>`;
+  const allDone=doneRows.length===total;
+  const headBadge=allDone?'<span class="badge ok">已走完</span>'
+   :(next?(next.status_label==='可接取'?'<span class="badge ok">可接取</span>'
+     :(next.status_label==='条件不足'?'<span class="badge warn">条件不足</span>'
+     :`<span class="badge">${esc(next.status_label)}</span>`))
+   :(todoN?`<span class="badge">未走 ${todoN}</span>`:'<span class="badge warn">无法继续</span>'));
+  const rewardRows=source.filter(r=>r.rewards.length);
+  const final=rewardRows.length?rewardRows.reduce((a,b)=>((b.chain_index||0)>=(a.chain_index||0)?b:a)):null;
+  const head=`<summary><span class="evname">${esc(items[0].chain_name||'支线')}</span>`+
+   headBadge+`<span class="badge">已走 ${doneRows.length}/${total}</span>`+
+   `<span class="badge">灵石 ${got}${left?' · 可拿 '+left:''}</span>`+
+   (final?`<span class="rwline qfinal"><b>终奖</b>${rewardChips(final,3)}</span>`:'')+
+   (missN?`<span class="badge">未选 ${missN}</span>`:'')+
+   (deadN?`<span class="badge warn">不可达 ${deadN}</span>`:'')+
+   `<span class="evloc">${esc(items[0].group||'')}</span></summary>`;
+  const nextHtml=next?`<div class="qnext"><b>下一步</b>${esc(next.name)}<span>${esc(next.status_hint)}</span></div>`:'';
+  const walkedHtml=walked.length?`<div class="qwalk">`+secHead('已走',`${doneRows.length} 环 · 灵石 ${got}`)+walked.map(block).join('')+`</div>`:'';
+  const todoHtml=todo.length?secHead('未走',`${todoN} 环 · 可拿 ${left} 灵石`)+todo.map(block).join(''):'';
+  const missedHtml=missed.length?`<details class="qfold"><summary><span class="qfoldt">未选分支</span>`+
+   `<span class="qfoldn">${missN} 环</span><span class="qfoldx">已选了另一条路，游戏里不会有入口</span></summary>`+
+   `<div class="qfoldbody">${missed.map(block).join('')}</div></details>`:'';
+  const deadHtml=dead.length?`<details class="qfold"><summary><span class="qfoldt">不可达</span>`+
+   `<span class="qfoldn">${deadN} 环</span><span class="qfoldx">${esc([...new Set(flat(dead).map(r=>r.unreachable_text))].join('；'))}</span></summary>`+
+   `<div class="qfoldbody">${dead.map(block).join('')}</div></details>`:'';
+  const open=items.some(r=>r.doing)||!!next||(doneRows.length>0&&!allDone);
+  return `<details class="qchain" ${open?'open':''}>${head}<div class="qchainbody">`+
+   nextHtml+walkedHtml+todoHtml+missedHtml+deadHtml+`</div></details>`;
+ }
+ function matched(){
+  const q=state.q.trim();
+  return rows.filter(r=>{
+   if(state.status==='todo'&&r.accepted)return false;
+   if(state.status==='doing'&&!r.doing)return false;
+   if(state.status==='done'&&!r.done)return false;
+   if(state.status==='reward'&&!r.rewards.length)return false;
+   if(state.status==='branch'&&!r.branch)return false;
+   if(state.status==='blocked'&&(r.done||!r.unreachable))return false;
+   if(state.status==='can'&&r.status_label!=='可接取')return false;
+   if(state.status==='cond'&&r.status_label!=='条件不足')return false;
+   if(state.status==='wait'&&r.status_label!=='待触发')return false;
+   if(state.status==='suspect'&&r.status_label!=='疑似已触发')return false;
+   if(state.status==='skipped'&&r.status_label!=='疑似已跳过')return false;
+   if(state.status==='dialog'&&r.status_label!=='剧情接取')return false;
+   if(state.status==='unknown'&&r.status_label!=='触发未知')return false;
+   if(state.status==='prev'&&r.status_label!=='前置未完成')return false;
+   if(state.status==='missed'&&r.status_label!=='未选分支')return false;
+   if(state.status==='gap'&&r.status_label!=='后续已完成')return false;
+   if(state.status==='worth'){
+    if(r.done||r.doing||r.unreachable||r.branch_missed||!(r.rewards||[]).length)return false;
+    if(!['可接取','待触发','剧情接取','前置未完成'].includes(r.status_label))return false;
+   }
+   if(state.group&&(r.group||'其他支线')!==state.group)return false;
+   if(!q)return true;
+   const hay=[r.name,r.desc,r.group,r.chain_name,giverName(r),locText(r),r.spot,r.unreachable_text,
+    (r.objectives||[]).map(o=>o.text).join(' '),r.rewards.map(x=>x.name).join(' '),
+    (r.branch_with||[]).join(' '),linkName(r.prev),r.next.map(linkName).join(' ')].join(' ');
+   return hay.includes(q);
+  });
+ }
+ function renderChips(){
+  document.querySelectorAll('#qview .chip').forEach(b=>b.classList.toggle('on',b.dataset.view===state.view));
+  document.querySelectorAll('#qstatus .chip').forEach(b=>b.classList.toggle('on',b.dataset.st===state.status));
+  document.querySelectorAll('#qgroups .chip').forEach(b=>b.classList.toggle('on',b.dataset.group===state.group));
+ }
+ function statusRank(r){
+  const order={'可接取':0,'待触发':1,'剧情接取':2,'前置未完成':3,'条件不足':4,'疑似已触发':5,'疑似已跳过':6,'触发未知':7};
+  return order[r.status_label]!==undefined?order[r.status_label]:8;
+ }
+ function chainRank(items){
+  if(items.some(r=>r.doing))return 0;
+  const pending=items.filter(r=>!r.done&&!r.unreachable&&!r.branch_missed);
+  if(pending.length)return 1+Math.min(...pending.map(statusRank));
+  if(items.every(r=>r.done))return 9;
+  return 10;
+ }
+ function renderAll(){
+  renderChips();
+  $('qs').value=state.q;
+  const list=matched();
+  const breakdown=`未接取 ${stats.todo||0} 个（含折叠的前置未完成/未选分支/不可达）：可接取 ${stats.can_accept||0} · 条件不足 ${stats.cond_fail||0} · 待触发 ${stats.waiting||0} · 疑似已触发 ${stats.suspect||0} · 疑似已跳过 ${stats.skipped||0} · 剧情接取 ${stats.dialogue||0} · 触发未知 ${stats.unknown||0} · 前置未完成 ${stats.blocked_prev||0} · 未选分支 ${stats.missed||0} · 后续已完成 ${stats.record_gap||0} · 不可达 ${stats.unreachable||0}`;
+  if(state.view==='chain'){
+   const allMap=new Map();
+   rows.forEach(r=>{const key=r.chain_id||('q'+r.id);if(!allMap.has(key))allMap.set(key,[]);allMap.get(key).push(r)});
+   const map=new Map();
+   list.forEach(r=>{const key=r.chain_id||('q'+r.id);if(!map.has(key))map.set(key,[]);map.get(key).push(r)});
+   const chains=[...map.entries()].sort((a,b)=>chainRank(a[1])-chainRank(b[1])
+    ||String(a[1][0].chain_name||'').localeCompare(String(b[1][0].chain_name||''),'zh-CN'));
+   $('qcount').textContent=`筛选结果：${chains.length} 条剧情线 / ${list.length} 个支线 · ${breakdown}`;
+   $('qlist').innerHTML=chains.map(([key,items])=>chainBlock(items,allMap.get(key))).join('')||'<div class="empty">没有符合条件的支线，试试放宽筛选。</div>';
+  }else{
+   const grouped={};
+   list.forEach(r=>{const key=r.group||'其他支线';(grouped[key]=grouped[key]||[]).push(r)});
+   $('qcount').textContent=`筛选结果：${list.length} / ${rows.length} 个支线 · ${breakdown}`;
+   $('qlist').innerHTML=Object.keys(grouped).map(key=>{
+    const items=grouped[key].slice().sort((a,b)=>statusRank(a)-statusRank(b)
+     ||(a.chain_index||0)-(b.chain_index||0)||String(a.name).localeCompare(String(b.name),'zh-CN'));
+    const rewards=items.filter(r=>r.rewards.length).length;
+    const stones=items.reduce((sum,r)=>sum+(r.reward_stone||0),0);
+    return `<div class="qgroup">${esc(key)}<span class="gmeta">${items.length} 个 · 带奖励 ${rewards} 个 · 灵石 ${stones}</span></div>`+items.map(card).join('');
+   }).join('')||'<div class="empty">没有符合条件的支线，试试放宽筛选。</div>';
+  }
+ }
+ host.innerHTML=sourceHtml(m)+
+  `<div class="cards">`+
+  `<div class="card"><div class="k">支线完成</div><div class="v">${stats.done||0} <span>/ ${stats.total||0}</span></div><div class="s">进行中 ${stats.doing||0} · 未接取 ${stats.todo||0}</div></div>`+
+  `<div class="card"><div class="k">带奖励支线</div><div class="v">${stats.rewards_done||0} <span>/ ${stats.with_rewards||0}</span></div><div class="s">已提交 / 全部</div></div>`+
+  `<div class="card"><div class="k">未拿奖励</div><div class="v">${stats.rewards_todo||0} <span>个</span></div><div class="s">灵石约 ${stats.stones_todo||0}（含分支）</div></div>`+
+  `<div class="card"><div class="k">当前不可达</div><div class="v">${stats.unreachable||0} <span>个</span></div><div class="s">灵石约 ${stats.unreachable_stones||0} · ${esc(stats.player_realm_name||'未知境界')}${stats.blocked_by_prev?' · 前置连带 '+stats.blocked_by_prev:''}</div></div>`+
+  `<div class="card"><div class="k">剧情链 / 二选一</div><div class="v">${stats.chains||0} <span>/ ${stats.branches||0}</span></div><div class="s">链 / 分支组</div></div>`+
+  `</div>`+
+  `<div class="legend"><span>奖励颜色：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span><span>奖励后面的灰字是来源</span></div>`+
+  `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找支线 / 剧情线 / 委托人 / 奖励</span><input id="qs" placeholder="输入任务名、剧情线、地点、NPC 或奖励物品"></label></div></div>`+
+  `<div class="chips" id="qview"><span class="chip-label">视图</span>`+
+   `<button class="chip" data-view="chain">剧情线</button><button class="chip" data-view="flat">逐条</button></div>`+
+  `<div class="chips" id="qstatus"><span class="chip-label">状态</span>`+
+   `<button class="chip" data-st="all">全部</button><button class="chip" data-st="worth">值得做 ${stats.worth||0}</button><button class="chip" data-st="todo">未接取 ${stats.todo||0}</button>`+
+   `<button class="chip" data-st="can">可接取 ${stats.can_accept||0}</button><button class="chip" data-st="cond">条件不足 ${stats.cond_fail||0}</button>`+
+   `<button class="chip" data-st="wait">待触发 ${stats.waiting||0}</button><button class="chip" data-st="suspect">疑似已触发 ${stats.suspect||0}</button>`+
+   `<button class="chip" data-st="skipped">疑似已跳过 ${stats.skipped||0}</button>`+
+   `<button class="chip" data-st="dialog">剧情接取 ${stats.dialogue||0}</button><button class="chip" data-st="unknown">触发未知 ${stats.unknown||0}</button>`+
+   `<button class="chip" data-st="prev">前置未完成 ${stats.blocked_prev||0}</button><button class="chip" data-st="missed">未选分支 ${stats.missed||0}</button>`+
+   `<button class="chip" data-st="doing">进行中 ${stats.doing||0}</button><button class="chip" data-st="done">已完成 ${stats.done||0}</button>`+
+   `<button class="chip" data-st="reward">有奖励</button><button class="chip" data-st="branch">二选一</button>`+
+   `<button class="chip" data-st="blocked">不可达 ${stats.unreachable||0}</button></div>`+
+  `<div class="chips" id="qgroups"><span class="chip-label">剧情线</span><button class="chip" data-group="">全部</button>`+
+   groups.map(name=>`<button class="chip" data-group="${esc(name)}">${esc(name)}</button>`).join('')+`</div>`+
+  `<div id="qcount" class="result-info"></div><div id="qlist"></div>`+
+  `<div class="tip">奖励来自任务提交、阶段目标与剧情流水，全部实时读取游戏配置，任务或奖励改动后无需更新模块。奖励物品悬停可看类型与说明，展开任务也能看到物品描述。`+
+  `「待触发」表示有明确触发条件（前置任务、进入指定场景、修炼层数或好感度达标等），满足后自动出现；「疑似已触发」表示触发条件已满足但本环没有记录，可能已经触发过或记录缺失；`+
+  `「剧情接取」表示要在剧情对话里接取，没有固定入口；「触发未知」表示配置里没有触发条件，只能靠剧情脚本触发，游戏内不一定有入口；`+
+  `「疑似已跳过」表示同一段剧情流程里接取了几个任务，其中一个已完成、这个没有记录，多半是同源分支被跳过，也可能是记录缺失；`+
+  `「条件不足」表示委托人还在，但接取条件没满足（如好感度、城镇声望），展开可以看到当前数值；`+
+  `「未选分支」表示同组另一个选项已经做了，后续环也会一并标为未选分支，游戏里不会有入口；`+
+  `「后续已完成」表示后续任务有记录但本环没有，可能是自动跳过或记录缺失；「不可达」表示境界已过或委托人已退隐，前置链上的后续环同样不可达。`+
+  `剧情线视图把每条线拆成「已走 / 未走 / 未选分支·不可达」三块：已走的在上、未走的在下，未选中或不可达的默认折叠成一行；奖励直接显示在每一环上，不用展开；可继续的线会给出「下一步」。`+
+  `「值得做」只列出未完成、可达且有奖励的任务（可接取 / 待触发 / 剧情接取）；「未接取」按任务数统计，包含折叠在未走、未选分支、不可达里的环，所以比展开后看到的条数多。`+
+  `折叠状态、筛选和搜索会记住。</div>`;
+ $('qs').oninput=e=>{state.q=e.target.value;store.set(QUEST_FILTER_KEY,state);renderAll()};
+ $('qview').onclick=e=>{const b=e.target.closest('[data-view]');if(!b)return;state.view=b.dataset.view;store.set(QUEST_FILTER_KEY,state);renderAll()};
+ $('qstatus').onclick=e=>{const b=e.target.closest('[data-st]');if(!b)return;state.status=b.dataset.st;store.set(QUEST_FILTER_KEY,state);renderAll()};
+ $('qgroups').onclick=e=>{const b=e.target.closest('[data-group]');if(!b)return;state.group=b.dataset.group;store.set(QUEST_FILTER_KEY,state);renderAll()};
+ renderAll();
+}
+$('warnings').innerHTML=(DATA.warnings||[]).map(esc).join('<br>');initTabs();renderBedroom();initTalent();initItems();initPill();initForge();initEvent();initQuest();
 
 let polledVersion=INITIAL_VERSION;setInterval(()=>{const script=document.createElement('script');script.src='仙友助手版本.js?t='+Date.now();script.onload=()=>{const next=window.PROGRESS_VERSION||'';if(next&&next!==polledVersion){location.reload();return}polledVersion=next||polledVersion;script.remove()};script.onerror=()=>script.remove();document.head.appendChild(script)},3000);
 </script></body></html>"""

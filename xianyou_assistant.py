@@ -29,6 +29,29 @@ def scan(path, meta):
     return bedroom.scan_legacy(path, meta)
 
 
+def _character_options(dec):
+    """列出各角色最新的一份存档副本，供设置菜单选择。"""
+    if not dec:
+        return []
+    originals = original_save_index(find_save_root())
+    best = {}
+    for path in save_files(dec):
+        try:
+            with open(path, "rb") as f:
+                obj = unpack(f.read())
+        except Exception:
+            continue
+        player = obj.get("playerModel") or {}
+        name = player.get("playerName") or "未命名"
+        layer = (player.get("combat") or {}).get("cultivate_layer_id") or 0
+        settlements = ((player.get("random_event_settlements") or {}).get("quests") or {})
+        stamp, original = source_time(path, originals)
+        if name not in best or stamp > best[name]["stamp"]:
+            best[name] = {"name": name, "layer": layer, "settle": len(settlements),
+                          "stamp": stamp, "file": os.path.basename(original or path)}
+    return sorted(best.values(), key=lambda item: -item["stamp"])
+
+
 def settings_menu():
     cfg = load_cfg()
     while True:
@@ -39,14 +62,16 @@ def settings_menu():
         print("  4. 炼丹：%s" % ("开启" if cfg["modules"]["pill"] else "关闭"))
         print("  5. 炼器：%s" % ("开启" if cfg["modules"]["forge"] else "关闭"))
         print("  6. 奇遇：%s" % ("开启" if cfg["modules"]["event"] else "关闭"))
-        print("  7. 重新设置解密存档目录")
+        print("  7. 支线：%s" % ("开启" if cfg["modules"]["quest"] else "关闭"))
+        print("  8. 重新设置解密存档目录")
+        print("  9. 选择存档角色：%s" % (cfg.get("save_file") or "自动跟随最近存档"))
         print("  0. 保存并退出")
         choice = input("请选择: ").strip()
-        if choice in ("1", "2", "3", "4", "5", "6"):
+        if choice in ("1", "2", "3", "4", "5", "6", "7"):
             name = {"1": "bedroom", "2": "talent", "3": "items", "4": "pill",
-                    "5": "forge", "6": "event"}[choice]
+                    "5": "forge", "6": "event", "7": "quest"}[choice]
             cfg["modules"][name] = not cfg["modules"][name]
-        elif choice == "7":
+        elif choice == "8":
             path = input("把 BepInEx\\decrypted 的路径粘贴到这里: ").strip().strip('"')
             if os.path.isdir(path):
                 cfg["decrypted_dir"] = os.path.normpath(path)
@@ -55,6 +80,25 @@ def settings_menu():
                     cfg["game_dir"] = game
             else:
                 print("目录不存在，未修改。")
+        elif choice == "9":
+            options = _character_options(cfg.get("decrypted_dir") or find_dir(cfg, interactive=False))
+            if not options:
+                print("还没找到可用存档。请先启动游戏，让插件导出存档副本。")
+            else:
+                print("  0. 自动跟随最近存档")
+                for index, item in enumerate(options, 1):
+                    when = time.strftime("%m-%d %H:%M", time.localtime(item["stamp"])) if item["stamp"] else "未知"
+                    print("  %d. %s · 修炼层数 %s · 奇遇结算 %d 条 · %s" % (
+                        index, item["name"], item["layer"], item["settle"], when))
+                picked = input("选择角色: ").strip()
+                if picked == "0":
+                    cfg["save_file"] = ""
+                    print("已改为自动跟随最近存档。")
+                elif picked.isdigit() and 1 <= int(picked) <= len(options):
+                    cfg["save_file"] = options[int(picked) - 1]["file"]
+                    print("已固定读取：%s" % options[int(picked) - 1]["name"])
+                else:
+                    print("输入无效，未修改。")
         elif choice == "0":
             if save_cfg(cfg):
                 print("设置已保存。重新打开查询工具后生效。")
@@ -84,7 +128,7 @@ def main():
             signature = state_signature(dec, cfg)
             if signature != last_signature or not os.path.exists(OUT_HTML):
                 payload = render(dec, cfg) if dec or not any(cfg["modules"].values()) else {
-                    "enabled": [n for n in ("bedroom", "talent", "items", "pill", "forge", "event")
+                    "enabled": [n for n in ("bedroom", "talent", "items", "pill", "forge", "event", "quest")
                                 if cfg["modules"][n]],
                     "modules": {}, "warnings": ["未设置解密存档目录，请重新安装或运行功能设置。"],
                 }

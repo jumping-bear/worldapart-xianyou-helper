@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """模块注册表：固定展示顺序，模块之间互不调用。"""
-from .scanners import bedroom, event, forge, items, pill, talent
+from .scanners import bedroom, event, forge, items, pill, quest, talent
 
-MODULES = (bedroom, talent, items, pill, forge, event)
+MODULES = (bedroom, talent, items, pill, forge, event, quest)
 _BY_KEY = {module.KEY: module for module in MODULES}
 
 
