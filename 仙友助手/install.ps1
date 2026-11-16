@@ -35,7 +35,7 @@ function Find-GameDir([string]$hint) {
 }
 
 Write-Host '=============================================' -ForegroundColor Cyan
-Write-Host '  不问凡尘 · 触摸进度查询工具 一键安装' -ForegroundColor Cyan
+Write-Host '  不问凡尘 · 仙友助手 一键安装' -ForegroundColor Cyan
 Write-Host '=============================================' -ForegroundColor Cyan
 Write-Host ''
 
@@ -161,6 +161,25 @@ if (-not (Test-Path (Join-Path $libsDst '*.zip'))) {
     Write-Host '首次启动若卡在生成适配文件，请把安装包里的 unity-libs 整个复制过去。' -ForegroundColor Yellow
 }
 
+# 默认关闭 BepInEx 控制台黑窗：日志仍写入 BepInEx\LogOutput.log，排查问题时可改回 true
+$cfgDir = Join-Path $game 'BepInEx\config'
+New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
+$cfgPath = Join-Path $cfgDir 'BepInEx.cfg'
+$srcCfg = Join-Path $src 'BepInEx\config\BepInEx.cfg'
+if (-not (Test-Path $cfgPath)) {
+    if (Test-Path $srcCfg) {
+        Copy-Item $srcCfg $cfgPath -Force
+        Write-Host '已关闭游戏内 BepInEx 控制台黑窗（日志见 BepInEx\LogOutput.log）。' -ForegroundColor Green
+    }
+} else {
+    $cfgText = Get-Content $cfgPath -Raw -Encoding UTF8
+    if ($cfgText -match '(?ms)\[Logging\.Console\][^\[]*?Enabled\s*=\s*true') {
+        $cfgText = [regex]::Replace($cfgText, '(?ms)(\[Logging\.Console\][^\[]*?Enabled\s*=\s*)true', '${1}false')
+        [System.IO.File]::WriteAllText($cfgPath, $cfgText, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host '已关闭游戏内 BepInEx 控制台黑窗（可改 BepInEx.cfg 恢复）。' -ForegroundColor Green
+    }
+}
+
 $pluginDir = Join-Path $game 'BepInEx\plugins\SaveDecryptProbe'
 New-Item -ItemType Directory -Path $pluginDir -Force | Out-Null
 $sourceDll = Join-Path $src 'BepInEx\plugins\SaveDecryptProbe\SaveDecryptProbe.dll'
@@ -188,13 +207,13 @@ $configPath = Join-Path $here 'config.json'
 $settings = @{
     decrypted_dir = (Join-Path $game 'BepInEx\decrypted')
     game_dir = $game
-    modules = @{ bedroom = $true; talent = $true; items = $true; pill = $true; forge = $true }
+    modules = @{ bedroom = $true; talent = $true; items = $true; pill = $true; forge = $true; event = $true; quest = $true; memoria = $true }
 }
 if (Test-Path $configPath) {
     try {
         $old = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($old.modules) {
-            foreach ($name in @('bedroom', 'talent', 'items', 'pill', 'forge')) {
+            foreach ($name in @('bedroom', 'talent', 'items', 'pill', 'forge', 'event', 'quest', 'memoria')) {
                 $property = $old.modules.PSObject.Properties[$name]
                 if ($null -ne $property) { $settings.modules[$name] = [bool]$property.Value }
             }
