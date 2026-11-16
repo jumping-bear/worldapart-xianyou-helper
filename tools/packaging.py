@@ -47,6 +47,37 @@ def collect_snapshot_datas(root=None):
     return datas, problems
 
 
+def collect_module_datas(root=None):
+    """收集功能模块目录里的静态文件（view.js / view.css 等）。
+
+    运行期按 app/modules/<key>/ 目录扫描并读取这些文件，因此打包时必须
+    原样带进去；否则 EXE 里既找不到模块目录，也渲染不出页签。
+    """
+    root = root or ROOT
+    base = os.path.join(root, "app", "modules")
+    datas, problems = [], []
+    if not os.path.isdir(base):
+        return datas, ["找不到模块目录 %s" % base]
+    for key in sorted(os.listdir(base)):
+        module_dir = os.path.join(base, key)
+        if key.startswith("__") or not os.path.isdir(module_dir):
+            continue
+        has_view = False
+        for current, dirs, files in os.walk(module_dir):
+            dirs[:] = [name for name in dirs if name != "__pycache__"]
+            for name in files:
+                if name.endswith((".py", ".pyc")):
+                    continue
+                if name == "view.js":
+                    has_view = True
+                src = os.path.join(current, name)
+                rel = os.path.relpath(src, root).replace(os.sep, "/")
+                datas.append((rel, os.path.dirname(rel)))
+        if not has_view:
+            problems.append("模块 %s 缺少 view.js，打包后页签无法渲染" % key)
+    return datas, problems
+
+
 def check(root=None):
     """发布前严格检查：返回 (阻断问题, 提示)。"""
     root = root or ROOT
@@ -54,7 +85,9 @@ def check(root=None):
     from app import modules as plugins
 
     datas, problems = collect_snapshot_datas(root)
-    problems = list(plugins.errors()) + problems
+    module_datas, module_problems = collect_module_datas(root)
+    datas += module_datas
+    problems = list(plugins.errors()) + problems + module_problems
     notes = list(plugins.warnings())
     if "UnityPy" in sys.modules:
         notes.append("打包期不应导入 UnityPy，请检查模块顶层 import")

@@ -6,11 +6,14 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 # 快照清单由各模块的 SNAPSHOT / EXTRA_SNAPSHOTS 自动收集，
 # 新增模块不需要改动本文件；缺文件或重名会在这里直接失败。
 sys.path.insert(0, SPECPATH)
-from tools.packaging import collect_snapshot_datas  # noqa: E402
+from tools.packaging import collect_snapshot_datas, collect_module_datas  # noqa: E402
 
 datas, snapshot_problems = collect_snapshot_datas(SPECPATH)
-if snapshot_problems:
-    raise SystemExit("打包前检查失败：\n" + "\n".join(snapshot_problems))
+module_datas, module_problems = collect_module_datas(SPECPATH)
+problems = snapshot_problems + module_problems
+if problems:
+    raise SystemExit("打包前检查失败：\n" + "\n".join(problems))
+datas += module_datas
 if "UnityPy" in sys.modules:
     raise SystemExit("打包期不应导入 UnityPy，请检查模块顶层 import")
 
@@ -43,6 +46,9 @@ excludes += [
     'networkx', 'pyarrow', 'polars', 'dask', 'ibis', 'cv2', 'sentencepiece', 'av',
     'altair', 'panel', 'fsspec.gui', 'fsspec.parquet', 'fsspec.fuse', 'fsspec.conftest',
 ]
+# 运行期只读 TextAsset / 头像 webp；numpy 仅被已排除的 UnityPy.export 引用。
+# setuptools 系列只服务开发期构建，打包后不需要。
+excludes += ['numpy', 'setuptools', 'pip', 'wheel']
 hiddenimports = [
     name for name in hiddenimports
     if not any(name == excluded or name.startswith(excluded + '.') for excluded in excludes)

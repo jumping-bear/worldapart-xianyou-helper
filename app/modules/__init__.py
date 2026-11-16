@@ -26,9 +26,13 @@ __init__.py 只需把实现按标准名导出，例如：
 """
 import importlib
 import os
+import sys
 
 _DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(os.path.dirname(_DIRECTORY))
+# 打包后模块代码在 PYZ 里，磁盘上只有 view.js/css 等静态文件，
+# 因此不能再用 __init__.py 是否存在来判断模块目录。
+_FROZEN = bool(getattr(sys, "frozen", False))
 _LOADED = None
 _ERRORS = []
 _WARNINGS = []
@@ -181,7 +185,7 @@ def _discover():
         directory = os.path.join(_DIRECTORY, name)
         if name.startswith((".", "_")) or not os.path.isdir(directory):
             continue
-        if not os.path.isfile(os.path.join(directory, "__init__.py")):
+        if not _FROZEN and not os.path.isfile(os.path.join(directory, "__init__.py")):
             continue
         try:
             package = importlib.import_module("%s.%s" % (__name__, name))
