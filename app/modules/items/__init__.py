@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """NPC 物品。"""
-from meta_update import CACHE_SCHEMA, SCHEMA as DATA_SCHEMA
+from meta_update import SCHEMA as DATA_SCHEMA
 
 from .build import build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "items", "NPC物品"
-ORDER, SELECT, SCHEMA = 30, "latest", CACHE_SCHEMA
+ORDER, SELECT, SCHEMA = 30, "latest", 21  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "items_meta.json"
 TABLES = frozenset({
     "tbnpcbasecfg", "tbspace", "tbcultivaterealm", "tbitem", "tbsteal", "tbitemtype",

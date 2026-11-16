@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """炼器：器胚、材料、法宝与洗练保底。"""
-from meta_update import CACHE_SCHEMA, SCHEMA as DATA_SCHEMA
+from meta_update import SCHEMA as DATA_SCHEMA
 
 from .build import FORGE_QUALITY_NAMES, FORGE_SLOT_NAMES, build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "forge", "炼器"
-ORDER, SELECT, SCHEMA = 50, "latest", CACHE_SCHEMA
+ORDER, SELECT, SCHEMA = 50, "latest", 21  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "forge_meta.json"
 TABLES = frozenset({
     "tbalchemyprototype", "tbalchemymaterial", "tbalchemylayout", "tbalchemylevel",

@@ -7,7 +7,9 @@ import sys
 
 import meta_update
 
-APP_VERSION = "1.8.0"
+from . import version
+
+APP_VERSION = version.VERSION
 FROZEN = getattr(sys, "frozen", False)
 if FROZEN:
     HERE = os.path.dirname(sys.executable)
@@ -18,6 +20,22 @@ else:
 CFG = os.path.join(HERE, "config.json")
 OUT_HTML = os.path.join(HERE, "仙友助手.html")
 OUT_VERSION = os.path.join(HERE, "仙友助手版本.js")
+
+
+def set_output_dir(directory):
+    """把页面生成物重定向到指定目录。
+
+    默认仍写仓库根（开发预览）；发布由 tools/release.py 指向 仙友助手/，
+    避免开发预览与发布产物互相覆盖。
+    """
+    global OUT_HTML, OUT_VERSION
+    target = os.path.abspath(directory or HERE)
+    os.makedirs(target, exist_ok=True)
+    OUT_HTML = os.path.join(target, "仙友助手.html")
+    OUT_VERSION = os.path.join(target, "仙友助手版本.js")
+    return target
+
+
 DEFAULT_MODULES = {"bedroom": True, "talent": True, "items": True, "pill": True,
                    "forge": True, "event": True, "quest": True}
 

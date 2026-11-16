@@ -8,7 +8,13 @@ import struct
 import sys
 import time
 
-SCHEMA = 2
+# 公共解析层：配置表纯函数集中在 app/tablekit.py，这里按原名再导出，
+# 保证 app/modules/*/build.py 的既有 import 路径不变。
+from app.tablekit import (  # noqa: F401
+    SCHEMA, _callee_name, _call_parts, _clip, _const_args, _const_value, _expr_ints,
+    _int, _plain, _rows, _text, build_realms, build_spaces,
+)
+
 CACHE_SCHEMA = 21
 TABLES = {
     "tbnpcbasecfg", "tbnpcbedroom", "tbscenepresentationinteraction",
@@ -364,167 +370,6 @@ def _extract_tables(inspection):
     return tables
 
 
-def _rows(value):
-    if isinstance(value, list):
-        return value
-    if isinstance(value, dict):
-        return list(value.values())
-    return []
-
-
-def _text(value):
-    if isinstance(value, dict):
-        for key in ("zh-Hans", "zh-Hant", "en-US"):
-            if value.get(key):
-                return str(value[key])
-        return ""
-    return "" if value is None else str(value)
-
-
-def _plain(value):
-    """去掉富文本标签，供列表展示。"""
-    return re.sub(r"<[^>]+>", "", _text(value)).strip()
-
-
-def build_realms(tables):
-    realms = {"0": "凡人"}
-    for row in _rows(tables["tbcultivaterealm"]):
-        if isinstance(row, dict) and row.get("id") is not None:
-            realms[str(row["id"])] = _text(row.get("realm_name")) or ("境界 %s" % row["id"])
-    return realms
-
-
-def build_spaces(tables):
-    spaces = {}
-    for row in _rows(tables["tbspace"]):
-        if isinstance(row, dict) and row.get("id") is not None:
-            father = row.get("fatherSpace")
-            if isinstance(father, dict):
-                father = father.get("id")
-            spaces[str(row["id"])] = {
-                "name": _text(row.get("spaceName")) or ("地点 %s" % row["id"]),
-                "realm_id": row.get("realm_id"),
-                "father_id": "" if father in (None, "", 0, "0") else str(father),
-            }
-
-    def space_path(space_id):
-        path, seen, current = [], set(), space_id
-        while current in spaces and current not in seen:
-            seen.add(current)
-            path.append(current)
-            current = spaces[current]["father_id"]
-        path.reverse()
-        names = []
-        for item in path:
-            name = spaces[item]["name"]
-            if not names or names[-1] != name:
-                names.append(name)
-        return names
-
-    for space_id, space in spaces.items():
-        path = space_path(space_id) or [space["name"]]
-        space["region"] = path[0]
-        space["path"] = path
-    return spaces
-
-
-def _int(value, default=0):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _expr_ints(node):
-    """取表达式树里的整型字面量，用于识别交互点引用的任务 id。"""
-    out = []
-
-    def walk(value):
-        if isinstance(value, dict):
-            for child in value.values():
-                walk(child)
-        elif isinstance(value, (list, tuple)):
-            if len(value) == 2 and isinstance(value[0], str) and isinstance(value[1], dict):
-                item = value[1].get("value")
-                if isinstance(item, int) and not isinstance(item, bool):
-                    out.append(item)
-                walk(value[1])
-            else:
-                for child in value:
-                    walk(child)
-
-    walk(node)
-    return out
-
-
-def _clip(text, limit):
-    return text if len(text) <= limit else text[:limit] + "…"
-
-
-def _callee_name(callee):
-    """从变量/索引/调用描述里取出函数名与索引名。"""
-    if isinstance(callee, dict):
-        return callee.get("name"), None
-    if isinstance(callee, (list, tuple)) and len(callee) == 2 and isinstance(callee[1], dict):
-        tag, payload = callee
-        if tag == "variable":
-            return payload.get("name"), None
-        if tag == "index":
-            name, _ = _callee_name(payload.get("target"))
-            index = payload.get("index")
-            index_name = None
-            if isinstance(index, (list, tuple)) and len(index) == 2 and isinstance(index[1], dict):
-                index_name = index[1].get("value")
-            return name, index_name
-        if tag == "call":
-            return _callee_name(payload)
-    return None, None
-
-
-def _call_parts(node):
-    """拆出调用节点的 (名字, 索引名, 参数列表)。"""
-    if isinstance(node, (list, tuple)) and len(node) == 2 and isinstance(node[0], str) and isinstance(node[1], dict):
-        return _call_parts(node[1])
-    if not isinstance(node, dict):
-        return None, None, []
-    args = []
-    callee = None
-    if isinstance(node.get("func"), (list, dict)):
-        callee, args = node["func"], node.get("args") or []
-        if not args:
-            inner_name, inner_index, inner_args = _call_parts(callee)
-            if inner_args:
-                return inner_name, inner_index, inner_args
-    elif isinstance(node.get("target"), (list, dict)):
-        callee, args = node["target"], node.get("arguments") or []
-    elif isinstance(node.get("name"), str):
-        callee, args = node, node.get("arguments") or []
-    name, index = _callee_name(callee)
-    return name, index, args if isinstance(args, list) else []
-
-
-def _const_value(node):
-    """取字面量表达式（int/string/bool/float）的值。"""
-    if isinstance(node, (list, tuple)) and len(node) == 2 and isinstance(node[0], str):
-        if node[0] in ("int", "string", "bool", "float") and isinstance(node[1], dict):
-            return node[1].get("value")
-    if isinstance(node, (int, float, str, bool)):
-        return node
-    return None
-
-
-def _const_args(args):
-    """按顺序取参数里的直接字面量，避免被嵌套条件里的整数干扰。"""
-    out = []
-    for arg in args or []:
-        if isinstance(arg, (list, tuple)) and len(arg) == 2 and isinstance(arg[0], str) and isinstance(arg[1], dict):
-            if arg[0] in ("int", "string", "bool", "float"):
-                out.append(arg[1].get("value"))
-        elif isinstance(arg, (int, float, str, bool)):
-            out.append(arg)
-    return out
-
-
 def _module_tables(module, specs=None):
     """模块需要的配置表：优先用模块自己声明的 TABLES，老调用回退集中表。"""
     spec = (specs if specs is not None else _plugin_specs()).get(module)
@@ -557,6 +402,22 @@ def _read_module_cache(cache_dir, module, schema):
     if not isinstance(entry, dict) or entry.get("schema") != schema or entry.get("data") is None:
         return {}
     return entry
+
+
+def _failed_modules(state):
+    """上次构建失败的模块：新结构 {key: {schema, error}}；旧版列表视为无记录。"""
+    raw = state.get("modules")
+    if not isinstance(raw, dict):
+        return {}
+    return {str(key): value for key, value in raw.items() if isinstance(value, dict)}
+
+
+def _failed_with_same_schema(module, failed_modules, specs):
+    """只有 SCHEMA 未变时才跳过重试；模块升级缓存版本后必须重新构建。"""
+    entry = failed_modules.get(module)
+    if not entry:
+        return False
+    return entry.get("schema") == _module_schema(module, specs.get(module))
 
 
 def _module_label(module, spec):
@@ -638,9 +499,10 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
             unresolved.append(module)
 
     failed = bool(inspection) and state.get("fingerprint") == report["fingerprint"]
-    failed_modules = set(state.get("modules") or []) if failed else set()
+    failed_modules = _failed_modules(state) if failed else {}
     builders = {module: _module_builder(module, specs) for module in unresolved}
-    to_extract = [m for m in unresolved if m not in failed_modules and builders.get(m)] if inspection else []
+    to_extract = [m for m in unresolved if builders.get(m)
+                  and not _failed_with_same_schema(m, failed_modules, specs)] if inspection else []
     errors = {}
     if to_extract:
         try:
@@ -670,14 +532,18 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
                 errors[module] = str(e)
         try:
             _atomic_json(state_path, {
-                "fingerprint": inspection["fingerprint"], "modules": sorted(errors),
-                "errors": errors, "time": int(time.time()),
+                "fingerprint": inspection["fingerprint"],
+                "modules": {module: {"schema": _module_schema(module, specs.get(module)),
+                                     "error": message}
+                            for module, message in errors.items()},
+                "time": int(time.time()),
             })
         except Exception:
             pass
-    for module, message in (state.get("errors") or {}).items():
-        if module in unresolved and module in failed_modules:
-            errors[module] = str(message)
+    for module in unresolved:
+        entry = failed_modules.get(module)
+        if entry and entry.get("schema") == _module_schema(module, specs.get(module)):
+            errors[module] = str(entry.get("error") or "上次构建失败")
 
     for module in unresolved:
         if module in result:
@@ -705,23 +571,56 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
     return result, report
 
 
-def export_snapshots(game_dir, output_dir):
-    """导出全部模块的内置快照：模块自带 build 与额外快照（如炼丹盘面）。"""
+def _same_json(path, data):
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            return json.load(f) == data
+    except Exception:
+        return False
+
+
+def export_snapshots(game_dir, output_dir, only=None):
+    """导出模块内置快照。
+
+    only 指定模块时只写这几个，其它模块的快照文件不会被触碰（并行安全）；
+    内容与现有文件一致的快照不落盘，保持 git diff 只体现真实变化。
+    """
+    specs = _plugin_specs()
+    if only:
+        unknown = [key for key in only if key not in specs]
+        if unknown:
+            raise SystemExit("未知模块：%s（可选：%s）" % (
+                "、".join(unknown), "、".join(sorted(specs))))
     inspection = inspect_game(game_dir)
     tables = _extract_tables(inspection)
-    for key, spec in sorted(_plugin_specs().items(), key=lambda item: (item[1].ORDER, item[0])):
+    written = 0
+    for key, spec in sorted(specs.items(), key=lambda item: (item[1].ORDER, item[0])):
+        if only and key not in only:
+            continue
+        builders = []
         if getattr(spec, "HAS_BUILD", False):
-            name = spec.SNAPSHOT or ("%s_meta.json" % key)
-            _atomic_json(os.path.join(output_dir, name), spec.build(tables))
+            builders.append((spec.SNAPSHOT or ("%s_meta.json" % key),
+                             lambda t, i, build=spec.build: build(t)))
         for name, make in (getattr(spec, "EXTRA_SNAPSHOTS", None) or {}).items():
-            _atomic_json(os.path.join(output_dir, name), make(tables, inspection))
-    print("已导出当前配置快照：%s" % output_dir)
+            builders.append((name, make))
+        for name, make in builders:
+            data = make(tables, inspection)
+            path = os.path.join(output_dir, name)
+            if _same_json(path, data):
+                continue
+            _atomic_json(path, data)
+            written += 1
+    print("已导出配置快照：%s（写入 %d 个文件）" % (output_dir, written))
 
 
 if __name__ == "__main__":
     if "--export-snapshots" in sys.argv:
         index = sys.argv.index("--export-snapshots")
-        export_snapshots(sys.argv[index + 1], sys.argv[index + 2])
+        only = None
+        if "--only" in sys.argv:
+            only = [item.strip() for item in sys.argv[sys.argv.index("--only") + 1].split(",")
+                    if item.strip()]
+        export_snapshots(sys.argv[index + 1], sys.argv[index + 2], only)
     else:
         cfg = _read_json(os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json"), {}) or {}
         data, info = load_metadata(game_dir_from_config(cfg, cfg.get("decrypted_dir", "")),

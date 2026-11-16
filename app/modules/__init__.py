@@ -28,8 +28,10 @@ import importlib
 import os
 
 _DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(os.path.dirname(_DIRECTORY))
 _LOADED = None
 _ERRORS = []
+_WARNINGS = []
 
 
 def _default_scan(obj, meta, state=None):
@@ -88,6 +90,8 @@ class Plugin(object):
         self.VIEW_JS = _read_asset(directory, "view.js")
         self.VIEW_CSS = _read_asset(directory, "view.css")
         self.EXTRA_SNAPSHOTS = _callables(getattr(package, "EXTRA_SNAPSHOTS", None))
+        self.SNAPSHOTS = ((self.SNAPSHOT,) if self.SNAPSHOT else ()) + tuple(self.EXTRA_SNAPSHOTS)
+        self.SCHEMA_DECLARED = getattr(package, "SCHEMA", None) is not None
 
 
 def _strings(value):
@@ -126,9 +130,53 @@ def _callables(value):
     return {str(name): make for name, make in value.items() if callable(make)}
 
 
+def _contract(key, directory, snapshot, extras, has_build, tables, explicit_schema):
+    """模块契约检查：返回 (阻断项, 告警项)。
+
+    阻断项会让该模块整体不加载（避免半可用状态），告警项只提示。
+    发布期由 tools/packaging.py 以同一份规则严格校验。
+    """
+    fatal, warn = [], []
+    directory_name = os.path.basename(directory)
+    if key != directory_name:
+        fatal.append("目录名与 KEY 不一致（目录 %s，KEY=%s），请统一后再启用" % (directory_name, key))
+    if has_build and not snapshot:
+        fatal.append("声明了 build 却未声明 SNAPSHOT，无法生成内置快照")
+    if not has_build and not snapshot:
+        fatal.append("既没有 build() 也没有内置快照，永远无法产出数据")
+    if has_build and not tables:
+        warn.append("未声明 TABLES，配置表缺失只能在构建快照时才发现")
+    if not explicit_schema:
+        warn.append("未声明 SCHEMA，按 1 处理；调整数据结构后请递增自有版本")
+    if not _read_asset(directory, "view.js").strip():
+        warn.append("未提供 view.js，页签将为空")
+    if not has_build:
+        for name in ((snapshot,) if snapshot else ()) + tuple(extras):
+            if not os.path.isfile(os.path.join(_ROOT, name)):
+                fatal.append("缺少内置快照 %s，请运行 python meta_update.py --export-snapshots "
+                             "<游戏目录> . --only %s" % (name, key))
+    return fatal, warn
+
+
+def _orphan_snapshots(declared):
+    """根目录里没有任何模块声明的 *_meta.json，通常是删掉的模块遗留。"""
+    notes = []
+    try:
+        names = sorted(os.listdir(_ROOT))
+    except OSError:
+        return notes
+    for name in names:
+        if not name.endswith("_meta.json") or name in declared:
+            continue
+        if os.path.isfile(os.path.join(_ROOT, name)):
+            notes.append("发现无人声明的快照 %s，请确认是否为已移除模块遗留" % name)
+    return notes
+
+
 def _discover():
     global _LOADED
-    loaded, errors = {}, []
+    loaded, errors, notes = {}, [], []
+    owners = {}
     for name in sorted(os.listdir(_DIRECTORY)):
         directory = os.path.join(_DIRECTORY, name)
         if name.startswith((".", "_")) or not os.path.isdir(directory):
@@ -147,9 +195,23 @@ def _discover():
         if key in loaded:
             errors.append("%s：KEY 重复（%s）" % (name, key))
             continue
-        loaded[key] = Plugin(key, package, directory)
+        spec = Plugin(key, package, directory)
+        fatal, warn = _contract(key, directory, spec.SNAPSHOT, spec.EXTRA_SNAPSHOTS,
+                                spec.HAS_BUILD, spec.TABLES, spec.SCHEMA_DECLARED)
+        for snapshot in spec.SNAPSHOTS:
+            if snapshot in owners:
+                fatal.append("快照文件名 %s 已被 %s 声明，必须全局唯一" % (snapshot, owners[snapshot]))
+        if fatal:
+            errors.extend("%s：%s" % (name, message) for message in fatal)
+            continue
+        for snapshot in spec.SNAPSHOTS:
+            owners[snapshot] = name
+        loaded[key] = spec
+        notes.extend("%s：%s" % (name, message) for message in warn)
+    notes.extend(_orphan_snapshots(set(owners)))
     _LOADED = loaded
     _ERRORS[:] = errors
+    _WARNINGS[:] = notes
 
 
 def all():
@@ -165,9 +227,17 @@ def errors():
     return list(_ERRORS)
 
 
+def warnings():
+    """契约告警：不阻断加载，运行期与发布期都会提示。"""
+    if _LOADED is None:
+        _discover()
+    return list(_WARNINGS)
+
+
 def reload():
     """重新扫描模块目录（测试或热更新用）。"""
     global _LOADED
     _LOADED = None
     del _ERRORS[:]
+    del _WARNINGS[:]
     return all()

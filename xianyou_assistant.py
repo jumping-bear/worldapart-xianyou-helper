@@ -16,9 +16,9 @@ from app.common import (  # noqa: F401  （保留旧调用方使用的模块级�
     APP_VERSION, BUILTIN_DIR, CFG, DEFAULT_MODULES, FROZEN, HERE, OUT_HTML, OUT_VERSION,
     _find_game_dir, _find_steam_libs, find_dir, find_save_root, load_cfg,
     original_save_index, save_cfg, save_files, source_time, state_signature, unpack)
+from app import common, registry
 from app.output import build_html, console_summary, disk_version, write_outputs  # noqa: F401
 from app.render import render
-from app import registry
 from app.modules import bedroom
 
 import meta_update
@@ -60,26 +60,25 @@ def _character_options(dec):
     return sorted(best.values(), key=lambda item: -item["stamp"])
 
 
-def settings_menu():
+def settings_menu(dry_run=False):
     cfg = load_cfg()
     while True:
+        specs = registry.MODULES
         print("\n功能设置（只读工具，不会修改游戏存档）")
-        print("  1. 仙居楼互动（十八摸成就）：%s" % ("开启" if cfg["modules"]["bedroom"] else "关闭"))
-        print("  2. NPC天赋：%s" % ("开启" if cfg["modules"]["talent"] else "关闭"))
-        print("  3. NPC物品：%s" % ("开启" if cfg["modules"]["items"] else "关闭"))
-        print("  4. 炼丹：%s" % ("开启" if cfg["modules"]["pill"] else "关闭"))
-        print("  5. 炼器：%s" % ("开启" if cfg["modules"]["forge"] else "关闭"))
-        print("  6. 奇遇：%s" % ("开启" if cfg["modules"]["event"] else "关闭"))
-        print("  7. 支线：%s" % ("开启" if cfg["modules"]["quest"] else "关闭"))
-        print("  8. 重新设置解密存档目录")
-        print("  9. 选择存档角色：%s" % (cfg.get("save_file") or "自动跟随最近存档"))
+        for index, spec in enumerate(specs, 1):
+            state = "开启" if cfg["modules"].get(spec.KEY, True) else "关闭"
+            print("  %d. %s：%s" % (index, spec.LABEL, state))
+        base = len(specs)
+        print("  %d. 重新设置解密存档目录" % (base + 1))
+        print("  %d. 选择存档角色：%s" % (base + 2, cfg.get("save_file") or "自动跟随最近存档"))
         print("  0. 保存并退出")
+        if dry_run:
+            return
         choice = input("请选择: ").strip()
-        if choice in ("1", "2", "3", "4", "5", "6", "7"):
-            name = {"1": "bedroom", "2": "talent", "3": "items", "4": "pill",
-                    "5": "forge", "6": "event", "7": "quest"}[choice]
-            cfg["modules"][name] = not cfg["modules"][name]
-        elif choice == "8":
+        if choice.isdigit() and 1 <= int(choice) <= base:
+            key = specs[int(choice) - 1].KEY
+            cfg["modules"][key] = not cfg["modules"].get(key, True)
+        elif choice == str(base + 1):
             path = input("把 BepInEx\\decrypted 的路径粘贴到这里: ").strip().strip('"')
             if os.path.isdir(path):
                 cfg["decrypted_dir"] = os.path.normpath(path)
@@ -88,7 +87,7 @@ def settings_menu():
                     cfg["game_dir"] = game
             else:
                 print("目录不存在，未修改。")
-        elif choice == "9":
+        elif choice == str(base + 2):
             options = _character_options(cfg.get("decrypted_dir") or find_dir(cfg, interactive=False))
             if not options:
                 print("还没找到可用存档。请先启动游戏，让插件导出存档副本。")
@@ -121,14 +120,17 @@ def main():
         except Exception:
             pass
     if "--settings" in sys.argv:
-        settings_menu()
+        settings_menu(dry_run="--dry-run" in sys.argv)
         return
+    if "--out-dir" in sys.argv:
+        common.set_output_dir(sys.argv[sys.argv.index("--out-dir") + 1])
+    open_browser = "--no-browser" not in sys.argv
     cfg = load_cfg()
     enabled = _enabled_keys(cfg)
     dec = find_dir(cfg, interactive=bool(enabled))
     opened = False
     last_signature = None
-    print("已生成：%s" % OUT_HTML)
+    print("已生成：%s" % common.OUT_HTML)
     while True:
         try:
             cfg = load_cfg()
@@ -136,7 +138,7 @@ def main():
             if enabled and (not dec or not os.path.isdir(dec)):
                 dec = find_dir(cfg, interactive=last_signature is None)
             signature = state_signature(dec, cfg)
-            if signature != last_signature or not os.path.exists(OUT_HTML):
+            if signature != last_signature or not os.path.exists(common.OUT_HTML):
                 payload = render(dec, cfg) if dec or not enabled else {
                     "enabled": enabled,
                     "tabs": _enabled_tabs(enabled),
@@ -148,9 +150,9 @@ def main():
                 if changed and last_signature is not None:
                     print("[%s] 数据已更新" % time.strftime("%H:%M:%S"))
                 last_signature = state_signature(dec, cfg)
-            if not opened:
+            if open_browser and not opened:
                 try:
-                    webbrowser.open("file:///" + OUT_HTML.replace("\\", "/"))
+                    webbrowser.open("file:///" + common.OUT_HTML.replace("\\", "/"))
                 except Exception:
                     pass
                 opened = True

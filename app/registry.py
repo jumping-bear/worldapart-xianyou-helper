@@ -45,3 +45,8 @@ def assets_js():
 
 def problems():
     return plugins.errors()
+
+
+def notes():
+    """契约告警（模块仍可用，但配置可能不完整）。"""
+    return plugins.warnings()

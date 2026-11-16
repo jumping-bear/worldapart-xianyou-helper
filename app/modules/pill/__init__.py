@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """炼丹：丹方手记、炉子与盘面拾取点。"""
-from meta_update import CACHE_SCHEMA, SCHEMA as DATA_SCHEMA
+from meta_update import SCHEMA as DATA_SCHEMA
 
 from .build import build, build_pill_map
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "pill", "炼丹"
-ORDER, SELECT, SCHEMA = 40, "latest", CACHE_SCHEMA
+ORDER, SELECT, SCHEMA = 40, "latest", 21  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "pill_meta.json"
 TABLES = frozenset({
     "tbitem", "tbpillrecipe", "tbpillherb", "tbpillsecretportal", "tbpillfurnace",

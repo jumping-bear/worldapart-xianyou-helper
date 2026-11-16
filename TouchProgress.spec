@@ -1,10 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys
+
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
+# 快照清单由各模块的 SNAPSHOT / EXTRA_SNAPSHOTS 自动收集，
+# 新增模块不需要改动本文件；缺文件或重名会在这里直接失败。
+sys.path.insert(0, SPECPATH)
+from tools.packaging import collect_snapshot_datas  # noqa: E402
 
-datas = [('bedroom_meta.json', '.'), ('talent_meta.json', '.'), ('items_meta.json', '.'),
-         ('pill_meta.json', '.'), ('pill_map.json', '.'), ('forge_meta.json', '.'),
-         ('event_meta.json', '.'), ('quest_meta.json', '.')]
+datas, snapshot_problems = collect_snapshot_datas(SPECPATH)
+if snapshot_problems:
+    raise SystemExit("打包前检查失败：\n" + "\n".join(snapshot_problems))
+if "UnityPy" in sys.modules:
+    raise SystemExit("打包期不应导入 UnityPy，请检查模块顶层 import")
+
 binaries = []
 hiddenimports = []
 # 插件式功能模块（app/modules/<key>）由运行期动态导入，需显式收集。

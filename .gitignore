@@ -6,15 +6,24 @@
 !meta_update.py
 !app/
 __pycache__/
-!bedroom_meta.json
-!talent_meta.json
-!items_meta.json
-!quest_meta.json
+# 模块快照：<key>_meta.json 自动放行；带额外快照（EXTRA_SNAPSHOTS）的模块
+# 如使用其它文件名，由装配负责人在此追加一行（如 pill_map.json）。
+!/*_meta.json
+!/pill_map.json
 !TouchProgress.spec
 !功能设置.bat
+!查进度.bat
 !TouchProgress_最终版.zip
 !SaveDecryptProbe/
 !仙友助手/
+!docs/
+!tools/
+!release/
+!留影石模块-交接单.md
+
+# tools 只收录脚本，逆向工具与缓存目录不入库
+tools/*
+!tools/*.py
 
 # 插件只保留源码，不重复收录构建目录
 SaveDecryptProbe/*

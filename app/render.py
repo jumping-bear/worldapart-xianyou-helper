@@ -25,6 +25,8 @@ def render(dec, cfg):
                "modules": {}, "warnings": []}
     for problem in registry.problems():
         payload["warnings"].append("功能模块加载失败：%s" % problem)
+    for note in registry.notes():
+        payload["warnings"].append("模块契约提示：%s" % note)
     if not specs:
         payload["warnings"].append("查询模块都已关闭。请运行“功能设置.bat”重新开启。")
         return payload
