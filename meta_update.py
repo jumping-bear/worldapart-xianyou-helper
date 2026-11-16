@@ -202,10 +202,24 @@ def resolve_table(name):
 
 
 def cache_directory():
+    """缓存目录：打包后的 exe 共用一份，源码运行按工作区隔离。
+
+    多任务并行时每个 worktree 各用各的缓存，避免不同版本的模块数据互相覆盖；
+    需要指定位置时设置环境变量 ``XY_CACHE_DIR``。
+    """
+    override = (os.environ.get("XY_CACHE_DIR") or "").strip()
+    if override:
+        return os.path.abspath(override)
     root = os.environ.get("LOCALAPPDATA")
     if not root:
         root = os.path.expanduser("~")
-    return os.path.join(root, "WorldApartTouchProgress")
+    base = os.path.join(root, "WorldApartTouchProgress")
+    if getattr(sys, "frozen", False):
+        return base
+    here = os.path.dirname(os.path.abspath(__file__))
+    digest = hashlib.sha1(os.path.normcase(here).encode("utf-8")).hexdigest()[:8]
+    name = re.sub(r"[^0-9A-Za-z._-]+", "-", os.path.basename(here)).strip("-") or "dev"
+    return os.path.join(base, "worktrees", "%s-%s" % (name, digest))
 
 
 def game_dir_from_config(cfg, decrypted_dir=""):
