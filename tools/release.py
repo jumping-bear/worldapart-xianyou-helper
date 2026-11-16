@@ -12,7 +12,6 @@
     * 页面只写 仙友助手/，根目录产物仅用于开发预览；
     * 失败一律在写入前拦下（先检查后写入），覆盖式写入都走临时文件 + 原子替换。
 """
-import filecmp
 import json
 import os
 import re
@@ -124,8 +123,6 @@ def preflight(version):
         errors.append("缺少 release/workshop.vdf.tpl")
     if not os.path.isfile(os.path.join(WORKSHOP_DIR, "preview.png")):
         errors.append("缺少 workshop_release/preview.png")
-    if not os.path.isfile(os.path.join(APP_DIR, "仙友助手-示例.html")):
-        errors.append("缺少 仙友助手/仙友助手-示例.html")
 
     if not _has_decrypted_dir():
         todos.append("本机未找到可用的解密存档目录，--dry-run 将跳过页面生成")
@@ -225,29 +222,11 @@ def acquire_lock(version):
     return LOCK
 
 
-def sync_snapshots():
-    """把根目录快照同步进发布目录：快照只维护 root 一份，发布目录由脚本刷新。"""
-    from tools import packaging
-    datas, problems = packaging.collect_snapshot_datas(ROOT)
-    if problems:
-        raise SystemExit("快照收集失败：\n" + "\n".join(problems))
-    copied = 0
-    for name, _dest in datas:
-        source = os.path.join(ROOT, name)
-        target = os.path.join(APP_DIR, name)
-        if os.path.isfile(target) and filecmp.cmp(source, target, shallow=False):
-            continue
-        shutil.copy2(source, target)
-        copied += 1
-    print("快照同步：%d 个文件（共 %d 个）" % (copied, len(datas)))
-
-
 def release(version):
     lock = acquire_lock(version)
     try:
         generate_pages(APP_DIR, version)
         update_readme(version)
-        sync_snapshots()
         staging = build_exe()
         archive = make_zip(staging, version)
         generate_vdf(os.path.join(WORKSHOP_DIR, "workshop.vdf"), version, APP_DIR)

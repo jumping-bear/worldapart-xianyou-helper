@@ -38,6 +38,14 @@ Write-Host '=============================================' -ForegroundColor Cyan
 Write-Host '  不问凡尘 · 仙友助手 一键安装' -ForegroundColor Cyan
 Write-Host '=============================================' -ForegroundColor Cyan
 Write-Host ''
+Write-Host '装完后这样用（3 步）：' -ForegroundColor Green
+Write-Host '  1) 启动游戏，停在主菜单约 20 秒（插件自动导出存档副本）'
+Write-Host '     首次启动要生成适配文件，可能慢 1~3 分钟且看起来没反应，属正常，别关游戏'
+Write-Host '  2) 双击 仙友助手.exe，浏览器会自动打开查询页面'
+Write-Host '  3) 平时不用管：每 60 秒自动同步；游戏里保存后按 F8 可立即刷新'
+Write-Host ''
+Write-Host '开始安装（约 1 分钟）…' -ForegroundColor Cyan
+Write-Host ''
 
 if (Get-Process -Name WorldApart -ErrorAction SilentlyContinue) {
     Write-Host '检测到游戏正在运行，请先退出游戏（任务管理器结束 WorldApart.exe）再安装。' -ForegroundColor Red
@@ -174,9 +182,11 @@ if (-not (Test-Path $cfgPath)) {
 } else {
     $cfgText = Get-Content $cfgPath -Raw -Encoding UTF8
     if ($cfgText -match '(?ms)\[Logging\.Console\][^\[]*?Enabled\s*=\s*true') {
+        # 只改控制台这一个开关，其余配置（含其它 Mod 的设置）原样保留；改前留一份备份
+        Copy-Item $cfgPath ($cfgPath + '.bak') -Force
         $cfgText = [regex]::Replace($cfgText, '(?ms)(\[Logging\.Console\][^\[]*?Enabled\s*=\s*)true', '${1}false')
         [System.IO.File]::WriteAllText($cfgPath, $cfgText, (New-Object System.Text.UTF8Encoding($false)))
-        Write-Host '已关闭游戏内 BepInEx 控制台黑窗（可改 BepInEx.cfg 恢复）。' -ForegroundColor Green
+        Write-Host '已关闭游戏内 BepInEx 控制台黑窗（仅改这一项，原配置备份为 BepInEx.cfg.bak）。' -ForegroundColor Green
     }
 }
 
@@ -226,7 +236,7 @@ $configJson = $settings | ConvertTo-Json -Depth 4 -Compress
 [System.IO.File]::WriteAllText($configPath, $configJson, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host ''
-Write-Host '────────────────── 安装自检清单 ──────────────────' -ForegroundColor Cyan
+Write-Host '────────────────── 安装自检 ──────────────────' -ForegroundColor Cyan
 
 $checks = @(
     @{ label='winhttp.dll（Doorstop 代理）';        path='winhttp.dll' },
@@ -237,32 +247,30 @@ $checks = @(
     @{ label='SaveDecryptProbe.dll（查询插件）';     path='BepInEx\plugins\SaveDecryptProbe\SaveDecryptProbe.dll' },
     @{ label='config.json（查询工具配置）';          path=(Join-Path $here 'config.json') }
 )
-$allOk = $true
+$failed = @()
 foreach ($c in $checks) {
     $full = if ($c.path.StartsWith('BepInEx') -or $c.path.StartsWith('winhttp') -or $c.path.StartsWith('doorstop') -or $c.path.StartsWith('dotnet') -or $c.path.StartsWith('.doorstop')) { Join-Path $game $c.path } else { $c.path }
-    $ok = Test-Path $full
-    $mark = if ($ok) { '✓' } else { '✗' }
-    $color = if ($ok) { 'Green' } else { 'Red' }
-    Write-Host ('  ' + $mark + ' ' + $c.label) -ForegroundColor $color
-    if (-not $ok) { $allOk = $false }
+    if (-not (Test-Path $full)) { $failed += $c.label }
 }
 
-if (-not $allOk) {
-    Write-Host ''
-    Write-Host '自检未通过！请把报错截图发给作者。' -ForegroundColor Red
+if ($failed.Count -gt 0) {
+    Write-Host '自检未通过，缺少：' -ForegroundColor Red
+    foreach ($label in $failed) { Write-Host ('  ✗ ' + $label) -ForegroundColor Red }
+    Write-Host '请确认解压完整后重试；仍失败请把本窗口截图发给作者。' -ForegroundColor Yellow
     exit 1
 }
-
-Write-Host '───────────────────────────────────────────────────' -ForegroundColor Cyan
+Write-Host ('自检通过：' + $checks.Count + '/' + $checks.Count + ' 项就绪') -ForegroundColor Green
 Write-Host ''
-Write-Host '运行环境已就绪。接下来：' -ForegroundColor Green
-Write-Host '  1) 启动游戏，停在主菜单约 20 秒（插件自动导出存档副本）'
-Write-Host '  2) 双击 仙友助手.exe 查看进度（会打开一个网页）'
+Write-Host '────────────────── 接下来 3 步 ──────────────────' -ForegroundColor Cyan
+Write-Host '  1) 启动游戏，停在主菜单约 20 秒，让插件导出存档副本' -ForegroundColor Green
+Write-Host '     首次启动会生成适配文件，可能慢 1~3 分钟且窗口没反应，属正常，请勿关闭' -ForegroundColor Yellow
+Write-Host '  2) 双击 仙友助手.exe，会打开一个网页显示进度' -ForegroundColor Green
+Write-Host '  3) 平时每 60 秒自动同步；保存游戏后按 F8 立即刷新' -ForegroundColor Green
 Write-Host ''
-Write-Host '首次启动会生成 IL2CPP 适配文件，可能停留 1~3 分钟且窗口看起来没反应，请勿关闭。' -ForegroundColor Yellow
-Write-Host '平时每 60 秒自动同步；保存游戏后按 F8 可立即强制刷新。' -ForegroundColor DarkGray
-Write-Host '查询工具的黑窗口保持开启，网页会在数据变化时自动更新。' -ForegroundColor DarkGray
-Write-Host '可用「功能设置.bat」单独开关各模块。' -ForegroundColor DarkGray
-Write-Host '卸载：删掉 BepInEx\plugins\SaveDecryptProbe 文件夹即可。' -ForegroundColor DarkGray
+Write-Host '────────────────── 其他说明 ──────────────────' -ForegroundColor DarkGray
+Write-Host '游戏内已关闭 BepInEx 控制台黑窗，日志仍写在 BepInEx\LogOutput.log。' -ForegroundColor DarkGray
+Write-Host '需要看插件日志时，把 BepInEx\config\BepInEx.cfg 里 [Logging.Console] 的 Enabled 改成 true。' -ForegroundColor DarkGray
+Write-Host '可用「功能设置.bat」单独开关各模块；「查进度.bat」等同双击 仙友助手.exe。' -ForegroundColor DarkGray
+Write-Host '卸载：删掉 游戏目录\BepInEx\plugins\SaveDecryptProbe 文件夹即可。' -ForegroundColor DarkGray
 
 
