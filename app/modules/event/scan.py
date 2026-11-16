@@ -5,10 +5,8 @@ import time
 
 import meta_update
 
-from ..common import bag_entries
+from ...common import bag_entries
 
-KEY = "event"
-LABEL = "奇遇"
 
 HISTORY_FILE = "event_history.json"
 

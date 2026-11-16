@@ -20,7 +20,11 @@ def _source_payload(path, stamp, original, rows, meta_info):
 
 def render(dec, cfg):
     specs = registry.active(cfg["modules"])
-    payload = {"enabled": [spec.KEY for spec in specs], "modules": {}, "warnings": []}
+    payload = {"enabled": [spec.KEY for spec in specs],
+               "tabs": [{"key": spec.KEY, "label": getattr(spec, "LABEL", spec.KEY)} for spec in specs],
+               "modules": {}, "warnings": []}
+    for problem in registry.problems():
+        payload["warnings"].append("功能模块加载失败：%s" % problem)
     if not specs:
         payload["warnings"].append("查询模块都已关闭。请运行“功能设置.bat”重新开启。")
         return payload

@@ -7,6 +7,11 @@ datas = [('bedroom_meta.json', '.'), ('talent_meta.json', '.'), ('items_meta.jso
          ('event_meta.json', '.'), ('quest_meta.json', '.')]
 binaries = []
 hiddenimports = []
+# 插件式功能模块（app/modules/<key>）由运行期动态导入，需显式收集。
+try:
+    hiddenimports += collect_submodules('app.modules')
+except Exception:
+    pass
 # 只读取 TextAsset；压缩、类型树和 UnityPy 原生模块需要随 EXE 一起收集。
 for package in ('UnityPy', 'lz4', 'brotli', 'tpk_ar'):
     try:

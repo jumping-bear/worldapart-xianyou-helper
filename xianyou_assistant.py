@@ -2,8 +2,7 @@
 """不问凡尘 · 仙友助手：程序入口、命令行菜单与存档监视。
 
 具体功能拆分在 app/ 包内：
-    app/common.py        常量、配置、存档定位
-    app/scanners/*.py    每个功能一个扫描模块
+    app/modules/<key>/   每个功能一个独立模块（构建、扫描、视图）
     app/registry.py      模块注册表
     app/render.py        汇总页面数据
     app/output.py        静态页面、版本哈希与写出
@@ -19,9 +18,18 @@ from app.common import (  # noqa: F401  （保留旧调用方使用的模块级�
     original_save_index, save_cfg, save_files, source_time, state_signature, unpack)
 from app.output import build_html, console_summary, disk_version, write_outputs  # noqa: F401
 from app.render import render
-from app.scanners import bedroom
+from app import registry
+from app.modules import bedroom
 
 import meta_update
+
+
+def _enabled_keys(cfg):
+    return [spec.KEY for spec in registry.active((cfg or {}).get("modules") or {})]
+
+
+def _enabled_tabs(keys):
+    return [tab for tab in registry.tabs() if tab["key"] in keys]
 
 
 def scan(path, meta):
@@ -116,20 +124,22 @@ def main():
         settings_menu()
         return
     cfg = load_cfg()
-    dec = find_dir(cfg, interactive=any(cfg["modules"].values()))
+    enabled = _enabled_keys(cfg)
+    dec = find_dir(cfg, interactive=bool(enabled))
     opened = False
     last_signature = None
     print("已生成：%s" % OUT_HTML)
     while True:
         try:
             cfg = load_cfg()
-            if any(cfg["modules"].values()) and (not dec or not os.path.isdir(dec)):
+            enabled = _enabled_keys(cfg)
+            if enabled and (not dec or not os.path.isdir(dec)):
                 dec = find_dir(cfg, interactive=last_signature is None)
             signature = state_signature(dec, cfg)
             if signature != last_signature or not os.path.exists(OUT_HTML):
-                payload = render(dec, cfg) if dec or not any(cfg["modules"].values()) else {
-                    "enabled": [n for n in ("bedroom", "talent", "items", "pill", "forge", "event", "quest")
-                                if cfg["modules"][n]],
+                payload = render(dec, cfg) if dec or not enabled else {
+                    "enabled": enabled,
+                    "tabs": _enabled_tabs(enabled),
                     "modules": {}, "warnings": ["未设置解密存档目录，请重新安装或运行功能设置。"],
                 }
                 version, changed = write_outputs(payload)

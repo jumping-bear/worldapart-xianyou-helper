@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 """炼器扫描。"""
-from ..common import bag_entries
-
-KEY = "forge"
-LABEL = "炼器"
+from ...common import bag_entries
 
 
 def _forge_number(value):
@@ -174,7 +171,6 @@ def scan_forge(obj, meta):
                   "count": pity_done.get((realm_id, quality_id), 0), "total": total}
                  for (realm_id, quality_id), total in sorted(pity_limit.items())],
     }
-
 
 
 def meta(metadata):

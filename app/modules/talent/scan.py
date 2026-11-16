@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """NPC 天赋扫描。"""
-KEY = "talent"
-LABEL = "NPC天赋"
 
 
 def scan_talent(obj, meta):

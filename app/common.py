@@ -7,7 +7,7 @@ import sys
 
 import meta_update
 
-APP_VERSION = "1.8.1"
+APP_VERSION = "1.8.0"
 FROZEN = getattr(sys, "frozen", False)
 if FROZEN:
     HERE = os.path.dirname(sys.executable)
@@ -28,6 +28,18 @@ unpack = meta_update.unpack
 STEAM_APPID_A1 = 4209920  # 不问凡尘的 Steam AppID
 
 
+def _module_defaults():
+    """老模块 + 插件模块的默认开关：新增模块默认开启，无需改这里。"""
+    defaults = dict(DEFAULT_MODULES)
+    try:
+        from . import registry
+        for spec in registry.MODULES:
+            defaults.setdefault(spec.KEY, True)
+    except Exception:
+        pass
+    return defaults
+
+
 def load_cfg():
     raw = meta_update._read_json(CFG, {}) or {}
     modules = raw.get("modules") if isinstance(raw.get("modules"), dict) else {}
@@ -35,16 +47,20 @@ def load_cfg():
         "decrypted_dir": str(raw.get("decrypted_dir") or ""),
         "game_dir": str(raw.get("game_dir") or ""),
         "save_file": str(raw.get("save_file") or ""),
-        "modules": {name: bool(modules.get(name, default)) for name, default in DEFAULT_MODULES.items()},
+        "modules": {name: bool(modules.get(name, default))
+                    for name, default in _module_defaults().items()},
     }
 
 
 def save_cfg(cfg):
+    raw = meta_update._read_json(CFG, {}) or {}
+    modules = raw.get("modules") if isinstance(raw.get("modules"), dict) else {}
+    modules = dict(modules)
+    for name, default in _module_defaults().items():
+        modules[name] = bool((cfg.get("modules") or {}).get(name, default))
     data = {
         "decrypted_dir": cfg.get("decrypted_dir", ""), "game_dir": cfg.get("game_dir", ""),
-        "save_file": cfg.get("save_file", ""),
-        "modules": {name: bool((cfg.get("modules") or {}).get(name, default))
-                    for name, default in DEFAULT_MODULES.items()},
+        "save_file": cfg.get("save_file", ""), "modules": modules,
     }
     try:
         meta_update._atomic_json(CFG, data)

@@ -2,8 +2,6 @@
 """支线扫描：任务状态、奖励、剧情线与前置链路。"""
 import os
 
-KEY = "quest"
-LABEL = "支线"
 
 DONE_STATES = (2, 3)
 DOING_STATES = (1, 6)

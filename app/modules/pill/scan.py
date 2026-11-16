@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
 """炼丹扫描。"""
-import meta_update
-
-from .. import common
-
-KEY = "pill"
-LABEL = "炼丹"
+from ... import common
+from .build import load_fog_strokes, load_pill_map
 
 
 def _manual_field(entry, name):
@@ -59,7 +55,7 @@ def meta(metadata):
 
 
 def prepare(game_dir):
-    return meta_update.load_pill_map(game_dir, common.BUILTIN_DIR)
+    return load_pill_map(game_dir, common.BUILTIN_DIR)
 
 
 def scan(obj, meta_obj, state=None):
@@ -70,7 +66,7 @@ def scan(obj, meta_obj, state=None):
 def post(rows, state, original, path):
     mapdata = state[0] if state else {}
     rows["fog"] = {m.get("name") or "default":
-                   meta_update.load_fog_strokes(original or path, m.get("name") or "default")
+                   load_fog_strokes(original or path, m.get("name") or "default")
                    for m in (mapdata.get("maps") or [])}
     return rows
 

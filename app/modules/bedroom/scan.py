@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 """仙居楼互动（成就「十八摸」）扫描。"""
-from .. import common
-
-KEY = "bedroom"
-LABEL = "仙居楼互动"
-SELECT = "best"
+from ... import common
 
 
 def scan_bedroom(obj, meta):

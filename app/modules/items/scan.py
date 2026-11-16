@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """NPC 物品扫描。"""
-KEY = "items"
-LABEL = "NPC物品"
 
 
 def bag_items(bag):
