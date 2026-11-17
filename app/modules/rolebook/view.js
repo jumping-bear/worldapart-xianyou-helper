@@ -1,11 +1,11 @@
 /* 人物图鉴：以"现在在哪、他和我什么关系、能对他做什么"为主线的 NPC 档案墙。 */
 (function () {
   'use strict';
-  var STORE_KEY = 'worldapart.rolebook.filters.v4';
+  var STORE_KEY = 'worldapart.rolebook.filters.v5';
   var DEFAULTS = {
     q: '', rel: '', evil: '', realm: '', sect: '', personality: '',
     present: 0, met: 0, dao: 0, friend: 0, housed: 0, evilneg: 0,
-    spar: 0, steal: 0, merchant: 0, attackable: 0, memoria: 0, talent: 0,
+    safe: 0, spar: 0, steal: 0, merchant: 0, attackable: 0, memoria: 0, talent: 0,
     sort: 'relevance'
   };
   var PAGE = 48;  // 分批渲染步长
@@ -117,6 +117,7 @@
     if (filters.friend && (c.roles || []).indexOf('朋友') < 0) return false;
     if (filters.housed && !c.housed) return false;
     if (filters.evilneg && !(c.evil < 0)) return false;
+    if (filters.safe && !c.safe_target) return false;
     if (filters.spar && !c.spar) return false;
     if (filters.steal && !c.steal) return false;
     if (filters.merchant && !c.merchant) return false;
@@ -133,6 +134,17 @@
 
   function sortRows(rows) {
     var by = filters.sort;
+    // 安全击杀视角：先把"现在就能去杀的"排前面，再按恶名从重到轻
+    if (by === 'safe' || (filters.safe && by === 'relevance')) {
+      function rank(c) {
+        if (c.safe_now) return 0;
+        return c.present && !c.gone ? 1 : 2;
+      }
+      return rows.sort(function (a, b) {
+        return rank(a) - rank(b) || a.evil - b.evil ||
+          String(a.name).localeCompare(String(b.name), 'zh-CN');
+      });
+    }
     rows.sort(function (a, b) {
       if (by === 'relevance') return relevance(b) - relevance(a) || a.id - b.id;
       if (by === 'id') return a.id - b.id;
@@ -146,11 +158,40 @@
     return rows;
   }
 
+  // 击杀规则：NPC 卡只存规则下标，文案与数字统一取 meta.alignment_rules
+  function killRuleOf(c, meta) {
+    var rules = (meta || {}).alignment_rules || [], id = num(c.kill_rule);
+    for (var i = 0; i < rules.length; i++) {
+      if (num(rules[i].id) === id) return rules[i];
+    }
+    return null;
+  }
+  function killEntries(rule) {
+    return [['善值', rule.good_delta], ['恶值', rule.evil_delta],
+            ['城镇声望', rule.city_rep], ['宗门声望', rule.sect_rep]];
+  }
+  function signed(v) { return (v > 0 ? '+' : '') + v; }
+  // 卡片悬停用的一句话结论：恶名目标连 0 都写出来，让"不扣"看得见
+  function killSummary(c, meta) {
+    var rule = killRuleOf(c, meta);
+    if (!rule) return '';
+    return killEntries(rule).map(function (e) {
+      return e[0] + ' ' + signed(e[1]);
+    }).join(' · ');
+  }
+
   function cardHtml(c, meta, map) {
     var cls = evilClass(c.evil);
-    var badges = roleTags(c) || (c.met ? '<span class="rolebook-role-none">有交情 · 暂无关系</span>'
-                                     : (c.present ? '<span class="rolebook-role-none">在世 · 尚未结识</span>'
-                                                  : '<span class="rolebook-role-none">未在当前世界</span>'));
+    var badges = roleTags(c);
+    if (c.safe_target) {
+      badges = '<span class="rolebook-safe" title="击杀此人：' + esc(killSummary(c, meta)) +
+        '">安全击杀</span>' + badges;
+    }
+    if (!badges) {
+      badges = c.met ? '<span class="rolebook-role-none">有交情 · 暂无关系</span>'
+        : (c.present ? '<span class="rolebook-role-none">在世 · 尚未结识</span>'
+                     : '<span class="rolebook-role-none">未在当前世界</span>');
+    }
     var place = placeLines(c);
     return '<article class="rolebook-card rolebook-card-' + cls + '" data-npc="' + c.id + '" tabindex="0">' +
       '<div class="rolebook-card-top">' + avatarHtml(c, '', map) +
@@ -177,7 +218,7 @@
 
   var CHIPS = [
     ['present', '在世'], ['met', '有交情'], ['dao', '道侣'], ['friend', '朋友'], ['housed', '已入住'],
-    ['evilneg', '负善恶'], ['spar', '可切磋'], ['steal', '可偷窃'],
+    ['evilneg', '负善恶'], ['safe', '可安全击杀'], ['spar', '可切磋'], ['steal', '可偷窃'],
     ['merchant', '商人'], ['attackable', '可攻击'], ['memoria', '有留影'], ['talent', '固定天赋']
   ];
 
@@ -186,8 +227,11 @@
     if (!info) return;
     var present = rows.filter(function (c) { return c.present; }).length;
     var met = rows.filter(function (c) { return c.met; }).length;
+    var safe = rows.filter(function (c) { return c.safe_target; }).length;
+    var safeNow = rows.filter(function (c) { return c.safe_now; }).length;
     info.innerHTML = '命中 <b>' + rows.length + '</b> / ' + total + ' 位 · 在世 <b>' + present +
-      '</b> 位 · 有交情 <b>' + met + '</b> 位';
+      '</b> 位 · 有交情 <b>' + met + '</b> 位' +
+      (filters.safe ? ' · 可安全击杀 <b>' + safe + '</b> 位（在世 <b>' + safeNow + '</b> 位）' : '');
   }
 
   function renderCards(m, reset) {
@@ -266,27 +310,51 @@
         '<small>' + esc(note) + '</small></div></div></div>';
   }
 
-  function attackHtml(c, meta) {
+  // 击杀后果：用玩家语言写清"杀了他我会怎样"，安全目标连 0 都摆出来
+  function killHtml(c, meta) {
     if (!c.killable) {
-      return '<p class="rolebook-note">此人在配置里不可攻击。' +
+      return '<p class="rolebook-note">配置上不可击杀（剧情或寿元保护角色）。' +
         (c.dao ? '对方与你有道侣关系，动手也会直接破坏关系。' : '') + '</p>';
     }
-    var a = c.attack || {};
-    function delta(label, val, good) {
-      if (!val) return '';
-      var cls = good ? 'up' : 'down';
-      return '<span class="rolebook-delta rolebook-delta-' + cls + '">' + esc(label) +
-        ' ' + (val > 0 ? '+' : '') + esc(val) + '</span>';
+    var rule = killRuleOf(c, meta);
+    if (!rule) return '<p class="rolebook-note">没有匹配到击杀规则。</p>';
+    // 恶名目标四项全列（0 也要露出来）；其余只列真正变化的项
+    var entries = killEntries(rule);
+    if (rule.kind !== 'evil') {
+      entries = entries.filter(function (e) { return e[1]; });
     }
+    var line = entries.map(function (e) {
+      var v = e[1];
+      var cls = v > 0 ? 'up' : (v < 0 ? 'down' : 'flat');
+      return '<span class="rolebook-kill-delta rolebook-kill-' + cls + '">' + esc(e[0]) +
+        ' ' + esc(signed(v)) + '</span>';
+    }).join('<span class="rolebook-kill-sep">·</span>');
+
+    var tip;
+    if (rule.kind === 'evil') {
+      tip = '<p class="rolebook-kill-tip">杀他不掉恶值、不扣城镇与宗门声望' +
+        (rule.good_delta > 0 ? '，只会补 ' + esc(rule.good_delta) + ' 点善值' : '') +
+        '。想动手又不想背恶名，优先挑这类人。</p>';
+    } else if (rule.kind === 'good') {
+      tip = '<p class="rolebook-kill-tip rolebook-kill-warn">不推荐：杀善良之人会加恶值，' +
+        '还会连累当地城镇与其宗门声望。</p>';
+    } else {
+      tip = '<p class="rolebook-kill-tip">中庸之人也会沾一点恶值，能不杀就不杀。</p>';
+    }
+    var where = c.safe_target
+      ? (c.safe_now
+          ? '<p class="rolebook-kill-tip">他现在就在 <b>' + esc(c.loc_name || c.loc) + '</b>，可直接前往。</p>'
+          : '<p class="rolebook-kill-tip rolebook-kill-warn">不在当前世界（未生成或已退隐），暂时杀不到。</p>')
+      : '';
     var chase = (meta.chase || []).map(function (row) {
       return '<li>恶值 ≤ <b>' + esc(row.threshold) + '</b>：追杀概率 <b>' + esc(row.prob) + '%</b></li>';
     }).join('');
-    return '<p class="rolebook-note">可攻击。动手后的代价：</p>' +
-      '<div class="rolebook-attack-grid">' +
-      delta('善值', a.good, true) + delta('恶值', a.evil, false) +
-      delta('城镇声望', a.city, false) + delta('宗门声望', a.sect, false) + '</div>' +
-      (a.desc ? '<p class="rolebook-note">' + esc(a.desc) + '</p>' : '') +
-      (chase ? '<div class="rolebook-chase"><span>被追杀的恶值阈值</span><ul>' + chase + '</ul></div>' : '');
+    return '<div class="rolebook-kill">' +
+      '<div class="rolebook-kill-line">' + line + '</div>' +
+      (rule.desc ? '<p class="rolebook-note rolebook-kill-raw">' + esc(rule.desc) + '</p>' : '') +
+      tip + where +
+      (chase ? '<div class="rolebook-chase"><span>被追杀的恶值阈值</span><ul>' + chase + '</ul></div>' : '') +
+      '</div>';
   }
 
   function favorHtml(c, meta) {
@@ -365,8 +433,8 @@
           '<small>' + esc(tierName(meta, 'repute_tiers', c.repute_tier)) + '</small></div>' +
       '</div>' +
       (tierDesc(meta, 'evil_tiers', c.evil_tier) ? '<p class="rolebook-note">' +
-        esc(tierDesc(meta, 'evil_tiers', c.evil_tier)) + '</p>' : '') +
-      attackHtml(c, meta));
+        esc(tierDesc(meta, 'evil_tiers', c.evil_tier)) + '</p>' : ''));
+    html += section('击杀后果', killHtml(c, meta));
     var rel = [];
     if (c.memoria_titles && c.memoria_titles.length)
       rel.push('<div class="rolebook-rel-label">留影（' + c.memoria + '）</div><div class="rolebook-tags">' +
@@ -469,10 +537,12 @@
       '<div class="rolebook-hero">' +
         '<div class="rolebook-hero-text"><h2>人物图鉴 · NPC 档案</h2>' +
         '<p><b>在世</b>是存档里真实存在、能定位的人；<b>有交情</b>才是打过交道的那一小撮。' +
-        '位置来自存档实时空间；不在当前世界的如实标注，不拿配置常驻地凑数。</p></div>' +
+        '位置来自存档实时空间；不在当前世界的如实标注，不拿配置常驻地凑数。' +
+        '想找人动手又不想背恶名：勾选<b>可安全击杀</b>再叠<b>在世</b>，名单里的人杀完不掉恶值、不扣城镇与宗门声望。</p></div>' +
         '<div class="rolebook-hero-figures">' +
           '<div><b>' + esc(stats.total || 0) + '</b><span>图鉴</span></div>' +
           '<div><b>' + esc((m.live_stats || {}).present || 0) + '</b><span>在世</span></div>' +
+          '<div><b>' + esc((m.live_stats || {}).safe_target_present || 0) + '</b><span>安全击杀</span></div>' +
           '<div><b>' + esc((m.live_stats || {}).met || 0) + '</b><span>有交情</span></div>' +
         '</div>' +
       '</div>' +
@@ -500,7 +570,7 @@
         '</div>' +
         '<div class="rolebook-filters-row rolebook-filters-row2">' +
           '<label class="rolebook-field"><span>排序</span><select id="rolebook-sort">' +
-            [['relevance', '与我相关优先'], ['layer', '境界高低'], ['favor', '好感优先'],
+            [['relevance', '与我相关优先'], ['safe', '安全目标优先'], ['layer', '境界高低'], ['favor', '好感优先'],
              ['evil', '由恶到善'], ['evilDesc', '由善到恶'], ['name', '按名字'], ['id', '按 ID']]
               .map(function (p) {
                 return '<option value="' + p[0] + '"' + (filters.sort === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
