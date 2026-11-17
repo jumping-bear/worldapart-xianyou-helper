@@ -3,6 +3,10 @@
 
 只从 meta_update 导入公共纯函数，不 import 任何其它模块。
 档位说明等共享文本只放 meta（一份），NPC 卡只存档位 id，控制快照体积。
+
+境界全称链路：propLayerId → tbcultivatelayer(phase,layer) →
+tbcultivatephase(phase_name,realm) → tbcultivaterealm(realm_name)，
+合成"炼气后期·十二层"这类展示文本；层 0 视为凡人。
 """
 from meta_update import SCHEMA, _int, _plain, _rows, _text
 
@@ -11,13 +15,24 @@ _EVIL_MIN, _EVIL_MAX = -500, 500
 
 _SEX = {1: "男", 2: "女", 3: "其他", 0: "未知"}
 _ELEMENT_KEYS = (1, 2, 3, 4, 5)
+_CN = "零一二三四五六七八九"
+
+
+def _cn_num(n):
+    """1..99 转中文数字，用于'十二层'这类层号。"""
+    n = _int(n, 0)
+    if n <= 0:
+        return "零"
+    if n < 10:
+        return _CN[n]
+    if n < 20:
+        return "十" + (_CN[n % 10] if n % 10 else "")
+    tens, ones = divmod(n, 10)
+    return _CN[tens] + "十" + (_CN[ones] if ones else "")
 
 
 def _tier(rows, value, min_key, fallback_index=0):
-    """档位匹配：取 min_key <= value 中 min 最大的档；没有则回退最低档。
-
-    善恶表 min 为降序（-200/-99/0/200/500），其余为升序，本逻辑对两者通用。
-    """
+    """档位匹配：取 min_key <= value 中 min 最大的档；没有则回退最低档。"""
     hit = None
     for row in rows:
         if not isinstance(row, dict):
@@ -38,28 +53,77 @@ def _name_map(rows, name_key):
     return out
 
 
-def _phases(realm_rows):
-    """layer(phase) -> realm_id，境界名由 realms 提供。"""
-    phases = {}
-    for row in _rows(realm_rows):
-        if isinstance(row, dict):
-            realm_id = _int(row.get("id"))
-            for phase in row.get("phases") or []:
-                phases[str(_int(phase))] = realm_id
-    return phases
+def _cultivation(tables):
+    """构建 propLayerId -> (全称, 大境界, 层序) 的完整映射。"""
+    realms = _name_map(tables.get("tbcultivaterealm"), "realm_name")
+    realms.setdefault("0", "凡人")
+    phase_rows = {}
+    for row in _rows(tables.get("tbcultivatephase")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            phase_rows[str(_int(row.get("id")))] = row
+    phase_name = {
+        key: (_text(row.get("phase_name")) or "")
+        for key, row in phase_rows.items()}
+    phase_realm = {
+        key: _int(row.get("realm"))
+        for key, row in phase_rows.items()}
+    layer_map = {}
+    for row in _rows(tables.get("tbcultivatelayer")):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        layer_id = _int(row.get("id"))
+        phase_id = str(_int(row.get("phase")))
+        lv = _int(row.get("layer"))
+        pname = phase_name.get(phase_id, "")
+        realm_name = realms.get(str(phase_realm.get(phase_id, 0)), "")
+        full = ("%s·%s层" % (pname, _cn_num(lv))) if pname else (realm_name or "修行")
+        layer_map[str(layer_id)] = {
+            "full": full, "phase": pname, "realm": realm_name,
+            "realm_id": _int(phase_realm.get(phase_id, 0)),
+            "layer": lv, "order": layer_id,
+        }
+    return realms, layer_map
 
 
-def _realm_for_layer(phases, realms, layer):
-    if layer in (None, ""):
-        return realms.get("0", "凡人")
-    best = None
-    for raw, realm_id in phases.items():
-        phase = _int(raw)
-        if phase <= _int(layer) and (best is None or phase > best[0]):
-            best = (phase, realm_id)
-    if best is None:
-        return realms.get("0", "凡人")
-    return realms.get(str(best[1])) or ("境界 %s" % best[1])
+def _realm_for_layer(realms, layer_map, layer_id):
+    if layer_id in (None, "", 0, "0"):
+        return {"full": "凡人", "phase": "", "realm": "凡人", "layer": 0, "order": 0}
+    return layer_map.get(str(_int(layer_id))) or {
+        "full": "凡人", "phase": "", "realm": "凡人", "layer": 0, "order": 0}
+
+
+def _places(tables):
+    """按 realm_id 给常驻地提示；行为场景映射多为占位，仅取可读地名。"""
+    places = {}
+    for row in _rows(tables.get("tbnpcbehaviorspacemapping")):
+        if not isinstance(row, dict):
+            continue
+        rid = str(_int(row.get("realm_id")))
+        name = _text(row.get("sapce_name"))
+        if not name or "占位" in name:
+            continue
+        places.setdefault(rid, [])
+        if name not in places[rid]:
+            places[rid].append(name)
+    # tbspace 提供各空间正式名称，作为 realm 地名兜底来源
+    for row in _rows(tables.get("tbspace")):
+        if not isinstance(row, dict):
+            continue
+        rid = str(_int(row.get("realm_id")))
+        name = _text(row.get("spaceName"))
+        if not name:
+            continue
+        places.setdefault(rid, [])
+        if name not in places[rid] and len(places[rid]) < 3:
+            places[rid].append(name)
+    return places
+
+
+def _place_for(realm_id, places, realm_name, sect):
+    hits = places.get(str(_int(realm_id))) or []
+    if hits:
+        return "、".join(hits[:2])
+    return (realm_name + "修士" if realm_name and realm_name != "凡人" else (sect or "来历不明"))
 
 
 def _first_text(value, limit=160):
@@ -100,14 +164,13 @@ def build(tables):
         [r for r in _rows(tables.get("tbevilattackprobability")) if isinstance(r, dict)],
         key=lambda r: _int(r.get("alignment_threshold")))
 
-    realms = _name_map(tables.get("tbcultivaterealm"), "realm_name")
-    realms.setdefault("0", "凡人")
+    realms, layer_map = _cultivation(tables)
     sects = _name_map(tables.get("tbsect"), "sectName")
     races = _name_map(tables.get("tbnpcrace"), "raceName")
     elements = _name_map(tables.get("tbelement"), "element_name")
     talents = {str(r["id"]): _text(r.get("name")) for r in _rows(tables.get("tbnpctalent"))
                if isinstance(r, dict) and r.get("id") is not None}
-    phases = _phases(tables.get("tbcultivaterealm"))
+    places = _places(tables)
 
     # 关联内容：按 npc_id / npcId 聚合，NPC 卡只存计数与前几个标题
     memoria = {}
@@ -167,6 +230,7 @@ def build(tables):
              "prob": _int(r.get("chase_probability"))} for r in chase_rules],
         "realms": realms, "sects": sects, "races": races,
         "elements": elements, "talents": talents,
+        "places": places,
     }
 
     # tier_pack 用 enumerate 编号，匹配时也需按 enumerate 找 id
@@ -197,7 +261,9 @@ def build(tables):
         sect_id = _int(row.get("propSect"))
         sect = sects.get(str(sect_id)) if sect_id else ""
         sect = sect or "无门无派"
-        realm = _realm_for_layer(phases, realms, row.get("propLayerId"))
+        layer_id = row.get("propLayerId")
+        realm = _realm_for_layer(realms, layer_map, layer_id)
+        place = _place_for(realm.get("realm_id", 0), places, realm.get("realm"), sect)
         element_names = [elements.get(str(e)) for e in (row.get("element") or [])
                          if str(e) in elements]
 
@@ -246,7 +312,11 @@ def build(tables):
         npcs.append({
             "id": npc_id, "name": name, "avatar": avatar,
             "sex": sex, "age": _int(row.get("age")),
-            "race": race, "sect": sect, "realm": realm,
+            "lifespan": _int(row.get("lifespanAdjustment")),
+            "race": race, "sect": sect, "realm": realm["full"],
+            "realm_short": realm["realm"], "realm_raw": realm["phase"],
+            "layer": realm["layer"], "layer_order": realm["order"],
+            "place": place,
             "element": element_names,
             "personality_id": pid, "personality": pLabel,
             "evil": evil, "evil_tier": tier_id(evil_tiers, evil, "min"),
