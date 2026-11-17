@@ -125,6 +125,14 @@ def _eval_gate(gate, ctx):
     if kind in ("realm", "phase", "layer"):
         cur = ctx["layer"]
         return cur >= need, "修炼层数 %d/%d" % (cur, need), cur, need
+    if kind == "quest":
+        # 门槛是"必须已提交某个任务"（如「任务提交 11363」= 主线「天帷之破」）。
+        code = _int((ctx.get("_codes") or {}).get(need), -1)
+        if code < 0:
+            return False, "还没有接过这个前置任务", 0, 2
+        label = {0: "可接取", 1: "进行中", 2: "已完成", 3: "已提交",
+                 4: "已失败", 5: "已放弃", 6: "待提交"}.get(code, "未完成")
+        return code in (2, 3), "前置任务 %s" % label, code, 2
     return None, "", 0, need
 
 
