@@ -14,7 +14,7 @@ function qualityClass(q){return 'q'+Math.max(0,Math.min(9,n(q)))}
 function view(){
  if(!cache||cache.m!==DATA.modules.reputation){
   const m=DATA.modules.reputation||{};
-  const c=m.config||{};
+  const c=m.meta||{};
   const rows=m.rows||{};
   const config={};
   (c.towns||[]).forEach(town=>{config[n(town.id)]=town});

@@ -13,7 +13,7 @@ function qualityClass(q){return 'q'+Math.max(0,Math.min(9,n(q)))}
 function view(){
  if(!cache||cache.m!==DATA.modules.sect){
   const m=DATA.modules.sect||{};
-  const c=m.config||{};
+  const c=m.meta||{};
   cache={m:m,rows:m.rows||{},config:c,
    sects:Object.fromEntries((c.sects||[]).map(s=>[n(s.id),s])),
    positions:Object.fromEntries((c.positions||[]).map(p=>[n(p.id),p])),

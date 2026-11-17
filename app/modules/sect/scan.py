@@ -281,8 +281,7 @@ def post(rows, state, original, path):
 
 
 def enrich(module, meta_obj, state=None):
-    module["config"] = meta_obj or {}
-    module["config_warnings"] = (meta_obj or {}).get("warnings") or []
+    module["meta"] = meta_obj or {}
     return module
 
 
