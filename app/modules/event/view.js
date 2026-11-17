@@ -49,6 +49,27 @@ function initEvent(){
  };
  const checkText=k=>k.t==='attr'?`${(attrs[k.a]||{}).name||('属性'+k.a)} ${k.op} ${k.v}`:k.t==='money'?`灵石 ${k.op} ${k.v}`:`物品 ${k.i} ${k.op} ${k.v}`;
  const rewardChip=(x,got)=>`<span class="efchip fq${x.quality||0}${got?' got':''}" title="${esc((x.desc||'')+' · 掉率 '+x.chance+'%')}">${esc(x.name)} ×${x.min===x.max?x.min:x.min+'-'+x.max}${x.chance>=100?'':'<i>'+x.chance+'%</i>'}<span class="q">品质${x.quality||0}</span></span>`;
+ const chanceOf=x=>{const n=Number(x&&x.chance);return isFinite(n)?n:0};
+ // “随机其一”掉落池：同一掉落池里多项 chance 均 <100 且合计 ≈100（允许浮点误差）。
+ const isDropPool=rs=>rs&&rs.length>1&&rs.every(x=>chanceOf(x)<100)&&Math.abs(rs.reduce((a,x)=>a+chanceOf(x),0)-100)<=0.5;
+ const commonSuffix=names=>{if(!names.length)return '';let s=names[0];for(const n of names.slice(1)){let i=0;const m=Math.min(s.length,n.length);while(i<m&&s[s.length-1-i]===n[n.length-1-i])i++;s=s.slice(s.length-i);if(!s)break}return s};
+ const poolChip=(rs,got)=>{
+  const names=rs.map(x=>x.name||('物品 '+x.item));
+  const suffix=commonSuffix(names);
+  const pool=(suffix&&suffix.length>=2)?('随机'+suffix):'随机其一';
+  const shorts=(suffix&&suffix.length>=2)?names.map(n=>n.endsWith(suffix)?n.slice(0,n.length-suffix.length):n):names;
+  const labels=shorts.every(s=>s.length>0)?shorts:names;
+  const chances=rs.map(chanceOf);
+  const uniform=chances.every(c=>c===chances[0]);
+  const mins=rs.map(x=>Number(x.min)),maxs=rs.map(x=>Number(x.max));
+  let count='';
+  if(mins.every(v=>v===mins[0])&&maxs.every(v=>v===maxs[0]))count=mins[0]===maxs[0]?` ×${mins[0]}`:` ×${mins[0]}-${maxs[0]}`;
+  const qs=rs.map(x=>x.quality||0);
+  const q=qs.every(v=>v===qs[0])?qs[0]:0;
+  const title=rs.map(x=>`${x.name} · 掉率 ${chanceOf(x)}%${x.desc?'：'+x.desc:''}`).join('\n');
+  return `<span class="efchip fq${q}${got?' got':''}" title="${esc(title)}">${esc(pool)}${count}（${rs.length} 选 1）：${labels.map(esc).join(' / ')}${uniform?` · 各 ${chances[0]}%`:''}<span class="q">${qs.every(v=>v===qs[0])?'品质'+qs[0]:'随机其一'}</span></span>`;
+ };
+ const rewardsHtml=(rs,got)=>isDropPool(rs)?poolChip(rs,got):rs.map(x=>rewardChip(x,got)).join('');
  const realmRows=topRows.filter(r=>Number(r.realm||0)===Number(st.current_realm||0));
  const gateRows=topRows.filter(r=>!r.achieved&&groupMembers(r).some(m=>condSummary(m).some(c=>c.gate&&c.ok===false)));
  const cards=
@@ -80,13 +101,13 @@ function initEvent(){
     shown.join('')+(more?`<span class="cchip unk">+${more} 条条件</span>`:'')+(o.eff||[]).map(e=>`<span class="effchip">${esc(e)}</span>`).join('')+`</div>`;
    if(o.to&&o.to.startsWith('e:')){
     const eid=+o.to.slice(2),e=(r.endings||[]).find(x=>x.id===eid);
-    html+=`<div class="tend">结局：${e?`<b>${esc(e.title)}</b><span class="egrade ${gradeCls(e.grade)}">${esc(e.grade_name||gradeName(e.grade))}</span>${e.rewards.map(x=>rewardChip(x,e.got)).join('')}`:'#'+eid}</div>`;
+    html+=`<div class="tend">结局：${e?`<b>${esc(e.title)}</b><span class="egrade ${gradeCls(e.grade)}">${esc(e.grade_name||gradeName(e.grade))}</span>${rewardsHtml(e.rewards,e.got)}`:'#'+eid}</div>`;
    }else if(o.to){
     html+=`<div class="tbranch">${treeHtml(r,o.to,seen,depth+1)}</div>`;
    }
    (o.after||[]).forEach(tid=>{
     const eid=+tid.slice(2),e=(r.endings||[]).find(x=>x.id===eid);
-    html+=`<div class="tend">结算结局：${e?`<b>${esc(e.title)}</b>${e.rewards.map(x=>rewardChip(x,e.got)).join('')}`:'#'+eid}</div>`;
+    html+=`<div class="tend">结算结局：${e?`<b>${esc(e.title)}</b>${rewardsHtml(e.rewards,e.got)}`:'#'+eid}</div>`;
    });
   });
   seen.delete(id);
@@ -124,7 +145,7 @@ function initEvent(){
    (e.got?'<span class="badge ok">已达成</span>':'')+
    (e.history_got&&!e.got?'<span class="badge">历史达成</span>':'')+
    (e.reward_ok===false?'<span class="badge warn">奖励未收录</span>':'')+
-   `</div>${e.rewards.length?`<div class="erewards"><b>奖励</b><div class="efchips">${e.rewards.map(x=>rewardChip(x,e.got)).join('')}</div></div>`:'<div class="muted small">无奖励记录</div>'}`+
+   `</div>${e.rewards.length?`<div class="erewards"><b>奖励</b><div class="efchips">${rewardsHtml(e.rewards,e.got)}</div></div>`:'<div class="muted small">无奖励记录</div>'}`+
    `${(e.path||[]).length?`<div class="epath"><b>达成路径</b><div class="psteps">${e.path.map((step,i)=>`<span class="pstep"><i>${i+1}</i>${esc(step)}</span>`).join('<span class="parrow">›</span>')}</div></div>`:''}`+
    `${e.summary?`<div class="eend-sum">${esc(e.summary)}</div>`:''}`+
    `${(e.detail||[]).length?`<div class="eend-detail">${e.detail.map(esc).join(' · ')}</div>`:''}</div>`).join('');
