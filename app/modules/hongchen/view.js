@@ -40,7 +40,7 @@ function isDim(q){return !matchFilter(q)||!matchQuery(q)}
 
 function gateBadges(q){
   const out=[];
-  (q.gates||[]).forEach(g=>{if(g&&g.text)out.push('<span class="hongchen-badge gate" title="'+esc(g.alias||'玩家门槛')+'">'+esc(g.text)+'</span>')});
+  (q.gates||[]).forEach(g=>{if(g&&g.text)out.push('<span class="hongchen-badge gate" title="'+esc(g.source==='optionCondition'?'选项门槛（游戏里可能不提示）':'门槛')+'">'+esc(g.text)+'</span>')});
   (q.options||[]).forEach(o=>{if(o&&o.gate&&o.gate.text)
     out.push('<span class="hongchen-badge opt" title="'+esc(o.text||'选项')+'">'+esc(o.gate.text)+'</span>')});
   return out.length?'<div class="hongchen-badges">'+out.join('')+'</div>':'';
