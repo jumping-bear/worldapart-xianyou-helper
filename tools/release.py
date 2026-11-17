@@ -106,10 +106,9 @@ def preflight(version):
             continue
         if "v%s" % version not in text.splitlines()[0]:
             todos.append("%s 首行版本号待更新为 v%s" % (name, version))
-        if name.endswith("_en.txt"):
-            encoded = len(_vdf(text).encode("utf-8"))
-            if encoded >= DESC_LIMIT:
-                errors.append("工坊英文描述转义后 %d 字节，超过 %d 上限" % (encoded, DESC_LIMIT))
+        encoded = len(_vdf(text).encode("utf-8"))
+        if encoded >= DESC_LIMIT:
+            errors.append("%s 转义后 %d 字节，超过 %d 上限" % (name, encoded, DESC_LIMIT))
 
     changenote = os.path.join(RELEASE_DIR, "changenote.txt")
     if not os.path.isfile(changenote):
