@@ -1,20 +1,32 @@
-/* NPC 天赋：区域分组 + NPC 卡片折叠布局，深色主题。只写本模块选择器。 */
+/* NPC 天赋：天赋优先布局 + 高亮/变暗，深色主题。只写本模块选择器。 */
 .talent-stats{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 2px}
 .talent-stat{flex:1;min-width:110px;background:#171b23;border:1px solid #293140;border-radius:11px;padding:11px 14px}
 .talent-stat b{display:block;font-size:21px;font-weight:650;color:#e8eaed}
 .talent-stat span{color:#8b93a1;font-size:12px}
-.talent-filter-bar{grid-template-columns:minmax(150px,1fr) minmax(190px,1.35fr) auto auto;align-items:end}
+/* 同道提示横幅 */
+.talent-dao-hint{margin:14px 2px 0;padding:12px 15px;background:#16231c;border:1px solid #2f5b45;border-radius:10px;color:#c9f5dd;font-size:13px;line-height:1.8}
+.talent-dao-hint b{color:#8fd0a9;font-weight:650}
+/* 搜索：天赋搜索框更醒目 */
+.search-hero input{font-size:15px;padding:13px 14px;border-color:#3d735b}
+.search-hero input:focus{border-color:#55c78b;box-shadow:0 0 0 2px #1f3a2e}
+/* 主筛选栏：品质 / 分类 / 境界 / 只看可拜访 / 清空 */
+.talent-filter-bar{grid-template-columns:minmax(130px,1fr) minmax(140px,1.1fr) minmax(130px,1fr) auto auto;align-items:end}
 .talent-check{display:flex;align-items:center;gap:7px;min-height:40px;color:#aeb8c7;font-size:13px;cursor:pointer;white-space:nowrap;user-select:none}
 .talent-check input{width:16px;height:16px;accent-color:#3d735b;cursor:pointer}
-.talent-region{background:#12151b;border:1px solid #232b36;border-radius:12px;margin:0 0 13px;overflow:hidden}
-.talent-region>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:9px;padding:13px 16px;background:#171b23}
-.talent-region>summary::-webkit-details-marker{display:none}
-.talent-region>summary:before{content:"›";color:#6f7787;font-size:19px;transition:.15s}
-.talent-region[open]>summary:before{transform:rotate(90deg)}
-.talent-region-name{font-size:15px;font-weight:650;color:#d7dee8}
-.talent-region-count{margin-left:auto;color:#778292;font-size:11px}
-.talent-region-body{padding:10px 12px 13px;border-top:1px solid #232b36}
-/* NPC 卡：在世正常，离世/不在世灰化 */
+/* 天赋卡片：主结构（替代旧的区域分组） */
+.talent-card{background:#12151b;border:1px solid #232b36;border-radius:12px;margin:0 0 10px;overflow:hidden}
+.talent-card>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 15px;background:#171b23}
+.talent-card>summary::-webkit-details-marker{display:none}
+.talent-card>summary:before{content:"›";color:#6f7787;font-size:19px;transition:.15s}
+.talent-card[open]>summary:before{transform:rotate(90deg)}
+.talent-card>summary .talent-name{font-size:15px}
+.talent-holder-count{margin-left:auto;color:#778292;font-size:11px}
+/* 未命中筛选的天赋：保留但变暗，不删除 */
+.talent-dim{opacity:.5;filter:grayscale(.35)}
+.talent-detail{padding:11px 15px 13px;border-top:1px solid #232b36}
+.talent-holder-note{color:#8b93a1;font-size:11px;margin:10px 0 8px}
+.npc-holders{padding:0}
+/* NPC 卡在世状态标识 */
 .talent-status{display:inline-block;margin-left:5px;padding:1px 7px;border-radius:6px;font-size:10px;font-weight:600;vertical-align:middle}
 .talent-status.talent-live{background:#22392e;color:#8ee6b3}
 .talent-status.talent-gone{background:#3a2126;color:#e88b82}
@@ -24,12 +36,8 @@
 .talent-gone-card summary .who{color:#9aa3b2}
 .talent-absent-card{opacity:.55;filter:grayscale(.5)}
 .talent-absent-card summary .who{color:#9aa3b2}
-/* 卡片摘要里的天赋芯片：只露名字 + 品质色 + 是否可学 */
-.talent-chips{display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px 3px;border-top:1px solid #20252e}
-.talent-chip{display:inline-flex;align-items:center;gap:5px;background:#1a2029;border:1px solid #2b3340;border-radius:7px;padding:2px 8px;font-size:12px}
-.talent-chip-unknown{color:#7d8593;border-style:dashed}
-.talent-chip-lock{font-style:normal;font-size:10px;color:#b98289}
-.talent-chip-lock.on{color:#6edda2}
-.talent-chip.q0{color:#cfd6df}.talent-chip.q1{color:#9fd6a9}.talent-chip.q2{color:#82baf5}.talent-chip.q3{color:#c7a1ef}.talent-chip.q4{color:#e8c76d}.talent-chip.q5{color:#e88b82}
+/* 未命中筛选的 NPC / 槽位：变暗保留 */
+.npc-dim{opacity:.55;filter:grayscale(.3)}
+.slot-dim{opacity:.5;filter:grayscale(.3)}
 @media(max-width:850px){.talent-filter-bar{grid-template-columns:1fr 1fr}.talent-filter-bar .talent-check,.talent-filter-bar .filter-actions{grid-column:span 1}}
-@media(max-width:560px){.talent-filter-bar{grid-template-columns:1fr}.talent-region-name{font-size:14px}.talent-stat{min-width:80px;padding:9px 10px}.talent-stat b{font-size:18px}}
+@media(max-width:560px){.talent-filter-bar{grid-template-columns:1fr}.talent-card>summary .talent-name{font-size:14px}.talent-stat{min-width:80px;padding:9px 10px}.talent-stat b{font-size:18px}}

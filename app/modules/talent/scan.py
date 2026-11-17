@@ -16,6 +16,16 @@ def _int(value):
         return 0
 
 
+def _realm_for_layer(phases, layer):
+    """把存档里的 cultivate_layer_id 映射回境界 id（同 sect 模块的口径）。"""
+    best, realm = -1, 0
+    for raw, realm_id in (phases or {}).items():
+        phase = _int(raw)
+        if phase <= _int(layer) and phase > best:
+            best, realm = phase, _int(realm_id)
+    return realm
+
+
 def scan_talent(obj, meta):
     talents = {str(r.get("id")): r for r in meta.get("talents", []) if isinstance(r, dict)}
     npc_meta = meta.get("npcs") or {}
@@ -23,6 +33,10 @@ def scan_talent(obj, meta):
     spaces = obj.get("spaces") or {}
     player = obj.get("playerModel") or {}
     dao_ids = {str(x) for x in ((player.get("npc_dao_ally") or {}).get("npc_ids") or [])}
+    # 同道提示：从存档推导玩家当前境界，容量在 enrich 阶段再按境界配置查表。
+    player_realm = _realm_for_layer(meta.get("phases") or {},
+                                    (player.get("combat") or {}).get("cultivate_layer_id"))
+    dao = {"realm_id": str(player_realm), "count": len(dao_ids)}
 
     # 存档实例按 npcCfgId 建索引；同一配置可能有多份记录，优先留在世的。
     save_by_cfg = {}
@@ -101,14 +115,15 @@ def scan_talent(obj, meta):
             "space_id": space_id, "dao": str(cfg) in dao_ids,
             "slots": slots, "present": present, "gone": gone,
         })
-    # 在世优先，其次按区域、名字排序，便于前端分组展示。
+    # 在世优先，其次按名字排序（位置已降级为次要信息，不再作为主分组键）。
     rows.sort(key=lambda r: (0 if (r["present"] and not r["gone"]) else (1 if r["gone"] else 2),
-                             str(r["region"]), str(r["who"]), str(r["uid"])))
-    return rows
+                             str(r["who"]), str(r["uid"])))
+    return {"rows": rows, "dao": dao}
 
 
 def meta(metadata):
-    empty = {"items": {}, "npcs": {}, "spaces": {}, "realms": {"0": "凡人"}}
+    empty = {"items": {}, "npcs": {}, "spaces": {}, "realms": {"0": "凡人"},
+             "realm_capacity": {}, "phases": {}}
     return metadata.get("talent") or dict(empty, talents=[])
 
 
@@ -127,7 +142,22 @@ def post(rows, state, original, path):
 def enrich(module, meta_obj, state=None):
     module["talents"] = meta_obj.get("talents") or []
     module["realms"] = meta_obj.get("realms") or {"0": "凡人"}
-    rows = module.get("rows") or []
+    module["realm_capacity"] = meta_obj.get("realm_capacity") or {}
+    payload = module.get("rows")
+    dao = {}
+    if isinstance(payload, dict):
+        rows = payload.get("rows") or []
+        dao = payload.get("dao") or {}
+        module["rows"] = rows
+    else:
+        rows = payload or []
+    realm_id = str(dao.get("realm_id") or "0")
+    module["dao"] = {
+        "realm_id": realm_id,
+        "realm_name": module["realms"].get(realm_id, ""),
+        "count": dao.get("count", 0),
+        "capacity": module["realm_capacity"].get(realm_id, 0),
+    }
     present = sum(1 for r in rows if r.get("present") and not r.get("gone"))
     gone = sum(1 for r in rows if r.get("gone"))
     absent = sum(1 for r in rows if not r.get("present"))
