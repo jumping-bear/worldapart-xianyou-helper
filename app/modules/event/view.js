@@ -273,7 +273,7 @@ function initEvent(){
  const realmNames=[...new Set(topRows.map(r=>r.realm_name||'未知境界'))];
  const realmList=[...new Set(topRows.map(r=>String(r.realm||0)))];
  host.innerHTML=sourceHtml(m)+`<div class="notice"><b>境界提示：</b>奇遇绑定所在地点，配置里没有“境界高就关闭低阶奇遇”的硬限制；突破后低境界奇遇仍需回到对应地点才会遇到。当前境界的奇遇建议先清。</div>`+`<div class="notice"><b>分支归并：</b>同一母奇遇下的子奇遇折叠在母奇遇里；任一分支被选择或达成，整条奇遇即视为完成，其余未选分支不再计入未达成。无法确定父子关系的奇遇仍单独展示。</div>`+`<div class="cards">${cards}</div>`+
-  `<div class="legend"><span>奖励颜色：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span><span>越靠右越稀有</span></div>`+
+  `<div class="legend"><span>物品品质(0-5)：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span><span>越靠右越稀有</span></div>`+
   `<div class="legend"><span>结局品级：</span><span><i style="background:#8ee6b3"></i>上品</span><span><i style="background:#b9d9ff"></i>中品</span><span><i style="background:#e88b82"></i>下品</span><span>只代表结局平均奖励高低，具体看掉落</span></div>`+
   `<div class="chips event-chips" id="evgoals"><span class="chip-label">我想…</span>`+
    `<button class="chip" data-goal="check">出发前检查</button>`+

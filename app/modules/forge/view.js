@@ -141,6 +141,7 @@ function initForge(){
   fzone('fg-catalog','全部器胚','按境界 + 部位折叠 · 高境界在前',catalogBody)+
   fzone('fg-materials','材料盘点','按五行统计件数与灵性',materialsBody)+
   fzone('fg-pity','洗练保底','同境界、同品质法宝共享计数',pityBody)+
+  '<div class="legend"><span>法宝品阶(白~橙)：</span><span><i style="background:#8b8b8b"></i>白</span><span><i style="background:#4e9a6a"></i>绿</span><span><i style="background:#4a8fc4"></i>蓝</span><span><i style="background:#9a6cc0"></i>紫</span><span><i style="background:#d5a03f"></i>橙</span></div>'+
   '<div class="tip">五行需求按“该五行精粹需占几格”计算；缺口＝背包该五行材料总件数－需求格数，只作库存参考，实际摆盘还受封炉格与聚灵格影响。器契达到凡/玄/地/天四档门槛即对应阶，天阶最高。</div>';
  const realmBox=$('fgrealm'),slotBox=$('fgslot');
  $('fgq').value=state.q;
