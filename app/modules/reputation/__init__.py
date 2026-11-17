@@ -6,7 +6,7 @@ from .build import build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "reputation", "声望"
-ORDER, SELECT, SCHEMA = 86, "latest", 1  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 86, "latest", 3  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "reputation_meta.json"
 TABLES = frozenset({
     "tbtown", "tbcityreputation", "tbcityreputationtitle", "tbreputationtitle",

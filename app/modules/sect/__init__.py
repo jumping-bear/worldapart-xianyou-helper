@@ -6,7 +6,7 @@ from .build import build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "sect", "宗门"
-ORDER, SELECT, SCHEMA = 85, "latest", 1  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 85, "latest", 5  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "sect_meta.json"
 TABLES = frozenset({
     "tbsect", "tbsectposition", "tbsectreputation", "tbsecttaskpool",

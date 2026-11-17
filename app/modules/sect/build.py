@@ -47,6 +47,57 @@ def _quest_names(tables):
     return names
 
 
+def _duty_quests(tables):
+    """已接取的宗门任务：[宗门] 开头的任务目标、地点、目标物与动作。
+
+    这些任务不在 tbsecttaskpool 里（该表只用于委托板），只能从 tbquest 与
+    存档 questComponent.quests 关联，否则界面会只看到委托板的 3 条。
+    """
+    out = {}
+    for row in _rows_of(tables, "tbquest"):
+        quest_id = _int(row.get("id"))
+        name = _plain(row.get("name")) or ""
+        if not quest_id or not name.startswith("[宗门]"):
+            continue
+        raw_texts = []
+        for objective in row.get("objectives") or []:
+            if isinstance(objective, dict):
+                raw = _text(objective.get("description"))
+                if raw:
+                    raw_texts.append(raw)
+        raw = raw_texts[0] if raw_texts else ""
+        highlights = [_plain(match) for match in
+                      re.findall(r"<color=[^>]+>(.*?)</color>", raw, re.S)]
+        places = [text for text in highlights if "." in text or "·" in text]
+        location = "、".join(places)
+        target = next((text for text in highlights if text not in places), "")
+        if not places and highlights:
+            location, target = highlights[0], (highlights[-1] if len(highlights) > 1 else "")
+        objective = "；".join(_plain(text) for text in raw_texts)
+        count = 0
+        match = re.search(r"(?:采集|收集|击败|击杀|讨伐|提交|准备)\s*(\d+)\s*(?:个|只|名|位|株|份|枚|张)", objective)
+        if match:
+            count = int(match.group(1))
+        quality = ""
+        quality_match = re.search(r"[（(]([^）)]+品质)[）)]", objective)
+        if quality_match:
+            quality = quality_match.group(1)
+        action = "其他"
+        for keyword, label in (("采集", "采集"), ("采药", "采集"), ("收集", "收集"),
+                               ("击败", "讨伐"), ("击杀", "讨伐"), ("除患", "讨伐"),
+                               ("切磋", "切磋"), ("交谈", "访谈"), ("访谈", "访谈"),
+                               ("赠礼", "赠礼"), ("亲密度", "赠礼"), ("好感度", "赠礼"),
+                               ("筹备", "筹备"), ("提交", "提交")):
+            if keyword in objective:
+                action = label
+                break
+        out[str(quest_id)] = {
+            "name": name, "objective": objective, "location": location,
+            "target": target, "count": count, "quality": quality, "action": action,
+        }
+    return out
+
+
 def _condition_aliases(tables):
     aliases = {}
     for row in _rows_of(tables, "tbconditionexpr"):
@@ -215,8 +266,6 @@ def build(tables):
                 exchange.append(entry)
         exchange.sort(key=lambda entry: (0 if entry["role"] == "low" else 1,
                                         -entry["sort"], entry["price"]))
-        if not exchange:
-            warnings.append("%s 未配置藏经阁兑换（scriptorium NPC 为空）" % name)
 
         tasks = []
         for pool_row in pool:
@@ -330,6 +379,7 @@ def build(tables):
         "career": career,
         "constants": constants,
         "task_types": {str(key): value for key, value in TASK_TYPES.items()},
+        "duty_quests": _duty_quests(tables),
         "sects": sects,
         "warnings": warnings,
     }

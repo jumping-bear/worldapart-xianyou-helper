@@ -25,13 +25,65 @@ def _rows_of(tables, key):
     return [row for row in _rows(value) if isinstance(row, dict)]
 
 
-def _quest_names(tables):
-    names = {}
+def _quest_index(tables, npcs):
+    """委托详情：名称、目标文本、地点、目标物/怪物/NPC、数量与动作类型。"""
+    index = {}
     for row in _rows_of(tables, "tbquest"):
         quest_id = _int(row.get("id"))
-        if quest_id:
-            names[quest_id] = _plain(row.get("name")) or ("委托 %s" % quest_id)
-    return names
+        if not quest_id:
+            continue
+        raw_texts, submit_npc = [], 0
+        for objective in row.get("objectives") or []:
+            if not isinstance(objective, dict):
+                continue
+            raw = _text(objective.get("description"))
+            if raw:
+                raw_texts.append(raw)
+            if _int(objective.get("submitNpcID")):
+                submit_npc = _int(objective.get("submitNpcID"))
+        raw = raw_texts[0] if raw_texts else ""
+        highlights = [_plain(match) for match in
+                      re.findall(r"<color=[^>]+>(.*?)</color>", raw, re.S)]
+        places = [text for text in highlights if "." in text or "·" in text]
+        location = "、".join(places)
+        target = next((text for text in highlights if text not in places), "")
+        if not places and highlights:
+            location, target = highlights[0], (highlights[-1] if len(highlights) > 1 else "")
+        objective = "；".join(_plain(text) for text in raw_texts)
+        count = 0
+        match = re.search(r"(?:采集|收集|击败|击杀|讨伐|交付|护送|寻找)\s*(\d+)\s*(?:个|只|名|位|株|份|张)", objective)
+        if match:
+            count = int(match.group(1))
+        quality = ""
+        quality_match = re.search(r"[（(]([^）)]+品质)[）)]", objective)
+        if quality_match:
+            quality = quality_match.group(1)
+        action = "其他"
+        for keyword, label in (("采集", "采集"), ("采药", "采集"), ("收集", "收集"),
+                               ("击败", "讨伐"), ("击杀", "讨伐"), ("讨伐", "讨伐"), ("除患", "讨伐"),
+                               ("切磋", "切磋"), ("交谈", "访谈"), ("访谈", "访谈"),
+                               ("打听", "访谈"), ("询问", "访谈"),
+                               ("疏经导脉", "行医"), ("行医", "行医"),
+                               ("赠礼", "赠礼"), ("亲密度", "赠礼"),
+                               ("炼制", "炼制"), ("筹备", "筹备"),
+                               ("交付", "交付"), ("送达", "交付"), ("护送", "交付")):
+            if keyword in objective:
+                action = label
+                break
+        if action == "切磋" and not count:
+            count = 1
+        index[quest_id] = {
+            "name": _plain(row.get("name")) or ("委托 %s" % quest_id),
+            "objective": objective,
+            "location": location,
+            "target": target,
+            "count": count,
+            "quality": quality,
+            "action": action,
+            "submit_npc": submit_npc,
+            "submit_npc_name": npcs.get(submit_npc, ""),
+        }
+    return index
 
 
 def _npc_names(tables):
@@ -101,8 +153,8 @@ def _sum_drop(entries, rep_by_item):
 
 def build(tables):
     items = _item_index(tables)
-    quests = _quest_names(tables)
     npcs = _npc_names(tables)
+    quests = _quest_index(tables, npcs)
     drops = _drops(tables)
     aliases = {_int(row.get("id")): str(row.get("alias") or "")
                for row in _rows_of(tables, "tbconditionexpr")}
@@ -187,11 +239,20 @@ def build(tables):
         drop_id = _int(row.get("reward_drop_id"))
         stones, reputation, _other = _sum_drop(drops.get(drop_id) or [], rep_by_item)
         quest_id = _int(row.get("quest_id"))
+        quest = quests.get(quest_id) or {}
         town_id = force_to_town[force_id]
         pool_by_force.setdefault(force_id, []).append({
             "id": _int(row.get("id")),
             "quest": quest_id,
-            "name": quests.get(quest_id) or ("委托 %s" % quest_id),
+            "name": quest.get("name") or ("委托 %s" % quest_id),
+            "objective": quest.get("objective", ""),
+            "location": quest.get("location", ""),
+            "target": quest.get("target", ""),
+            "count": quest.get("count", 0),
+            "quality": quest.get("quality", ""),
+            "action": quest.get("action", "其他"),
+            "submit_npc": quest.get("submit_npc", 0),
+            "submit_npc_name": quest.get("submit_npc_name", ""),
             "type": _int(row.get("task_type")),
             "difficulty": _int(row.get("difficulty"), 1),
             "weight": _int(row.get("weight")),

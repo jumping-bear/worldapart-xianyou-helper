@@ -148,6 +148,32 @@ def scan(obj, meta_obj, state=None):
             warnings.append("征收委托 %s 未在当前宗门委托池中" % order_id)
     delivered = [_int(value) for value in tasks_state.get("delivered_purchase_order_ids") or []]
 
+    # 已接取的宗门任务不在 tbsecttaskpool 里，而在 questComponent.quests 中；
+    # 只读 current_offer_pool_ids 会漏掉它们，导致“本期任务只有 3 个”的错觉。
+    duty_quests = meta_obj.get("duty_quests") or {}
+    accepted = []
+    quest_log = ((player.get("questComponent") or {}).get("quests") or {})
+    for key, entry in quest_log.items():
+        if not isinstance(entry, dict):
+            continue
+        quest_id = _int(entry.get("questId") or key)
+        info = duty_quests.get(str(quest_id))
+        if not info:
+            continue
+        state = _int(entry.get("state"))
+        if state in (4, 5):
+            continue
+        progresses = entry.get("objectiveProgresses") or []
+        progress_now = progress_target = 0
+        if progresses and isinstance(progresses[0], dict):
+            progress_now = _int(progresses[0].get("currentValue"))
+            progress_target = _int(progresses[0].get("targetValue"))
+        state_text = {0: "可接取", 1: "进行中", 2: "待提交", 3: "已提交", 6: "待提交"}.get(state, "进行中")
+        accepted.append(dict(info, quest=quest_id, state=state, state_text=state_text,
+                             progress_now=progress_now, progress_target=progress_target))
+    accepted.sort(key=lambda item: (0 if item["state"] in (2, 6) else 1 if item["state"] == 1 else 2,
+                                    item["quest"]))
+
     # 晋升：职位链中下一个可晋升职位；条件取职位表（声望、境界）与晋升任务。
     career = [item for item in meta_obj.get("career") or []
               if _int(item.get("level")) > _int(position.get("level"))]
@@ -184,6 +210,19 @@ def scan(obj, meta_obj, state=None):
     contribution_id = _int(constants.get("SECT_CONTRIBUTION_ITEM_ID"), 50002)
     stone_id = _int(constants.get("STONE_ITEM_ID"), 50000)
     contribution = bag.get(contribution_id, 0)
+    # 委托板只挂 3 条；已接任务在任务日志里，单独计数。每周期上限来自职位 task_limit。
+    limit = _int(position.get("task_limit")) or _int(constants.get("SECT_TASK_DEFAULT_LIMIT"), 3)
+    accepted_count = sum(1 for item in accepted if item["state"] in (1, 2, 6))
+    settled_count = _int(tasks_state.get("current_cycle_settled_count")) or \
+        sum(1 for item in accepted if item["state"] == 3)
+    slots = {
+        "offered": len(offers),
+        "limit": limit,
+        "accepted": accepted_count,
+        "settled": settled_count,
+        "submit": sum(1 for item in accepted if item["state"] in (2, 6)),
+        "remaining": max(0, limit - accepted_count - settled_count),
+    }
     affordable = sum(1 for entry in exchange
                      if _int(entry.get("price")) <= contribution
                      and _int(entry.get("position")) <= _int(position.get("level"))
@@ -205,6 +244,8 @@ def scan(obj, meta_obj, state=None):
         "reputations": [{"sect": key, "name": (sects.get(key) or {}).get("name", ""), "value": _int(value)}
                         for key, value in sorted(sect_reputes.items()) if _int(value)],
         "offers": offers,
+        "accepted": accepted,
+        "slots": slots,
         "offer_contribution": sum(_int(item.get("contribution")) for item in offers
                                   if not item["completed"]),
         "offer_reputation": sum(_int(item.get("reputation")) for item in offers
@@ -249,6 +290,8 @@ def summary(module):
     rows = module.get("rows") or {}
     if not rows.get("in_sect"):
         return "宗门：尚未入宗"
-    return "宗门：%s · %s；贡献 %d，宗门声望 %d，本期任务 %d 项" % (
+    return "宗门：%s · %s；贡献 %d，宗门声望 %d，本期任务 %d 项（已接 %d）" % (
         rows.get("sect_name") or "未知宗门", rows.get("position_name") or "未知职位",
-        _int(rows.get("contribution")), _int(rows.get("reputation")), len(rows.get("offers") or []))
+        _int(rows.get("contribution")), _int(rows.get("reputation")),
+        len(rows.get("offers") or []) + len(rows.get("accepted") or []),
+        len(rows.get("accepted") or []))

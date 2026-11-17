@@ -42,6 +42,12 @@ function canBuy(entry){
   && n(entry.position)<=n(rows.position_level)
   && n(entry.realm)<=n(rows.realm);
 }
+function nextShopEntry(rows,balanceValue){
+ const sect=view().sects[n(rows.sect_id)]||{};
+ return (sect.exchange||[]).filter(entry=>n(entry.price)>balanceValue
+  && n(entry.position)<=n(rows.position_level)
+  && n(entry.realm)<=n(rows.realm)).sort((a,b)=>n(a.price)-n(b.price))[0];
+}
 function groupName(key){return key==='low'?'灵果灵物':'功法招式'}
 
 function cardsHtml(rows){
@@ -54,6 +60,38 @@ function cardsHtml(rows){
   <div class="card"><div class="k">宗门声望</div><div class="v">${num(rows.reputation)}</div><div class="s">${esc(rows.position_name||'未任职')}</div></div>
   <div class="card"><div class="k">灵石</div><div class="v">${num(rows.stones)}</div><div class="s">可用于城镇货架</div></div>
  </div>`;
+}
+
+function dashboardHtml(rows){
+ const accepted=rows.accepted||[];
+ const pending=accepted.filter(item=>item.state_text==='待提交').length;
+ const active=accepted.filter(item=>item.state_text==='进行中').length;
+ const p=rows.promotion;
+ let promotionValue='已满级';
+ let promotionSub='当前版本最高职位';
+ if(p){
+  const missing=[];
+  if(!p.reputation_ok)missing.push('声望 '+num(Math.max(0,n(p.reputation)-n(p.reputation_now))));
+  if(!p.realm_ok)missing.push('境界');
+  promotionValue=missing.length?'差 '+missing.join(' + '):'可晋升';
+  promotionSub='下一职位 '+esc(p.name);
+ }
+ const stats=[
+  ['当前贡献',num(rows.contribution)],
+  ['委托板',`${(rows.offers||[]).length} 条 · +${num(rows.offer_contribution)}`],
+  ['累计贡献',num(rows.contribution_total)],
+  ['宗门声望',num(rows.reputation)],
+  ['灵石',num(rows.stones)]
+ ];
+ const next=nextShopEntry(rows,n(rows.contribution));
+ const affordSub=next?`再攒 ${num(n(next.price)-n(rows.contribution))} 可换「${esc(next.name)}」`:`当前贡献 ${num(rows.contribution)}`;
+ return `<div class="sec-actions">
+  <div class="sec-action${pending?' primary':''}"><div class="k">待提交</div><div class="v">${pending}</div><div class="s">${pending?'先去交掉，别占着任务位':'暂无待提交'}</div></div>
+  <div class="sec-action"><div class="k">进行中</div><div class="v">${active}</div><div class="s">已接 ${n(rows.slots&&rows.slots.accepted)}/${n(rows.slots&&rows.slots.limit)} · 还可接 ${n(rows.slots&&rows.slots.remaining)}</div></div>
+  <div class="sec-action"><div class="k">晋升</div><div class="v">${promotionValue}</div><div class="s">${promotionSub}</div></div>
+  <div class="sec-action"><div class="k">可兑换</div><div class="v">${n(rows.exchange_affordable)} 件</div><div class="s">${affordSub}</div></div>
+ </div>
+ <div class="sec-stats">${stats.map(item=>`<span>${item[0]} <b>${item[1]}</b></span>`).join('')}</div>`;
 }
 
 function careerHtml(rows){
@@ -69,9 +107,9 @@ function careerHtml(rows){
   </div>`;
  }).join('<span class="sec-arrow">›</span>');
  return `<div class="sec-block">
-  <div class="sec-head">职位晋升路径<span>${esc(rows.sect_name||'未入宗')}</span></div>
-  <div class="sec-path">${steps}</div>
+  <div class="sec-head">晋升<span>${esc(rows.sect_name||'未入宗')}</span></div>
   ${promotionHtml(rows)}
+  <details class="sec-pool"><summary>完整职位路径</summary><div class="sec-path">${steps}</div></details>
  </div>`;
 }
 
@@ -98,17 +136,41 @@ function incomeHtml(rows){
  return `<div class="sec-block">
   <div class="sec-head">本月收入<span>${esc(refresh.next?('下次刷新 '+refresh.next):'刷新时间未知')}</span></div>
   <div class="sec-income">
-   <div><span>任务贡献</span><b>+${num(rows.offer_contribution)}</b></div>
-   <div><span>宗门声望</span><b>+${num(rows.offer_reputation)}</b></div>
+   <div><span>委托板贡献</span><b>+${num(rows.offer_contribution)}</b></div>
+   <div><span>委托板声望</span><b>+${num(rows.offer_reputation)}</b></div>
    <div><span>年俸</span><b>${num(salary.annual)}</b></div>
    <div><span>下次俸禄</span><b>${salary.amount>0?num(salary.amount):'待结算'}</b>${salary.next_time?`<small>${esc(salary.next_time)}</small>`:''}</div>
   </div>
+  <div class="sec-hint" style="margin-top:8px">仅统计委托板可接任务；已接任务的奖励以游戏内为准。</div>
  </div>`;
 }
 
 function tasksHtml(rows){
+ const accepted=rows.accepted||[];
  const list=rows.offers||[];
- const body=list.length?list.map(item=>{
+ const slots=rows.slots||{};
+ const pending=accepted.filter(item=>item.state_text==='待提交');
+ const done=accepted.filter(item=>item.state_text==='已提交');
+ const active=accepted.filter(item=>!['待提交','已提交'].includes(item.state_text));
+ const card=item=>{
+  const isPending=item.state_text==='待提交';
+  const state=isPending?badge('待提交','warn'):(item.state_text==='已提交'?badge('已提交','ok'):badge(item.state_text||'进行中','warn'));
+  const progress=item.progress_target?`<span class="sec-num">${num(item.progress_now)}/${num(item.progress_target)}</span>`:'';
+  return `<div class="sec-task-card${isPending?' pending':''}${item.state_text==='已提交'?' done':''}">
+   <div class="sec-task-top">
+    <span class="sec-task-name">${esc(item.name)}</span>
+    ${item.action&&item.action!=='其他'?badge(item.action,'act'):''}
+    ${state}${progress}
+   </div>
+   ${item.objective?`<div class="sec-task-obj">${esc(item.objective)}</div>`:''}
+   <div class="sec-task-meta">
+    ${item.location?`<span>${esc(item.location)}</span>`:''}
+    ${item.target?`<span>${esc(item.action||'目标')} ${esc(item.target)}${item.count?` ×${num(item.count)}`:''}${item.quality?` · ${esc(item.quality)}`:''}</span>`:''}
+   </div>
+  </div>`;
+ };
+ const group=(title,items)=>items.length?`<div class="sec-sub">${title} ${items.length} 条</div>`+items.map(card).join(''):'';
+ const offerBody=list.length?`<div class="sec-sub">委托板可接 ${list.length} 条</div>`+list.map(item=>{
   const state=item.completed?badge('已完成','ok'):(item.locked?badge('职位不足','warn'):badge('可领取',''));
   return `<div class="sec-task${item.completed?' done':''}">
    <span class="sec-task-name">${esc(item.name)}</span>
@@ -119,9 +181,11 @@ function tasksHtml(rows){
    ${item.stones?`<span class="sec-num">+${num(item.stones)} 灵石</span>`:''}
    ${state}
   </div>`;
- }).join(''):`<div class="sec-empty">本期没有可领取的宗门任务。${rows.refresh&&rows.refresh.next?('下次刷新：'+esc(rows.refresh.next)):'请前往宗门执事处查看。'}</div>`;
+ }).join(''):'';
+ const body=(group('待提交',pending)+group('进行中',active)+group('已提交',done)+offerBody)
+  ||`<div class="sec-empty">本期没有可领取的宗门任务。${rows.refresh&&rows.refresh.next?('下次刷新：'+esc(rows.refresh.next)):'请前往宗门执事处查看。'}</div>`;
  return `<div class="sec-block">
-  <div class="sec-head">本期任务<span>${list.length} 项 · 已完成 ${(rows.completed||[]).length}</span></div>
+  <div class="sec-head">本期任务<span>待提交 ${pending.length} · 已接 ${n(slots.accepted)}/${n(slots.limit)} · 委托板 ${list.length} 条</span></div>
   ${body}
  </div>`;
 }
@@ -133,6 +197,7 @@ function shopHtml(rows){
  const groups=['low','high'];
  const q=String(ui.q||'').trim().toLowerCase();
  const balanceNow=balance();
+ const nextEntry=nextShopEntry(rows,balanceNow);
  const list=all.filter(entry=>{
   if(ui.group&&entry.role!==ui.group)return false;
   if(ui.onlyAffordable&&!canBuy(entry))return false;
@@ -175,6 +240,7 @@ function shopHtml(rows){
  }).join('');
  return `<div class="sec-block">
   <div class="sec-head">贡献兑换<span>${esc(sect.low_npc_name||'')} / ${esc(sect.high_npc_name||'')} · 全清 ${num(sect.exchange_total)} 贡献</span></div>
+  <div class="sec-shop-lead">当前可兑换 <b>${n(rows.exchange_affordable)}</b> / ${all.length} 件${nextEntry?` · 再攒 <b>${num(n(nextEntry.price)-balanceNow)}</b> 贡献可换「${esc(nextEntry.name)}」`:''}</div>
   <div class="sec-shop-tools">
    <button type="button" class="sec-chip${ui.group===''?' on':''}" data-group="">全部</button>
    <button type="button" class="sec-chip${ui.group==='low'?' on':''}" data-group="low">灵果灵物</button>
@@ -246,8 +312,12 @@ function render(){
   box.innerHTML=sourceHtml(DATA.modules.sect)+cardsHtml(rows)+warningsHtml(rows)+joinHtml();
   return;
  }
- box.innerHTML=sourceHtml(DATA.modules.sect)+cardsHtml(rows)+warningsHtml(rows)
-  +careerHtml(rows)+incomeHtml(rows)+tasksHtml(rows)+shopHtml(rows)+purchaseHtml(rows);
+ box.innerHTML=sourceHtml(DATA.modules.sect)+dashboardHtml(rows)+warningsHtml(rows)
+  +`<div class="sec-layout">
+    <div class="sec-main">${tasksHtml(rows)}${purchaseHtml(rows)}</div>
+    <aside class="sec-side">${careerHtml(rows)}${incomeHtml(rows)}</aside>
+   </div>`
+  +shopHtml(rows);
  bind();
 }
 

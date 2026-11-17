@@ -2,6 +2,22 @@
 .sec-cards{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0 18px}
 .sec-cards .card{min-width:132px}
 .sec-cards .card .s{display:block;font-size:11px;color:#7d8593;font-weight:400;margin-top:3px}
+.sec-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0 10px}
+.sec-action{background:#15181f;border:1px solid #232833;border-radius:10px;padding:11px 13px;min-width:0}
+.sec-action .k{color:#8b93a1;font-size:11px}
+.sec-action .v{color:#e8eaed;font-size:20px;font-weight:700;line-height:1.35;margin:3px 0 2px;font-variant-numeric:tabular-nums}
+.sec-action .s{color:#778292;font-size:10px;line-height:1.5}
+.sec-action.primary{border-color:#5b4f2f;background:#221e15}
+.sec-action.primary .v{color:#e8c76d}
+.sec-stats{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 16px}
+.sec-stats span{background:#10141a;border:1px solid #232833;border-radius:20px;padding:4px 10px;color:#8b93a1;font-size:11px}
+.sec-stats b{color:#d6dee8;font-weight:600;font-variant-numeric:tabular-nums;margin-left:4px}
+.sec-layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr);gap:12px;align-items:start}
+.sec-main,.sec-side{min-width:0}
+.sec-side .sec-income{grid-template-columns:1fr 1fr}
+.sec-side .sec-cond{grid-template-columns:78px 1fr}
+.sec-side .sec-path{flex-direction:column;align-items:stretch}
+.sec-side .sec-arrow{transform:rotate(90deg);align-self:center;line-height:1}
 .sec-notice{background:#16202b;border:1px solid #2d4356;border-radius:8px;color:#a9c4d8;font-size:12px;line-height:1.8;padding:10px 12px;margin:0 0 12px}
 .sec-warn{background:#241f16;border:1px solid #4a3c22;border-radius:8px;color:#d9c28e;font-size:11px;line-height:1.8;padding:8px 12px;margin:0 0 12px}
 .sec-warn summary{cursor:pointer}
@@ -42,7 +58,21 @@
 .sec-task-name{color:#d6dee8;font-size:12px;font-weight:600;min-width:120px}
 .sec-num{color:#8fd0a9;font-size:11px;font-variant-numeric:tabular-nums}
 .sec-task .badge{margin-left:0}
+.sec-sub{color:#8b93a1;font-size:11px;font-weight:600;margin:10px 0 4px;padding-top:8px;border-top:1px solid #20252e}
+.sec-sub:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.sec-task-card{background:#12161d;border:1px solid #232833;border-radius:8px;padding:8px 10px;margin:0 0 6px}
+.sec-task-card.done{opacity:.7}
+.sec-task-card.pending{border-color:#5b4f2f;background:#221e15}
+.sec-task-card.pending .sec-task-name{color:#f0dca4}
+.sec-task-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.sec-task-top .sec-task-name{min-width:0}
+.sec-task-obj{color:#9aa3b2;font-size:11px;line-height:1.65;margin:4px 0 0}
+.sec-task-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;color:#778292;font-size:10px}
+.sec-task-meta span{background:#10141a;border:1px solid #2a3240;border-radius:6px;padding:2px 7px}
+.sec-task-card .badge.act{background:#233043;border-color:#355075;color:#9fc4ef}
 .sec-shop-tools{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 10px}
+.sec-shop-lead{color:#9aa3b2;font-size:11px;line-height:1.7;margin:-4px 0 10px}
+.sec-shop-lead b{color:#e8c76d;font-variant-numeric:tabular-nums}
 .sec-chip{background:#171a21;border:1px solid #29303c;color:#9aa3b2;border-radius:20px;padding:6px 13px;cursor:pointer;font-size:12px;font-family:inherit}
 .sec-chip:hover{border-color:#3d735b;color:#c9f5dd}
 .sec-chip.on{background:#263b34;border-color:#3d735b;color:#c9f5dd}
@@ -73,5 +103,7 @@
 .sec-join-desc{flex:1;min-width:180px;color:#9aa3b2;font-size:11px;line-height:1.6}
 .sec-join-meta{color:#778292;font-size:11px}
 .sec-join-row .badge{margin-left:0}
-@media(max-width:850px){.sec-income{grid-template-columns:1fr 1fr}.sec-balance{margin-left:0;width:100%}}
-@media(max-width:560px){.sec-income{grid-template-columns:1fr}.sec-cond{grid-template-columns:72px 1fr}.sec-task-name{min-width:0;width:100%}.sec-shop-name{min-width:0;width:100%}.sec-price{margin-left:0}}
+@media(max-width:950px){.sec-layout{grid-template-columns:1fr}.sec-side{display:grid;grid-template-columns:1fr 1fr;gap:12px}.sec-side .sec-block{margin:0}}
+@media(max-width:850px){.sec-income{grid-template-columns:1fr 1fr}.sec-balance{margin-left:0;width:100%}.sec-actions{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.sec-side{grid-template-columns:1fr}}
+@media(max-width:560px){.sec-income{grid-template-columns:1fr}.sec-cond{grid-template-columns:72px 1fr}.sec-task-name{min-width:0;width:100%}.sec-shop-name{min-width:0;width:100%}.sec-price{margin-left:0}.sec-actions{grid-template-columns:1fr}.sec-action .v{font-size:18px}}
