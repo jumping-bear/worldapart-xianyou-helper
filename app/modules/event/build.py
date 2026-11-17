@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """奇遇：配置表 → 模块快照（自 meta_update.py 原样搬入）。"""
+import difflib
 import re
 
 from meta_update import (
@@ -109,6 +110,147 @@ def _designer_path(note):
     tail = re.split(r"[；;]", match.group(1))[0]
     steps = [part.strip(" 　。") for part in re.split(r"\s*[>＞]\s*", tail)]
     return [_polish_path_step(step) for step in steps if step]
+
+
+# 达成路径里的“（需X≥N）”“（X≥N）”“（需X N 级）”阈值，策划备注是手写的、会过期，
+# 必须对齐到对话树里选项的真实条件（tree.nodes.*.options[].conds[].checks）。下面这组函数负责对齐。
+_THRESHOLD_RE = re.compile(r"^(.*?)（(需)?\s*([^（）]*?)\s*(≥|>)\s*(\d+)\s*）$")
+_LEVEL_RE = re.compile(r"^(.*?)（(需)?\s*([^（）]*?)\s*(\d+)\s*级）$")
+_VERDICT_RE = re.compile(r"^(神识|灵机|体魄|辩道|医术)检定(成功|失败)$")
+
+
+def _norm_match(text):
+    """去掉标点与空白，供选项文本与路径步骤做模糊匹配。"""
+    return re.sub(r"[\s\u3000。，、！？；：\"'“”‘’「」『』（）()【】…—·~＞≥]", "", text or "")
+
+
+def _match_score(a, b):
+    """路径步骤与选项文本的相似度：子串匹配优先，否则按最长公共子序列。"""
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    if a in b:
+        return 0.85 + 0.15 * len(a) / len(b)
+    if b in a:
+        return 0.85 + 0.15 * len(b) / len(a)
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+
+def _positive_checks(checks):
+    """只保留“可达正向门槛”的检查：属性 / 灵石 / 物品的 >= 或 >。"""
+    out = []
+    for check in checks or []:
+        if not isinstance(check, dict) or check.get("op") not in (">=", ">"):
+            continue
+        kind = check.get("t")
+        if kind == "attr":
+            out.append(("attr", check.get("a"), check.get("op"), check.get("v")))
+        elif kind == "money":
+            out.append(("money", None, check.get("op"), check.get("v")))
+        elif kind == "item":
+            out.append(("item", check.get("i"), check.get("op"), check.get("v")))
+    return out
+
+
+def _render_need(checks, attrs, items, currency):
+    """把正向检查渲染成“需体魄≥8 且 灵石≥50”（同一属性取最低门槛）。"""
+    best = {}
+    for kind, key, op, value in checks:
+        if value is None:
+            continue
+        slot = (kind, key)
+        if slot not in best or value < best[slot][1]:
+            best[slot] = (op, value)
+    parts = []
+    for (kind, key), (op, value) in sorted(best.items(), key=lambda item: (item[0][0], str(item[0][1]))):
+        symbol = "≥" if op == ">=" else ">"
+        if kind == "attr":
+            name = (attrs.get(str(key)) or {}).get("name") or ("属性%s" % key)
+            parts.append("%s%s%s" % (name, symbol, value))
+        elif kind == "money":
+            parts.append("灵石%s%s" % (symbol, value))
+        else:
+            if key in currency:
+                parts.append("灵石%s%s" % (symbol, value))
+            else:
+                name = (items.get(str(key)) or {}).get("name") or ("物品%s" % key)
+                parts.append("%s%s%s" % (name, symbol, value))
+    return "需" + " 且 ".join(parts) if parts else ""
+
+
+def _tree_option_checks(tree):
+    """从剧情树收集 (规范化选项文本, 原始检查列表)，供阈值对齐。"""
+    records = []
+    for node in (tree or {}).get("nodes", {}).values():
+        for option in node.get("options") or []:
+            text = option.get("t") or ""
+            if not text:
+                continue
+            checks = []
+            for cond in option.get("conds") or []:
+                checks.extend(cond.get("checks") or [])
+            records.append((_norm_match(text), checks))
+    return records
+
+
+def _attr_id_by_name(attrs, name):
+    for attr_id, info in attrs.items():
+        if (info or {}).get("name") == name:
+            return _int(attr_id)
+    return 0
+
+
+def _min_attr_threshold(records, attr_id):
+    values = []
+    for _norm, checks in records:
+        for check in checks or []:
+            if (isinstance(check, dict) and check.get("t") == "attr"
+                    and _int(check.get("a")) == attr_id and check.get("op") in (">=", ">")):
+                value = check.get("v")
+                if value is not None:
+                    values.append(value)
+    return min(values) if values else None
+
+
+def _align_path_step(step, records, attrs, items, currency):
+    """把单条路径步骤里的“（需X≥N）”“（X≥N）”“（需X N 级）”阈值对齐到剧情树的真实选项条件。"""
+    match = _THRESHOLD_RE.match(step) or _LEVEL_RE.match(step)
+    if not match:
+        return step
+    core = match.group(1).strip()
+    core_norm = _norm_match(core)
+    if not core_norm:
+        return step
+    scored = [(_match_score(core_norm, opt_norm), checks) for opt_norm, checks in records]
+    best_score = max((score for score, _ in scored), default=0.0)
+    if best_score >= 0.55:
+        merged = []
+        for score, checks in scored:
+            if score >= best_score - 0.001:
+                merged.extend(checks)
+        need = _render_need(_positive_checks(merged), attrs, items, currency)
+        if need:
+            return "%s（%s）" % (core, need)
+        return core
+    # 流程型“神识检定成功/失败”等无法按选项文本匹配，改用属性名在树里找回真实门槛。
+    verdict = _VERDICT_RE.match(core)
+    if verdict:
+        attr_id = _attr_id_by_name(attrs, verdict.group(1))
+        threshold = _min_attr_threshold(records, attr_id) if attr_id else None
+        if threshold:
+            return "%s（需%s≥%s）" % (core, verdict.group(1), threshold)
+    if "（以实际选项为准）" in step:
+        return step
+    return "%s（以实际选项为准）" % step
+
+
+def _align_path(path, tree, attrs, items, currency):
+    """把整条达成路径的阈值对齐到剧情树。"""
+    records = _tree_option_checks(tree)
+    if not records:
+        return list(path)
+    return [_align_path_step(step, records, attrs, items, currency) for step in (path or [])]
 
 
 def _operand_text(node, attrs, quest_names=None):
@@ -676,22 +818,24 @@ def build_event(tables):
         objective_text = "\n".join(_plain(obj.get("description")) for obj in (quest.get("objectives") or [])
                                    if isinstance(obj, dict))
         location = direct_location(quest_id, stage_ids, desc + "\n" + objective_text)
+        tree = _build_tree(quest_id, dialogues, flows, attrs, quest_names)
         endings = []
         for row in sorted(rows, key=lambda r: (_int(r.get("grade")), _int(r.get("id")))):
             drop_id = _int(row.get("reward_drop_id"))
             rewards = ending_rewards(drop_id) if drop_id else []
             grade = _int(row.get("grade"))
+            path = _ending_path(row.get("id"), row.get("designer_note"))
+            path = _align_path(path, tree, attrs, items, currency)
             endings.append({
                 "id": _int(row.get("id")), "title": _plain(row.get("title"))
                 or ("结局 %s" % row.get("id")), "summary": _plain(row.get("summary")),
                 "detail": _lines(row.get("detail_lines")), "grade": grade,
                 "grade_name": EVENT_GRADE_NAMES.get(grade, "第%s档" % grade),
-                "path": _ending_path(row.get("id"), row.get("designer_note")),
+                "path": path,
                 "rewards": rewards or [],
                 "reward_ok": True if not drop_id else rewards is not None,
             })
         resolved[quest_id] = location
-        tree = _build_tree(quest_id, dialogues, flows, attrs, quest_names)
         result.append({
             "id": quest_id, "name": names[quest_id], "desc": desc,
             "one_off": bool(quest.get("oneOff")), "parent": parents[quest_id],
