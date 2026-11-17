@@ -412,6 +412,7 @@ def scan(obj, meta_obj, state=None):
             "state_name": states.get(str(code)) or ("状态 %s" % code),
             "done": code in DONE_STATES,
             "doing": code in DOING_STATES,
+            "same_name": quest.get("same_name") or [],
         })
 
     by_id = {row["id"]: row for row in rows}
@@ -454,8 +455,26 @@ def scan(obj, meta_obj, state=None):
     for row in rows:
         place_of(row)
 
+    layer_phases = meta_obj.get("layer_phases") or {}
+    phase_names = meta_obj.get("phase_names") or {}
+
+    def _realm_text(layer_value):
+        realm_name = str(realms.get(str(_realm_for_layer(phases, _int(layer_value)))) or "").strip()
+        return realm_name.replace("期", "") or realm_name or ("第 %d 层" % _int(layer_value))
+
+    def _current_phase(layer_value):
+        """玩家当前层（propLayerId）→ 阶段全称：29 → 筑基后期。"""
+        return layer_phases.get(str(_int(layer_value))) or _realm_text(layer_value)
+
+    def _gate_phase(value):
+        """触发条件里的「修炼阶段」是阶段 id（33 → 结丹后期），不是 propLayerId。"""
+        return (phase_names.get(str(_int(value)))
+                or layer_phases.get(str(_int(value)))
+                or _realm_text(value))
+
     for row in rows:
         gate = row.get("gate") or {}
+        detail = gate.get("trigger_detail") or {}
         ids = [_int(value) for value in gate.get("quests") or []]
         names, done = [], True
         for gate_id in ids:
@@ -472,25 +491,44 @@ def scan(obj, meta_obj, state=None):
         row["gate_layer"] = _int(gate.get("layer"))
         row["gate_npc"] = _int(gate.get("npc"))
         row["gate_favor"] = _int(gate.get("favor"))
-        ready, hint = False, ""
+        ready, hint, check = True, "", None
         if ids:
+            ready = done
             hint = "完成「%s」后自动触发" % row["gate_names"]
-        elif row["gate_space"]:
-            hint = "进入「%s」后触发" % (row["gate_space_name"] or "指定地点")
         elif row["gate_layer"]:
+            need_name = _gate_phase(row["gate_layer"])
+            cur_name = _current_phase(layer)
             ready = _int(layer) >= row["gate_layer"]
-            hint = "修炼层数达到 %d 后触发（当前 %d）" % (row["gate_layer"], _int(layer))
+            text = "修炼到「%s」后自动出现" % need_name
+            hint = text if ready else "%s（当前 %s）" % (text, cur_name)
+            check = {"kind": "realm", "text": text, "cur_text": cur_name, "ok": ready}
+        elif row["gate_space"]:
+            place = row["gate_space_name"] or "指定地点"
+            hint = "进入「%s」后出现" % place
+            ready = False
+            check = {"kind": "scene_enter", "text": hint, "cur_text": "尚未进入", "ok": False}
         elif row["gate_npc"]:
-            cur_favor = favor.get(row["gate_npc"], 0)
+            npc_name = npc_names.get(str(row["gate_npc"])) or "对方"
+            cur_favor = _int(favor.get(row["gate_npc"], 0))
             ready = cur_favor >= row["gate_favor"]
-            hint = "%s好感度达到 %d 后触发（当前 %d）" % (
-                npc_names.get(str(row["gate_npc"])) or "对方",
-                row["gate_favor"], cur_favor)
+            text = "与「%s」好感达到 %d 后出现" % (npc_name, row["gate_favor"])
+            hint = text if ready else "%s（当前 %d）" % (text, cur_favor)
+            check = {"kind": "npc_favor", "text": text, "cur_text": "当前 %d" % cur_favor,
+                     "ok": ready}
         elif row["gate_event"] == "接取条件满足":
-            ready = row["cond_ok"] is True
             hint = "满足条件后自动触发"
+        elif row["gate_event"]:
+            hint = detail.get("label") or ("%s后自动触发" % row["gate_event"])
         row["gate_ready"] = ready
         row["gate_hint"] = hint
+        if check:
+            cond_eval = row.get("cond_eval")
+            if not isinstance(cond_eval, dict):
+                cond_eval = {"checks": [], "gaps": [], "logic": ""}
+                row["cond_eval"] = cond_eval
+            cond_eval.setdefault("checks", []).insert(0, check)
+            if not check["ok"]:
+                cond_eval.setdefault("gaps", []).append(check["text"])
 
     siblings = {}
     for ids in (meta_obj.get("flow_accepts") or {}).values():
@@ -569,6 +607,27 @@ def scan(obj, meta_obj, state=None):
             if len(missed_names) > 1:
                 row["branch_path"] = " › ".join(reversed(missed_names))
 
+    # 剧情线信息（章节/线名）：同名任务与前置按钮要标清“哪一个”，不能只给任务名。
+    quest_index = meta_obj.get("quest_index") or {}
+    line_of, chapter_of = {}, {}
+    for line in (meta_obj.get("storylines") or []):
+        for qid in line.get("quests") or []:
+            line_of[_int(qid)] = line.get("name") or ""
+            chapter_of[_int(qid)] = line.get("chapter") or ""
+    name_ids = {}
+    for row in rows:
+        if row["name"]:
+            name_ids.setdefault(row["name"], []).append(row["id"])
+    dup_names = {name: ids for name, ids in name_ids.items() if len(ids) > 1}
+
+    def _ref_label(name, qid):
+        """同名任务只写名字会认错，后面补章节：完成「小蝶所托」（炼气）后出现。"""
+        qid = _int(qid)
+        chapter = chapter_of.get(qid) or ""
+        if name and name in dup_names and chapter:
+            return "「%s」（%s）" % (name, chapter)
+        return "「%s」" % (name or "前置任务")
+
     for row in rows:
         exclusive_failed = any(check.get("kind") == "quest_none" and check.get("ok") is False
                                for check in ((row.get("cond_eval") or {}).get("checks") or []))
@@ -587,6 +646,8 @@ def scan(obj, meta_obj, state=None):
         elif row["record_gap"]:
             label = STATUS_WAIT
         elif row["gate_pending"]:
+            label = STATUS_WAIT
+        elif not row["gate_ready"]:
             label = STATUS_WAIT
         elif row["cond_text"] and row["cond_ok"] is not True:
             label = STATUS_WAIT
@@ -623,8 +684,10 @@ def scan(obj, meta_obj, state=None):
         elif row["record_gap"]:
             hint = "后续环节已完成，这一环可能已被跳过"
         elif row["prev"] and not row["prev_done"]:
-            hint = "先完成「%s」" % row["prev_name"]
+            hint = "先完成%s" % _ref_label(row["prev_name"], row.get("prev"))
         elif row["gate_pending"]:
+            hint = row["gate_hint"]
+        elif not row["gate_ready"]:
             hint = row["gate_hint"]
         elif row["trigger_text"]:
             hint = row["trigger_text"]
@@ -647,30 +710,61 @@ def scan(obj, meta_obj, state=None):
         # 折叠行也要有一句“怎么触发”，已完成的任务同样能回看。
         if row["trigger_text"]:
             trigger_line = row["trigger_text"]
+        elif row["gate_hint"] and not row["gate_ready"]:
+            trigger_line = row["gate_hint"]
         elif row["cond_text"]:
             trigger_line = "条件：%s" % row["cond_text"]
         elif row["gate_hint"]:
             trigger_line = row["gate_hint"]
         elif row["prev_name"] and row["prev_done"]:
-            trigger_line = "完成「%s」后自动出现" % row["prev_name"]
+            trigger_line = "完成%s后自动出现" % _ref_label(row["prev_name"], row.get("prev"))
         elif row["prev_name"]:
-            trigger_line = "完成「%s」后出现" % row["prev_name"]
+            trigger_line = "完成%s后出现" % _ref_label(row["prev_name"], row.get("prev"))
         elif row["acq_source"] == 1:
             trigger_line = "与%s对话接取" % ((row.get("giver") or {}).get("name") or "委托人")
         elif row.get("acq_dialogue"):
             trigger_line = "在剧情对话中接取"
         else:
             trigger_line = "剧情推进到这里时自动出现"
+        # 折叠行引用了同名任务时补章节，避免「完成小蝶所托后」让人以为是另一个。
+        ref_ids = list((row.get("gate") or {}).get("quests") or [])
+        if row.get("prev"):
+            ref_ids.append(row["prev"])
+        for qid in ref_ids:
+            other = by_id.get(_int(qid))
+            if not other or other["name"] not in dup_names:
+                continue
+            old = "「%s」" % other["name"]
+            if old in trigger_line and (old + "（") not in trigger_line:
+                trigger_line = trigger_line.replace(old, _ref_label(other["name"], qid), 1)
         row["trigger_line"] = trigger_line
 
-    # 怎么触发 + 前置任务：让玩家不只知道“要完成 XXX”，还知道 XXX 是什么、在哪、能不能点过去。
-    quest_index = meta_obj.get("quest_index") or {}
-    npc_homes = meta_obj.get("npc_homes") or {}
-    line_of = {}
-    for line in (meta_obj.get("storylines") or []):
-        for qid in line.get("quests") or []:
-            line_of[_int(qid)] = line.get("name") or ""
+    # 同名任务：把“另一个同名任务是什么状态、在哪条线”一并给前端，页面才讲得清。
+    for row in rows:
+        ids = row.get("same_name") or []
+        if not ids:
+            continue
+        info = []
+        for qid in ids:
+            other = by_id.get(_int(qid))
+            if not other:
+                continue
+            info.append({
+                "id": other["id"],
+                "name": other["name"],
+                "chapter": chapter_of.get(other["id"]) or "",
+                "line": line_of.get(other["id"]) or "",
+                "region": ((other.get("location") or {}).get("region") or ""),
+                "giver": (other.get("giver") or {}).get("name") or "",
+                "status_label": other["status_label"],
+                "status_key": other["status_key"],
+                "done": other["done"],
+            })
+        if info:
+            row["ambiguous"] = True
+            row["same_name_info"] = info
 
+    # 怎么触发 + 前置任务：让玩家不只知道“要完成 XXX”，还知道 XXX 是什么、在哪、能不能点过去。
     def _ref(qid):
         qid = _int(qid)
         if not qid:
@@ -684,6 +778,7 @@ def scan(obj, meta_obj, state=None):
             "type_name": ("支线" if local else (info.get("type_name") or "其他任务")),
             "side": side,
             "line": line_of.get(qid) or "",
+            "chapter": chapter_of.get(qid) or "",
             "status_label": local.get("status_label") or ("不在本页" if not side else ""),
             "status_key": local.get("status_key") or ("out" if not side else ""),
             "done": bool(local.get("done")),
@@ -795,6 +890,7 @@ def scan(obj, meta_obj, state=None):
         "player_realm_name": realms.get(str(player_realm)) or "",
     }
     return {"rows": rows, "stats": stats, "storylines": storylines,
+            "dup_names": meta_obj.get("dup_names") or {},
             "groups": meta_obj.get("groups") or [],
             "chains": meta_obj.get("chains") or [], "branches": meta_obj.get("branches") or [],
             "edges": meta_obj.get("edges") or [],

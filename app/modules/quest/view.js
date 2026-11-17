@@ -19,9 +19,25 @@ function initQuest(){
  const nameToId={};
  rows.forEach(r=>{if(r.name&&nameToId[r.name]===undefined)nameToId[r.name]=r.id});
  Object.keys(questIndex).forEach(id=>{const nm=(questIndex[id]||{}).name;if(nm&&nameToId[nm]===undefined)nameToId[nm]=+id});
- const linkify=text=>esc(text||'').replace(/「([^」]{1,40})」/g,(m0,nm)=>{
-   const id=nameToId[nm];
-   return (id===undefined)?m0:('「<a class="sq-ref" data-jump="'+id+'">'+nm+'</a>」');
+ // 同名任务：游戏里可能有两处同名（如「小蝶所托」），必须按章节区分，不能凭名字乱跳。
+ const dupNames=st.dup_names||{};
+ const dupNameOf={};
+ Object.keys(dupNames).forEach(nm=>(dupNames[nm]||[]).forEach(e=>{dupNameOf[e.id]=nm}));
+ const lineMetaOf={};
+ lines.forEach(l=>(l.quests||[]).forEach(id=>{lineMetaOf[id]={line:l.name||'',chapter:l.chapter||'',region:l.region||''}}));
+ const chapOf=id=>(lineMetaOf[id]||{}).chapter||'';
+ const linkify=text=>esc(text||'').replace(/「([^」]{1,40})」(?:（([^）]{1,12})）)?/g,(m0,nm,chap)=>{
+   const cands=dupNames[nm];
+   let id=nameToId[nm];
+   if(cands){
+     if(chap){const hit=cands.filter(e=>e.chapter===chap)[0];if(hit)id=hit.id;}
+     // 同名又没给章节：宁可不跳，也不能跳到另一个同名任务上去。
+     else return m0;
+   }
+   if(id===undefined)return m0;
+   const sfx=(cands&&chap)?`<span class="sq-chap-sfx">（${esc(chap)}）</span>`:'';
+   const tail=(chap&&!cands)?`（${esc(chap)}）`:'';
+   return '「<a class="sq-ref" data-jump="'+id+'">'+esc(nm)+sfx+'</a>」'+tail;
  });
 
  let state=Object.assign({q:'',status:'all',view:'story',open:{}},store.get(KEY,{}));
@@ -94,13 +110,37 @@ function initQuest(){
      `<span class="sq-howtag ${h.auto?'auto':'npc'}">${esc(h.text||'条件满足时出现')}</span>`+
      (where.length?`<span class="sq-howmeta">${where.join(' ｜ ')}</span>`:'')+
      `</div>`+
-     (pre.length?`<div class="sq-prereq"><b>要做的前置${r.prereq_any&&pre.length>1?'（满足其一即可）':''}</b><div class="sq-pres">`+pre.map(p=>
-       p.side
-         ? `<button class="sq-pre" data-jump="${p.id}" title="点这里跳到「${esc(p.name)}」">
-              <span>${esc(p.name)}</span><em>${esc(p.status_label||'未完成')}</em>${(p.line&&p.line!==p.name)?`<i>${esc(p.line)}</i>`:''}</button>`
+     (pre.length?`<div class="sq-prereq"><b>要做的前置${r.prereq_any&&pre.length>1?'（满足其一即可）':''}</b><div class="sq-pres">`+pre.map(p=>{
+       const chap=p.chapter||chapOf(p.id);
+       const dup=!!dupNameOf[p.id];
+       const showLine=!!p.line&&(p.line!==p.name||dup);
+       return p.side
+         ? `<button class="sq-pre" data-jump="${p.id}" title="点这里跳到「${esc(p.name)}」${chap?'（'+esc(chap)+'）':''}${dup?' · 与当前任务同名，不是同一个任务':''}">
+              ${chap?`<span class="sq-chap ${chapCls(chap)}">${esc(chap)}</span>`:''}
+              <span>${esc(p.name)}</span><em>${esc(p.status_label||'未完成')}</em>${showLine?`<i>${esc(p.line)}</i>`:''}</button>`
          : `<span class="sq-pre out" title="该任务不在支线页">
               <span>${esc(p.name)}</span><em>${esc(p.type_name||'其他任务')} · 不在支线页</em></span>`
-     ).join('')+`</div></div>`:'');
+     }).join('')+`</div></div>`:'');
+ }
+ // 同名任务：不同章节各有一个同名任务时，把“另一个是什么、在哪、什么状态”摆出来，避免认错。
+ function sameNameHtml(r){
+   const info=r.same_name_info||[];
+   if(!info.length)return '';
+   const mine=lineMetaOf[r.id]||{},chap=mine.chapter||'';
+   const otherDone=info.filter(x=>x.done)[0];
+   let lead;
+   if(otherDone){
+     lead=`游戏里有 ${info.length+1} 个「${esc(r.name)}」：你完成的那个在「${esc((otherDone.chapter||'')+(otherDone.line?' · '+otherDone.line:''))}」，本行这条在「${esc(chap+(mine.line?' · '+mine.line:''))}」——不是同一个任务。`;
+   }else{
+     lead=`游戏里有 ${info.length+1} 个「${esc(r.name)}」，它们不是同一个任务。本行这条在「${esc(chap+(mine.line?' · '+mine.line:''))}」，另外还有：`;
+   }
+   return `<div class="sq-sec">同名任务</div><div class="sq-same"><div class="sq-sn-lead">${lead}</div>`+
+     info.map(x=>`<button class="sq-sn" data-jump="${x.id}" title="点这里跳到「${esc(x.name)}」">
+         <span class="sq-sn-nm">${esc(x.name)}</span>
+         ${x.chapter?`<span class="sq-chap ${chapCls(x.chapter)}">${esc(x.chapter)}</span>`:''}
+         <span class="sq-sn-line">${esc(x.line||'—')}</span>
+         <span class="sq-badge b-${x.status_key||'wait'}">${esc(x.status_label||'')}</span></button>`).join('')+
+     `</div>`;
  }
  function bodyHtml(r){
    const ce=r.cond_eval||{},checks=ce.checks||[],gaps=ce.gaps||[];
@@ -112,7 +152,7 @@ function initQuest(){
    const rewards=(r.rewards||[]).length
      ? `<div class="sq-rwlist">${r.rewards.map(x=>`<span class="sq-rw f${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}<i>${esc((x.sources||[]).join('/'))}</i></span>`).join('')}</div>`
      : `<div class="sq-muted">剧情向，无固定奖励</div>`;
-   return howHtml(r)+`<div class="sq-sec">触发条件</div>${cond}`+
+   return howHtml(r)+sameNameHtml(r)+`<div class="sq-sec">触发条件</div>${cond}`+
      (r.desc?`<div class="sq-sec">这一段剧情</div><div class="sq-desc">${linkify(r.desc)}</div>`:'')+
      gatesHtml(r)+
      ((r.objectives||[]).length?`<div class="sq-sec">要做的事</div><ul class="sq-objs">${r.objectives.map(o=>`<li>${esc(o.text)}${o.npc?'<em>'+esc(o.npc)+'</em>':''}</li>`).join('')}</ul>`:'')+
@@ -132,6 +172,7 @@ function initQuest(){
    const open=hit?' open':'';
    return `<details class="sq-node k-${key}${r.hidden?' hidden':''}${hit?' hit':''}" data-q="${r.id}"${open}>`+
      `<summary><span class="sq-step">${index}</span><span class="sq-nm">${esc(r.name)}</span>`+
+     (dupNameOf[r.id]?'<span class="sq-tag dup" title="游戏里有多个同名任务，注意区分">同名</span>':'')+
      `<span class="sq-badge b-${key}">${esc(statusText(r))}</span>`+
      (r.hidden?'<span class="sq-tag hid">不显示在任务面板</span>':'')+
      (r.egg_note?'<span class="sq-tag egg">含隐藏结局</span>':'')+branchTag+
