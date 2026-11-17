@@ -216,6 +216,31 @@ function remainHtml(line){
     +'</div>';
 }
 
+// 「怎么触发」：直接回答"这任务怎么来"——方式 + 可跳转的前置 + 人话条件。
+// 未选分支/已跳过节点同样显示，让人一眼看出是被剧情越过，而不是卡了 bug。
+function triggerHtml(q,line){
+  const map=byId(line);
+  const src=Number(q.acq_source||0);
+  const giver=(q.giver&&q.giver.name)||'';
+  const byNpc=(src===1)||(src!==2&&!!giver);
+  const way=byNpc?(giver?('与「'+giver+'」对话接取'):'与剧情人物对话接取')
+                 :'自动触发（剧情推进时出现）';
+  let prevHtml='';
+  if(q.prev){
+    const p=map[q.prev];
+    prevHtml=p?('先完成 <button type="button" class="hongchen-jump" data-jump="'+p.id
+        +'" title="跳到「'+esc(p.name)+'」">'+esc(p.name)+'</button>'
+        +'<em class="hongchen-tr-state '+statusOf(p.status_cls).cls+'">'+statusOf(p.status_cls).label+'</em>')
+      :'先走完上一段剧情';
+  }
+  const conds=(q.gates||[]).filter(g=>g&&g.text).map(g=>esc(g.text));
+  return '<div class="hongchen-trigger">'
+    +'<div class="hongchen-tr"><b>怎么触发</b><span>'+esc(way)+'</span></div>'
+    +(prevHtml?'<div class="hongchen-tr"><b>前置</b><span>'+prevHtml+'</span></div>':'')
+    +(conds.length?'<div class="hongchen-tr"><b>条件</b><span>'+conds.join('、')+'</span></div>':'')
+    +'</div>';
+}
+
 function inspectHtml(q,line){
   const st=statusOf(q.status_cls), map=byId(line);
   const gates=[];
@@ -237,6 +262,7 @@ function inspectHtml(q,line){
   return '<div class="hongchen-inspect"><div class="hongchen-inspect-title">'
     +'<span class="hongchen-id">#'+q.id+'</span>'+esc(q.name)
     +'<span class="hongchen-status '+st.cls+'">'+st.label+'</span></div>'
+    +triggerHtml(q,line)
     +(q.desc?'<p class="hongchen-inspect-desc">'+esc(q.desc)+'</p>':'')
     +notice
     +'<div class="hongchen-inspect-grid">'

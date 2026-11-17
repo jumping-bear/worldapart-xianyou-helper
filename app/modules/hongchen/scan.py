@@ -456,6 +456,7 @@ def scan(obj, meta_obj, state=None):
                 "branch_with": quest.get("branch_with") or [],
                 "hidden": bool(quest.get("hidden")),
                 "giver": quest.get("giver"),
+                "acq_source": _int(quest.get("acq_source")),
                 "gates": quest.get("gates") or [],
                 "gate_checks": gate_checks,
                 "options": options,
