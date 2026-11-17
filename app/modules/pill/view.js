@@ -512,7 +512,8 @@ function initPill(){
  function markSelected(id){
   document.querySelectorAll('#pilllist .pill-item.focus').forEach(n=>n.classList.remove('focus'));
   const node=document.querySelector('#pilllist .pill-item[data-id="'+id+'"]');
-  if(node){node.classList.add('focus');node.scrollIntoView({block:'nearest'})}
+  // 仅高亮列表项，不滚动页面/列表：地图点选时整页曾因 scrollIntoView 跳到下方列表
+  if(node)node.classList.add('focus');
  }
  function resetAll(){
   pillFilter.types=allTypes();pillFilter.elements=allElems.slice();
