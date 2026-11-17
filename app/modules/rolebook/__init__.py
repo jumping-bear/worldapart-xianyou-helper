@@ -13,7 +13,7 @@ from .scan import enrich, meta, post, prepare, scan, summary
 
 # ORDER=95，避开 quest=70 / talent=20 / memoria=80 / hongchen=90
 KEY, LABEL = "rolebook", "人物图鉴"
-ORDER, SELECT, SCHEMA = 95, "latest", 6  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 95, "latest", 7  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "rolebook_meta.json"
 TABLES = frozenset({
     "tbnpcbasecfg",            # NPC 主表：基础字段、身份称号、性格/善恶/声望/魅力/悟性原始值、能力标记
@@ -37,6 +37,7 @@ TABLES = frozenset({
     "tbsect",                  # 门派名（propSect）
     "tbnpcrace",               # 种族名（propRace）
     "tbelement",               # 五行名（element）
+    "tbconstants",             # 全局常量（MORTAL_MAX_LIFESPAN 凡人寿命上限）
 })
 
 
@@ -46,4 +47,5 @@ def builtin_ok(data):
 
 
 def empty():
-    return {"schema": DATA_SCHEMA, "npcs": [], "meta": {}, "stats": {"total": 0}}
+    return {"schema": DATA_SCHEMA, "npcs": [], "meta": {}, "stats": {"total": 0},
+            "breakthroughs": [], "death_risk": []}

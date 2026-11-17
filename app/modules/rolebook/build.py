@@ -108,6 +108,46 @@ def _space_index(tables):
     return out
 
 
+def _mortal_max_lifespan(tables):
+    """凡人寿命上限：从 tbconstants 读 MORTAL_MAX_LIFESPAN，缺失时回退 100。
+
+    参考 sect 模块读 tbsectconstants 的常量方式；当前游戏配置表未导出该常量，
+    按约定保留回退值，将来配置补上后无需改代码。
+    """
+    for row in _rows(tables.get("tbconstants")):
+        if isinstance(row, dict) and "MORTAL_MAX_LIFESPAN" in row:
+            value = _int(row.get("MORTAL_MAX_LIFESPAN"))
+            if value:
+                return value
+    return 100
+
+
+def _breakthroughs(tables):
+    """闭关突破：每个境界 cost_days[0] → 突破到 next_realm 的年数。
+
+    游戏语义是「从当前境界突破到下一境界」：筑基期 cost_days=27375 天 = 75 年，
+    即"突破结丹要 75 年"。返回目标境界名 + 年数，化神期无 next_realm 不产生条目。
+    """
+    realm_rows = [row for row in _rows(tables.get("tbcultivaterealm"))
+                  if isinstance(row, dict) and row.get("id") is not None]
+    realm_rows.sort(key=lambda row: _int(row.get("id")))
+    realm_name = {str(_int(row.get("id"))): _text(row.get("realm_name")) for row in realm_rows}
+    out = []
+    for row in realm_rows:
+        next_id = _int(row.get("next_realm"))
+        if not next_id:
+            continue
+        days = row.get("cost_days")
+        if isinstance(days, (list, tuple)) and days:
+            days = days[0]
+        days = _int(days)
+        if not days:
+            continue
+        target = realm_name.get(str(next_id)) or ("境界 %s" % next_id)
+        out.append({"realm": target, "years": int(round(days / 365.0)), "days": days})
+    return out
+
+
 def _persona_desc(value):
     """性格说明去掉"类似紫微斗数中的X星"这类命理包装，只留修仙世界的性格色彩。"""
     text = _plain(value)
@@ -162,6 +202,8 @@ def build(tables):
         key=lambda r: _int(r.get("alignment_threshold")))
 
     realms, layer_map = _cultivation(tables)
+    mortal_max = _mortal_max_lifespan(tables)
+    breakthroughs = _breakthroughs(tables)
     sects = _name_map(tables.get("tbsect"), "sectName")
     races = _name_map(tables.get("tbnpcrace"), "raceName")
     elements = _name_map(tables.get("tbelement"), "element_name")
@@ -280,6 +322,16 @@ def build(tables):
         sect = sect or "无门无派"
         layer_id = row.get("propLayerId")
         realm = _realm_for_layer(realms, layer_map, layer_id)
+        # 凡人寿命：MORTAL_MAX_LIFESPAN + lifespanAdjustment；修士寿命长，暂不精确计算
+        mortal = realm["realm"] == "凡人"
+        lifespan_protected = bool(row.get("is_lifespan_protected"))
+        age = _int(row.get("age"))
+        if mortal:
+            lifespan = mortal_max + _int(row.get("lifespanAdjustment"))
+            remaining_years = lifespan - age
+        else:
+            lifespan = None
+            remaining_years = None
         element_names = [elements.get(str(e)) for e in (row.get("element") or [])
                          if str(e) in elements]
 
@@ -318,8 +370,9 @@ def build(tables):
         npcs.append({
             "id": npc_id, "name": name, "avatar": avatar,
             "title": _text(row.get("npcTitle")),
-            "sex": sex, "age": _int(row.get("age")),
-            "lifespan": _int(row.get("lifespanAdjustment")),
+            "sex": sex, "age": age,
+            "mortal": int(mortal), "remaining_years": remaining_years,
+            "lifespan_protected": int(lifespan_protected), "lifespan": lifespan,
             "race": race, "sect": sect, "realm": realm["full"],
             "realm_short": realm["realm"], "realm_raw": realm["phase"],
             "layer": realm["layer"], "layer_order": realm["order"],
@@ -354,4 +407,20 @@ def build(tables):
         stats["with_topics"] += 1 if topic_titles else 0
 
     npcs.sort(key=lambda item: item["id"])
-    return {"schema": SCHEMA, "npcs": npcs, "meta": meta, "stats": stats}
+
+    # 闭关会寿终名单：凡人且未受寿命保护、剩余年数小于闭关年数。排除占位 NPC。
+    death_risk = []
+    for bt in breakthroughs:
+        years = bt["years"]
+        mortals = [
+            {"name": npc["name"], "remaining": npc["remaining_years"]}
+            for npc in npcs
+            if npc.get("mortal") and npc.get("remaining_years") is not None
+            and npc["remaining_years"] < years and not npc.get("lifespan_protected")
+            and npc["id"] > 0 and not str(npc.get("name") or "").startswith("匿名")
+        ]
+        mortals.sort(key=lambda item: item["remaining"])
+        death_risk.append({"realm": bt["realm"], "years": years, "mortals": mortals})
+
+    return {"schema": SCHEMA, "npcs": npcs, "meta": meta, "stats": stats,
+            "breakthroughs": breakthroughs, "death_risk": death_risk}

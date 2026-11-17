@@ -346,6 +346,8 @@ def enrich(module, meta_obj, state=None):
     module["live_stats"] = live_stats
     module["player"] = player
     module["avatar_map"] = avatar_map
+    module["breakthroughs"] = built.get("breakthroughs") or []
+    module["death_risk"] = built.get("death_risk") or []
     return module
 
 

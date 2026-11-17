@@ -6,6 +6,7 @@
     q: '', rel: '', evil: '', realm: '', sect: '', personality: '',
     present: 1, met: 0, dao: 0, friend: 0, housed: 0, evilneg: 0,
     safe: 0, spar: 0, steal: 0, merchant: 0, attackable: 0, memoria: 0, talent: 0,
+    mortal: 0,
     sort: 'relevance'
   };
   var PAGE = 48;  // 分批渲染步长
@@ -55,6 +56,20 @@
     return (c.roles || []).map(function (r) {
       return '<span class="rolebook-role rolebook-role-' + esc(r) + '">' + esc(r) + '</span>';
     }).join('');
+  }
+
+  // 凡人寿命徽标：剧情保护 > 已超寿元 > 余寿若干年；修士不显示
+  function lifespanText(c) {
+    if (!c.mortal) return '';
+    if (c.lifespan_protected) return '凡人 · 剧情保护';
+    if (c.remaining_years == null) return '凡人';
+    return c.remaining_years < 0 ? '凡人 · 已超寿元' : '凡人 · 余寿 ' + c.remaining_years + ' 年';
+  }
+  function lifespanHtml(c) {
+    if (!c.mortal) return '';
+    var cls = c.lifespan_protected ? ' rolebook-lifespan-prot'
+      : (c.remaining_years != null && c.remaining_years < 0 ? ' rolebook-lifespan-over' : '');
+    return '<span class="rolebook-lifespan' + cls + '">' + esc(lifespanText(c)) + '</span>';
   }
 
   function optList(values, selected, allLabel) {
@@ -125,6 +140,7 @@
     if (filters.attackable && !c.killable) return false;
     if (filters.memoria && !c.memoria) return false;
     if (filters.talent && !(c.talents || []).length) return false;
+    if (filters.mortal && !c.mortal) return false;
     if (filters.rel) {
       if (filters.rel === 'present') { if (!c.present) return false; }
       else if (filters.rel === 'met') { if (!c.met) return false; }
@@ -154,9 +170,16 @@
       if (by === 'evilDesc') return b.evil - a.evil;
       if (by === 'favor') return b.favor - a.favor;
       if (by === 'layer') return b.layer_order - a.layer_order;
+      if (by === 'lifespan') return lifespanRank(a) - lifespanRank(b) || a.id - b.id;
       return a.id - b.id;
     });
     return rows;
+  }
+
+  // 剩余寿元升序：凡人按余寿从少到多排前（已超寿元为负自然在最前），修士排最后
+  function lifespanRank(c) {
+    if (c.mortal && c.remaining_years != null) return c.remaining_years;
+    return 1e9;
   }
 
   // 击杀规则：NPC 卡只存规则下标，文案与数字统一取 meta.alignment_rules
@@ -205,7 +228,7 @@
         '<span class="rolebook-pin">⌖</span>' +
         '<span class="rolebook-place-box"><span class="rolebook-place-main">' + esc(place.main) + '</span>' +
         '<span class="rolebook-place-sub">' + esc(place.sub) + '</span></span></div>' +
-      '<div class="rolebook-card-badges">' + badges + '</div>' +
+      '<div class="rolebook-card-badges">' + lifespanHtml(c) + badges + '</div>' +
       evilBand(c) +
       '<div class="rolebook-card-meta">' +
         '<span class="rolebook-evil-label rolebook-evil-' + cls + '">' +
@@ -218,7 +241,7 @@
   }
 
   var CHIPS = [
-    ['present', '在世'], ['met', '有交情'], ['dao', '道侣'], ['friend', '朋友'], ['housed', '已入住'],
+    ['present', '在世'], ['met', '有交情'], ['mortal', '凡人'], ['dao', '道侣'], ['friend', '朋友'], ['housed', '已入住'],
     ['evilneg', '负善恶'], ['safe', '可安全击杀'], ['spar', '可切磋'], ['steal', '可偷窃'],
     ['merchant', '商人'], ['attackable', '可攻击'], ['memoria', '有留影'], ['talent', '固定天赋']
   ];
@@ -417,6 +440,7 @@
       '<div class="rolebook-grid2">' +
       kv('身份', c.title || '—') + kv('门派', c.sect) +
       kv('境界', c.realm) + kv('年龄', (c.age || 0) + ' 岁') +
+      (c.mortal ? kv('寿元', lifespanText(c)) : '') +
       kv('性别', c.sex) + kv('种族', c.race) +
       kv('性格', c.personality || '未知') + kv('五行', (c.element || []).join('、') || '—') +
       '</div>' +
@@ -477,6 +501,36 @@
       '</div></div>';
   }
 
+  // 闭关寿元面板：突破到某境界要闭关多少年，期间会寿终的凡人名单
+  function breakthroughHtml(m) {
+    var list = m.death_risk || [];
+    if (!list.length) {
+      return '<div class="rolebook-breakthrough" id="rolebook-breakthrough">' +
+        '<button type="button" class="rolebook-breakthrough-toggle" id="rolebook-bt-toggle">' +
+        '闭关寿元 <span class="rolebook-bt-caret">▾</span></button>' +
+        '<div class="rolebook-breakthrough-body" id="rolebook-bt-body">' +
+        '<p class="rolebook-note">暂无闭关寿元数据。</p></div></div>';
+    }
+    var rows = list.map(function (e) {
+      var mortals = e.mortals || [];
+      var names = mortals.slice(0, 6).map(function (x) {
+        return esc(x.name) + '(余 ' + (x.remaining < 0 ? '已超寿' : x.remaining + ' 年') + ')';
+      }).join('、');
+      var tail = mortals.length > 6 ? '…' : '';
+      var who = mortals.length
+        ? '会寿终 <b>' + mortals.length + '</b> 人：' + names + tail
+        : '无凡人会因此寿终';
+      return '<div class="rolebook-bt-entry">' +
+        '<span class="rolebook-bt-head">突破' + esc(e.realm) + ' · 闭关 ' + esc(e.years) + ' 年</span>' +
+        '<span class="rolebook-bt-deaths' + (mortals.length ? ' rolebook-bt-deaths-has' : '') + '">' + who + '</span>' +
+        '</div>';
+    }).join('');
+    return '<div class="rolebook-breakthrough" id="rolebook-breakthrough">' +
+      '<button type="button" class="rolebook-breakthrough-toggle" id="rolebook-bt-toggle">' +
+      '闭关寿元 <span class="rolebook-bt-caret">▾</span></button>' +
+      '<div class="rolebook-breakthrough-body" id="rolebook-bt-body">' + rows + '</div></div>';
+  }
+
   function bindEvents(m) {
     function bind(id, key) {
       var el = $(id);
@@ -501,6 +555,14 @@
     });
     var more = $('rolebook-more');
     if (more) more.onclick = loadMore;
+    var btToggle = $('rolebook-bt-toggle');
+    if (btToggle) btToggle.onclick = function () {
+      var body = $('rolebook-bt-body');
+      if (!body) return;
+      var collapsed = body.style.display === 'none';
+      body.style.display = collapsed ? '' : 'none';
+      btToggle.classList.toggle('on', collapsed);
+    };
     var reset = $('rolebook-reset');
     if (reset) reset.onclick = function () {
       filters = Object.assign({}, DEFAULTS); persist();
@@ -550,6 +612,7 @@
         '</div>' +
       '</div>' +
       statsHtml(m) +
+      breakthroughHtml(m) +
       '<div class="rolebook-filters">' +
         '<div class="rolebook-filters-row">' +
           '<label class="rolebook-search"><span>查找 NPC</span>' +
@@ -573,8 +636,8 @@
         '</div>' +
         '<div class="rolebook-filters-row rolebook-filters-row2">' +
           '<label class="rolebook-field"><span>排序</span><select id="rolebook-sort">' +
-            [['relevance', '与我相关优先'], ['safe', '安全目标优先'], ['layer', '境界高低'], ['favor', '好感优先'],
-             ['evil', '由恶到善'], ['evilDesc', '由善到恶'], ['name', '按名字'], ['id', '按 ID']]
+            [['relevance', '与我相关优先'], ['safe', '安全目标优先'], ['layer', '境界高低'], ['lifespan', '剩余寿元'],
+             ['favor', '好感优先'], ['evil', '由恶到善'], ['evilDesc', '由善到恶'], ['name', '按名字'], ['id', '按 ID']]
               .map(function (p) {
                 return '<option value="' + p[0] + '"' + (filters.sort === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
               }).join('') + '</select></label>' +
