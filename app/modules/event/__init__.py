@@ -6,7 +6,7 @@ from .build import EVENT_GRADE_NAMES, build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "event", "奇遇"
-ORDER, SELECT, SCHEMA = 60, "latest", 23  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 60, "latest", 24  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "event_meta.json"
 TABLES = frozenset({
     "tbrandomeventending", "tbrewarddrop", "tbquest", "tbitem", "tbitemtype",
