@@ -13,7 +13,7 @@ from .scan import enrich, meta, post, prepare, scan, summary
 
 # ORDER=95，避开 quest=70 / talent=20 / memoria=80 / hongchen=90
 KEY, LABEL = "rolebook", "人物图鉴"
-ORDER, SELECT, SCHEMA = 95, "latest", 4  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 95, "latest", 5  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "rolebook_meta.json"
 TABLES = frozenset({
     "tbnpcbasecfg",            # NPC 主表：基础字段、身份称号、性格/善恶/声望/魅力/悟性原始值、能力标记
@@ -33,7 +33,6 @@ TABLES = frozenset({
     "tbcultivaterealm",        # 境界名与 phases（phase → realm）
     "tbcultivatephase",        # 期名（炼气初期/筑基中期…）+ 所属 realm
     "tbcultivatelayer",        # 层号（propLayerId → phase + 层内序号）
-    "tbnpcbehaviorspacemapping", # 门派 → 常驻地区（不在存档里的 NPC 兜底提示）
     "tbspace",                 # 空间名与父子层级 → 实时位置路径表
     "tbsect",                  # 门派名（propSect）
     "tbnpcrace",               # 种族名（propRace）

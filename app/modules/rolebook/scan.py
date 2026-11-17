@@ -276,11 +276,10 @@ def enrich(module, meta_obj, state=None):
     locs = scanned.get("locs") or {}
     live_stats = scanned.get("stats") or {}
     player = scanned.get("player") or {}
-    sect_regions = meta.get("sect_regions") or {}
 
     npcs = []
     avatar_map = {}
-    evil_met = merchant_met = 0
+    evil_met = merchant_met = present_count = 0
     for card in built.get("npcs") or []:
         npc = dict(card)
         npc_id = _int(npc.get("id"), 0)
@@ -303,13 +302,14 @@ def enrich(module, meta_obj, state=None):
         npc["loc_name"] = place.get("name") or ""
         npc["region"] = place.get("region") or ""
         npc["gone"] = bool(place.get("gone"))
-        npc["config_region"] = sect_regions.get(npc.get("sect") or "") or ""
         tier = _intimacy_tier(tiers, favor) or {}
         npc["intimacy_name"] = live.get("tier") or tier.get("name") or ""
         idx = live.get("tier_index", -1)
         if (idx is None or idx < 0) and tier in tiers:
             idx = tiers.index(tier)
         npc["intimacy_index"] = idx
+        if npc["present"]:
+            present_count += 1
         if npc["met"]:
             evil_met += 1 if _int(npc.get("evil"), 0) < 0 else 0
             merchant_met += 1 if npc.get("merchant") else 0
@@ -319,6 +319,8 @@ def enrich(module, meta_obj, state=None):
         npcs.append(npc)
 
     live_stats = dict(live_stats)
+    live_stats["present"] = present_count
+    live_stats["absent"] = len(npcs) - present_count
     live_stats["evil_met"] = evil_met
     live_stats["merchant_met"] = merchant_met
 

@@ -75,7 +75,7 @@
     return t ? (t.desc || '') : '';
   }
 
-  // 位置两层：主=空间名，副=完整路径/地区。不在存档里的只给配置常驻地区。
+  // 位置两层：主=空间名，副=完整路径/地区。不在存档里的如实标注，不用配置常驻地兜底。
   function placeLines(c) {
     if (c.present && !c.gone) {
       return { main: c.loc_name || c.loc, sub: c.loc, off: false };
@@ -83,11 +83,7 @@
     if (c.present && c.gone) {
       return { main: '已退隐', sub: '不在当前世界', off: true };
     }
-    return {
-      main: '尚未在当前世界出现',
-      sub: c.config_region ? ('常驻地区（配置）：' + c.config_region) : '暂无实时位置',
-      off: true
-    };
+    return { main: '尚未出现在此世界', sub: '无实时位置（未生成或已退隐）', off: true };
   }
   function placeText(c) { return placeLines(c).main; }
 
@@ -105,7 +101,7 @@
   function match(c) {
     if (filters.q) {
       var hay = (c.name + ' ' + c.title + ' ' + c.sect + ' ' + c.personality + ' ' + c.realm +
-        ' ' + c.loc + ' ' + c.region + ' ' + c.config_region + ' ' +
+        ' ' + c.loc + ' ' + c.region + ' ' +
         (c.roles || []).join(' ') + ' ' + c.id).toLowerCase();
       if (hay.indexOf(filters.q.toLowerCase()) < 0) return false;
     }
@@ -257,7 +253,7 @@
     } else if (c.present && c.gone) {
       note = '寿元已尽或已退隐，当前世界找不到这个人';
     } else {
-      note = '不在当前存档里，可能尚未生成或已退隐；配置只给到门派驻地这一级，仅供参考';
+      note = '不在当前存档里，可能尚未生成或已退隐；没有实时位置就不猜地点。';
     }
     var live = c.present && !c.gone
       ? '<div class="rolebook-place-name">' + esc(c.loc_name || c.loc) + '</div>' +
@@ -473,7 +469,7 @@
       '<div class="rolebook-hero">' +
         '<div class="rolebook-hero-text"><h2>人物图鉴 · NPC 档案</h2>' +
         '<p><b>在世</b>是存档里真实存在、能定位的人；<b>有交情</b>才是打过交道的那一小撮。' +
-        '位置来自存档实时空间，不在当前世界的只给配置常驻地区。</p></div>' +
+        '位置来自存档实时空间；不在当前世界的如实标注，不拿配置常驻地凑数。</p></div>' +
         '<div class="rolebook-hero-figures">' +
           '<div><b>' + esc(stats.total || 0) + '</b><span>图鉴</span></div>' +
           '<div><b>' + esc((m.live_stats || {}).present || 0) + '</b><span>在世</span></div>' +
