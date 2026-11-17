@@ -8,6 +8,7 @@
 .hongchen-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .hongchen-dot.s-done{background:#5fbd8b}.hongchen-dot.s-doing{background:#6fa8d6}
 .hongchen-dot.s-ready{background:#d5ad63}.hongchen-dot.s-unpicked{background:#8d7fa3}
+.hongchen-dot.s-skipped{background:#5a6270}
 .hongchen-dot.s-locked{background:#c0854f}.hongchen-dot.s-notstarted{background:#6d7787}
 
 .hongchen-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
@@ -24,6 +25,10 @@
 .hongchen-cinfo{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
 .hongchen-name{font-size:15px;font-weight:600;color:#f2e6dc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hongchen-line{font-size:11px;color:#7d8593;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 女主实时位置：卡片与面板头都用；已退隐 / 不在本档各有一档颜色 */
+.hongchen-place{font-size:11px;color:#97a2b1;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hongchen-place.is-gone{color:#b9a3ae}
+.hongchen-place.is-away{color:#6f7787;font-style:italic}
 .hongchen-cardmeta{font-size:11px;color:#9aa3b2;margin-top:3px;line-height:1.4;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hongchen-cardleft{color:#c9a184;margin-top:1px}
@@ -43,6 +48,11 @@
   padding-bottom:11px;border-bottom:1px solid #242a34}
 .hongchen-panel-head b{color:#f0e2d6;font-size:14px;font-weight:600}
 .hongchen-panel-sum{display:inline-block;margin-left:8px;color:#7d8593;font-size:11px}
+.hongchen-panel-place{display:inline-block;margin-left:9px;padding:2px 9px;border-radius:20px;vertical-align:middle;
+  font-size:11px;color:#a9b3c0;background:#1b212a;border:1px solid #2b3340;
+  max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hongchen-panel-place.is-gone{color:#c6aeb8;background:#241c22;border-color:#4a3a44}
+.hongchen-panel-place.is-away{color:#7c8492;border-style:dashed}
 .hongchen-close{border:1px solid #2c333f;background:#181c23;color:#9aa3b2;border-radius:7px;width:27px;height:27px;
   line-height:1;cursor:pointer;font-size:17px;transition:.15s}
 .hongchen-close:hover{background:#242a34;color:#e8eaed;border-color:#3c4552}
@@ -91,6 +101,7 @@
 .hongchen-remain-chip.s-ready:hover{border-color:#d5ad63;background:#2c2619}
 .hongchen-remain-chip.s-doing{border-left:3px solid #6fa8d6}
 .hongchen-remain-chip.s-locked{border-left:3px solid #c0854f}
+.hongchen-remain-chip.s-skipped{border-left:3px dashed #5a6270}
 .hongchen-remain-chip.s-notstarted{border-left:3px solid #6d7787}
 .hongchen-remain-why{font-size:10px;color:#8b93a1}
 .hongchen-remain-all{font-size:11.5px;color:#8fd7ad;padding:2px 1px}
@@ -126,6 +137,7 @@
 .hongchen-axis-dot.rs-doing{background:#203247;border-color:#6fa8d6;color:#a9cdea}
 .hongchen-axis-dot.rs-ready{background:#3b3220;border-color:#d5ad63;color:#e4c485}
 .hongchen-axis-dot.rs-unpicked{background:#2c2736;border-color:#8d7fa3;color:#b9aacd}
+.hongchen-axis-dot.rs-skipped{background:#1a1e24;border-color:#4c535f;color:#8a929d;border-style:dashed}
 .hongchen-axis-dot.rs-notstarted,.hongchen-axis-dot.rs-empty{background:#181c23;border-color:#39414e;color:#7d8593}
 .hongchen-axis-dot.is-current{border-color:#e6c98a;border-width:3px}
 .hongchen-axis-dot.is-focus{background:var(--hongchen-accent,#c9866b);border-color:var(--hongchen-accent,#c9866b);
@@ -152,6 +164,7 @@
 .hongchen-ctx-chip:hover{border-color:var(--hongchen-accent,#c9866b);color:#e8eaed}
 .hongchen-ctx-chip.s-done{border-left:2px solid #5fbd8b}.hongchen-ctx-chip.s-doing{border-left:2px solid #6fa8d6}
 .hongchen-ctx-chip.s-ready{border-left:2px solid #d5ad63}.hongchen-ctx-chip.s-unpicked{border-left:2px solid #8d7fa3}
+.hongchen-ctx-chip.s-skipped{border-left:2px dashed #5a6270;color:#939caa}
 .hongchen-ctx-more{font-size:10px;color:#6f7787;align-self:center}
 
 /* 聚焦环主体：响应式网格，无横向长列 */
@@ -166,6 +179,11 @@
 .hongchen-node.s-done{border-left-color:#5fbd8b}.hongchen-node.s-doing{border-left-color:#6fa8d6}
 .hongchen-node.s-ready{border-left-color:#d5ad63}.hongchen-node.s-unpicked{border-left-color:#8d7fa3}
 .hongchen-node.s-locked{border-left-color:#c0854f}.hongchen-node.s-notstarted{border-left-color:#6d7787}
+/* 已跳过：灰 + 虚线，保留在树上但明确“不会再出现”，与可接取区分开 */
+.hongchen-node.s-skipped{border-left-color:#5a6270;border-left-style:dashed;background:#14171c}
+.hongchen-node.s-skipped .hongchen-nname{color:#aab2bd}
+.hongchen-node.s-skipped .hongchen-desc{color:#6f7787}
+.hongchen-node.s-skipped .hongchen-id{color:#5f6774}
 .hongchen-node.sel{outline:1px solid var(--hongchen-accent,#c9866b);outline-offset:1px;background:#20242c}
 .hongchen-node.dim{opacity:.26;filter:saturate(.5)}
 .hongchen-node-top{display:flex;align-items:center;justify-content:space-between;gap:6px}
@@ -174,9 +192,11 @@
 .s-done .hongchen-status{background:#1f3b2d;color:#8fd7ad}.s-doing .hongchen-status{background:#203247;color:#a9cdea}
 .s-ready .hongchen-status{background:#3b3220;color:#e4c485}.s-unpicked .hongchen-status{background:#2c2736;color:#b9aacd}
 .s-locked .hongchen-status{background:#3a2c1c;color:#d8a06d}.s-notstarted .hongchen-status{background:#232a33;color:#9aa6b5}
+.s-skipped .hongchen-status{background:#22262d;color:#98a1ad}
 .hongchen-nname{font-size:12.5px;font-weight:600;color:#eceff4;margin:4px 0 2px;line-height:1.35}
 .hongchen-desc{font-size:10.5px;line-height:1.5;color:#838c9a;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hongchen-node-note{font-size:10px;line-height:1.45;color:#b9aacd;margin-top:4px;background:#241f2e;border-radius:5px;padding:3px 6px}
+.hongchen-node.s-skipped .hongchen-node-note{color:#939caa;background:#1a1f26}
 .hongchen-badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
 .hongchen-badge{display:inline-block;font-size:9.5px;line-height:1.3;padding:2px 6px;border-radius:5px;white-space:normal;cursor:help;overflow-wrap:anywhere}
 .hongchen-badge.gate{background:#3a2d20;color:#e3b57e;border:1px solid #5a4330}
@@ -196,6 +216,21 @@
 .hongchen-inspect-desc{font-size:12px;color:#a4acb9;line-height:1.75;margin:8px 0 10px}
 .hongchen-inspect-note{font-size:11px;line-height:1.6;color:#c3b4d4;background:#241f2e;border:1px solid #39314a;
   border-radius:7px;padding:7px 9px;margin:2px 0 10px}
+.hongchen-inspect-note.is-skipped{color:#a3acb8;background:#191e25;border-color:#2f3743}
+/* 「怎么触发」：方式 / 前置（可点跳转）/ 条件 */
+.hongchen-trigger{margin:9px 0 10px;padding:8px 10px;background:#141920;border:1px solid #2b3340;
+  border-radius:8px;display:flex;flex-direction:column;gap:5px}
+.hongchen-tr{display:flex;gap:9px;font-size:11.5px;line-height:1.6;min-width:0}
+.hongchen-tr b{flex:0 0 52px;color:#7d8593;font-weight:500}
+.hongchen-tr span{color:#ced4dd;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.hongchen-jump{border:1px solid #3a4350;background:#1b212a;color:#d8c3ae;border-radius:6px;
+  padding:1px 7px;font-size:11px;cursor:pointer;transition:.15s;line-height:1.5}
+.hongchen-jump:hover{border-color:var(--hongchen-accent,#c9866b);color:#f2e6dc}
+.hongchen-tr-state{font-style:normal;font-size:10px;padding:1px 6px;border-radius:5px;
+  background:#232a33;color:#9aa6b5}
+.hongchen-tr-state.s-done{background:#1f3b2d;color:#8fd7ad}
+.hongchen-tr-state.s-doing{background:#203247;color:#a9cdea}
+.hongchen-tr-state.s-ready{background:#3b3220;color:#e4c485}
 .hongchen-inspect-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 18px}
 .hongchen-ir{display:flex;gap:9px;font-size:11.5px;line-height:1.6;min-width:0}
 .hongchen-ir b{color:#7d8593;font-weight:500;flex:0 0 44px}

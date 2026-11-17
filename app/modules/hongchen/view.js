@@ -7,16 +7,24 @@ const KEY='hongchen';
 const STATUS={
   done:{label:'已完成',cls:'s-done'}, doing:{label:'进行中',cls:'s-doing'},
   ready:{label:'可接取',cls:'s-ready'}, unpicked:{label:'另一条路',cls:'s-unpicked'},
+  skipped:{label:'已跳过',cls:'s-skipped'},
   locked:{label:'未解锁',cls:'s-locked'}, notstarted:{label:'未开始',cls:'s-notstarted'}
 };
 // 过滤项 value 对应状态类；'cando' 合并“可接取 + 未开始(可开启分支)”。
 const FILTERS=[['all','全部'],['cando','可做'],['doing','进行中'],['done','已完成'],
-               ['unpicked','另一条路'],['locked','未解锁']];
+               ['unpicked','另一条路'],['skipped','已跳过'],['locked','未解锁']];
 let LINES=[], OPEN='', FILTER='all', QUERY='', CUR=null, FOCUS=0, REMAIN=true;
 
 function statusOf(cls){return STATUS[cls]||STATUS.notstarted}
 function byId(line){const m={};(line.quests||[]).forEach(q=>m[q.id]=q);return m}
 function ringOf(q){return Number(q.depth)||1}
+// 女主此刻在哪：来自存档实时位置，不在存档就直说“不在当前世界”，不拿常驻地冒充。
+function placeText(line){
+  const loc=line.location||{};
+  if(!loc.present)return '不在当前世界';
+  const label=loc.path||loc.name||'位置未知';
+  return (loc.gone?'已退隐 · ':'在 ')+label;
+}
 
 function ring(pct,color){
   const c=2*Math.PI*16, p=Math.max(0,Math.min(100,Number(pct)||0));
@@ -52,10 +60,12 @@ function nodeHtml(q,map){
   const sel=(CUR===q.id)?' sel':'';
   const prev=(q.prev&&map[q.prev])?map[q.prev].name:'';
   // 分支任务用“N 选 1”提示，未选的那条写成“另一条路”，绝不写“已错过”。
-  let foot=(q.branch?'分支 · ':'')+(prev?'前置「'+esc(prev)+'」':'起点');
+  let foot=q.status_cls==='skipped'?'孤立节点 · 剧情已越过'
+    :((q.branch?'分支 · ':'')+(prev?'前置「'+esc(prev)+'」':'起点'));
   if(q.hidden)foot+=' · 隐藏';
   let note='';
-  if(q.status_cls==='unpicked'&&q.fail_text)note='<div class="hongchen-node-note">'+esc(q.fail_text)+'</div>';
+  if((q.status_cls==='unpicked'||q.status_cls==='skipped')&&q.fail_text)
+    note='<div class="hongchen-node-note">'+esc(q.fail_text)+'</div>';
   return '<div class="hongchen-node '+st.cls+dim+sel+'" data-qid="'+q.id+'" title="'+esc(q.desc||q.name)+'">'
     +'<div class="hongchen-node-top"><span class="hongchen-id">#'+q.id+'</span>'
     +'<span class="hongchen-status">'+st.label+'</span></div>'
@@ -88,6 +98,7 @@ function ringState(line,d){
   if(c.indexOf('done')>=0)return 'done';
   if(c.indexOf('ready')>=0)return 'ready';
   if(c.indexOf('unpicked')>=0)return 'unpicked';
+  if(c.every(x=>x==='skipped'))return 'skipped';
   return 'notstarted';
 }
 
@@ -205,6 +216,31 @@ function remainHtml(line){
     +'</div>';
 }
 
+// 「怎么触发」：直接回答"这任务怎么来"——方式 + 可跳转的前置 + 人话条件。
+// 未选分支/已跳过节点同样显示，让人一眼看出是被剧情越过，而不是卡了 bug。
+function triggerHtml(q,line){
+  const map=byId(line);
+  const src=Number(q.acq_source||0);
+  const giver=(q.giver&&q.giver.name)||'';
+  const byNpc=(src===1)||(src!==2&&!!giver);
+  const way=byNpc?(giver?('与「'+giver+'」对话接取'):'与剧情人物对话接取')
+                 :'自动触发（剧情推进时出现）';
+  let prevHtml='';
+  if(q.prev){
+    const p=map[q.prev];
+    prevHtml=p?('先完成 <button type="button" class="hongchen-jump" data-jump="'+p.id
+        +'" title="跳到「'+esc(p.name)+'」">'+esc(p.name)+'</button>'
+        +'<em class="hongchen-tr-state '+statusOf(p.status_cls).cls+'">'+statusOf(p.status_cls).label+'</em>')
+      :'先走完上一段剧情';
+  }
+  const conds=(q.gates||[]).filter(g=>g&&g.text).map(g=>esc(g.text));
+  return '<div class="hongchen-trigger">'
+    +'<div class="hongchen-tr"><b>怎么触发</b><span>'+esc(way)+'</span></div>'
+    +(prevHtml?'<div class="hongchen-tr"><b>前置</b><span>'+prevHtml+'</span></div>':'')
+    +(conds.length?'<div class="hongchen-tr"><b>条件</b><span>'+conds.join('、')+'</span></div>':'')
+    +'</div>';
+}
+
 function inspectHtml(q,line){
   const st=statusOf(q.status_cls), map=byId(line);
   const gates=[];
@@ -220,10 +256,13 @@ function inspectHtml(q,line){
   const next=(q.next||[]).map(id=>map[id]?esc(map[id].name):('#'+id)).join('、');
   const notice=(q.status_cls==='unpicked')
     ?'<div class="hongchen-inspect-note">这条支线当时没选，你走了另一条路；它不会再出现。</div>'
-    :(q.status_cls==='notstarted'?'<div class="hongchen-inspect-note">前置剧情还没走到，先推进前面的任务吧。</div>':'');
+    :(q.status_cls==='skipped'
+      ?'<div class="hongchen-inspect-note is-skipped">这条分支在本档已跳过：它与同线其它任务没有关联，且剧情已经推进到更后面的环，游戏里不会再出现。</div>'
+      :(q.status_cls==='notstarted'?'<div class="hongchen-inspect-note">前置剧情还没走到，先推进前面的任务吧。</div>':''));
   return '<div class="hongchen-inspect"><div class="hongchen-inspect-title">'
     +'<span class="hongchen-id">#'+q.id+'</span>'+esc(q.name)
     +'<span class="hongchen-status '+st.cls+'">'+st.label+'</span></div>'
+    +triggerHtml(q,line)
     +(q.desc?'<p class="hongchen-inspect-desc">'+esc(q.desc)+'</p>':'')
     +notice
     +'<div class="hongchen-inspect-grid">'
@@ -251,6 +290,9 @@ function panelHtml(line){
   const headline=p.headline||((p.done||0)+'/'+(p.base||0)+' 已完成');
   return '<div class="hongchen-panel" style="--hongchen-accent:'+esc(line.color||'#c9866b')+'">'
     +'<div class="hongchen-panel-head"><div><b>'+esc(line.name)+'</b> · 情缘任务树'
+    +'<span class="hongchen-panel-place'+((line.location&&line.location.gone)?' is-gone':'')
+    +((line.location&&line.location.present)?'':' is-away')+'" title="存档里的实时位置">'
+    +esc(placeText(line))+'</span>'
     +'<span class="hongchen-panel-sum">'+esc(line.group)+' ｜ '+esc(headline)+'</span></div>'
     +'<button type="button" class="hongchen-close" title="收起">×</button></div>'
     +remainHtml(line)
@@ -282,7 +324,9 @@ function render(host,stats){
       +'" style="--hongchen-accent:'+esc(line.color||'#c9866b')+'">'
       +'<span class="hongchen-portrait">'+portrait+'</span>'
       +'<span class="hongchen-cinfo"><span class="hongchen-name">'+esc(line.name)+'</span>'
-      +'<span class="hongchen-line">'+esc(line.group)+'</span>'
+      +'<span class="hongchen-place'+((line.location&&line.location.gone)?' is-gone':'')
+      +((line.location&&line.location.present)?'':' is-away')+'" title="存档里的实时位置">'
+      +esc(placeText(line))+'</span>'
       +'<span class="hongchen-cardmeta">已完成 '+(p.done||0)+'/'+(p.base||p.total||0)+'</span>'
       +'<span class="hongchen-cardmeta hongchen-cardleft'+((line.remaining&&line.remaining.done)?' is-done':'')+'">'
       +esc((line.remaining&&line.remaining.brief)||'')+'</span></span>'
@@ -297,7 +341,8 @@ function render(host,stats){
     +'<div class="hongchen-legend">'
     +'<span><i class="hongchen-dot s-done"></i>已完成</span><span><i class="hongchen-dot s-doing"></i>进行中</span>'
     +'<span><i class="hongchen-dot s-ready"></i>可接取</span><span><i class="hongchen-dot s-notstarted"></i>未开始</span>'
-    +'<span><i class="hongchen-dot s-unpicked"></i>另一条路</span><span><i class="hongchen-dot s-locked"></i>未解锁</span></div></div>'
+    +'<span><i class="hongchen-dot s-unpicked"></i>另一条路</span><span><i class="hongchen-dot s-skipped"></i>已跳过</span>'
+    +'<span><i class="hongchen-dot s-locked"></i>未解锁</span></div></div>'
     +'<div class="hongchen-cards">'+cards+'</div>'
     +(line?panelHtml(line):'<div class="hongchen-empty-hint">选择一位角色，展开她的情缘任务树</div>')
     +'</div>';

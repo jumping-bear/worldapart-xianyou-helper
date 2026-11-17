@@ -8,7 +8,7 @@ import re
 
 from meta_update import (
     SCHEMA, _call_parts, _clip, _const_args, _expr_ints, _int,
-    _plain, _rows, _text,
+    _plain, _rows, _text, build_spaces,
 )
 
 
@@ -30,12 +30,30 @@ _ATTR_TOKEN = {
     "REALM": "境界", "LAYER": "修炼阶段", "POWER": "战力",
 }
 
+# 条件调用「任务提交/任务持有」这类玩家看不懂的机器写法 -> 人话动词。
+# 末尾数字不是数量，而是任务 id，必须翻成任务名，绝不能把 id 直接甩给玩家。
+_QUEST_CALLS = {
+    "任务提交": "已提交过", "任务已提交": "已提交过",
+    "任务完成": "已完成", "任务已完成": "已完成",
+    "任务持有": "已接取", "任务接取": "已接取", "任务领取": "已接取",
+}
+
 
 def _table_rows(table):
     """tbquest 在游戏包里是 {rows, overrides}，其它表多为纯 list。"""
     if isinstance(table, dict) and isinstance(table.get("rows"), list):
         return table["rows"]
     return _rows(table)
+
+
+def _space_index(tables):
+    """tbspace -> {spaceId: "父地点 / 子地点"}，供 scan 按存档实时位置查女主在哪。"""
+    out = {}
+    for space_id, info in build_spaces(tables).items():
+        path = [part for part in (info.get("path") or []) if part]
+        if path:
+            out[str(space_id)] = " / ".join(path)
+    return out
 
 
 def _unwrap(node):
@@ -105,7 +123,23 @@ def _accepts(node):
     return out
 
 
-def _expr_gate(node, npcs):
+def _type_label(value):
+    """tbquesttype 的 text 带方括号（如「[主线]」），去掉括号只留类别名。"""
+    return re.sub(r"[\[\]【】\s]", "", str(value or ""))
+
+
+def _quest_gate_text(verb, quest_id, quest_names, quest_types):
+    """「任务提交 11363」 -> 「已提交过主线「天帷之破」」，查不到名字也不出现裸数字。"""
+    name = (quest_names or {}).get(quest_id) or ""
+    kind = _type_label((quest_types or {}).get(quest_id))
+    if not name:
+        return "%s某个任务" % verb
+    if kind:
+        return "%s%s「%s」" % (verb, kind, name)
+    return "%s「%s」" % (verb, name)
+
+
+def _expr_gate(node, npcs, quest_names=None, quest_types=None):
     """递归翻译条件表达式（alias 缺失或无法识别时兜底）。"""
     node = _unwrap(node)
     name, index, args = _call_parts(node)
@@ -116,7 +150,7 @@ def _expr_gate(node, npcs):
     if not name:
         return None
     if name in ("且", "或", "&&", "||") and args:
-        parts = [_expr_gate(item, npcs) for item in args]
+        parts = [_expr_gate(item, npcs, quest_names, quest_types) for item in args]
         parts = [p for p in parts if p]
         if not parts:
             return None
@@ -124,9 +158,16 @@ def _expr_gate(node, npcs):
         return {"kind": "", "need": 0, "text": joiner.join(p["text"] for p in parts),
                 "parts": parts}
     if name in ("非", "!", "not") and args:
-        inner = _expr_gate(args[0], npcs)
+        inner = _expr_gate(args[0], npcs, quest_names, quest_types)
         return {"kind": "", "need": 0,
                 "text": "非（%s）" % (inner["text"] if inner else "条件")}
+    call = index if index in _QUEST_CALLS else (name if name in _QUEST_CALLS else "")
+    if call and nums:
+        # 「条件.任务提交(11363)」：数字是任务 id，翻成任务名 + 类别。
+        quest_id = nums[0]
+        return {"kind": "quest", "need": quest_id,
+                "text": _quest_gate_text(_QUEST_CALLS[call], quest_id,
+                                         quest_names, quest_types)}
     if name in ("大于等于", "GE", ">=") and args and nums:
         left = _unwrap(args[0])
         lname, lindex, largs = _call_parts(left)
@@ -144,7 +185,7 @@ def _expr_gate(node, npcs):
                     "text": "%s≥%d" % (lindex, need)}
         if isinstance(lindex, str) and lindex:
             return {"kind": "", "need": need, "text": "%s≥%d" % (lindex, need)}
-        return {"kind": "", "need": need, "text": "≥%d" % need}
+        return {"kind": "", "need": need, "text": "属性≥%d" % need}
     if name == "NPC" and index == "好感度至少" and len(nums) >= 2:
         return {"kind": "favor", "npc": nums[0], "need": nums[1],
                 "text": "%s好感≥%d" % (npcs.get(nums[0], "NPC %s" % nums[0]), nums[1])}
@@ -155,16 +196,19 @@ def _expr_gate(node, npcs):
             "text": str(text) + ((" " + "/".join(str(x) for x in nums)) if nums else "")}
 
 
-def _gate_from_condition(cond_row, npcs, grey_text="", quest_names=None, cond_option=None):
+def _gate_from_condition(cond_row, npcs, grey_text="", quest_names=None, cond_option=None,
+                         quest_types=None):
     """把 optionCondition 引用的条件行翻译成人话门槛 + 可判定结构。
 
-    quest_names / cond_option 由配置表动态构建（见 build_hongchen）：
+    quest_names / cond_option / quest_types 由配置表动态构建（见 build_hongchen）：
       * quest_names: 任务 id -> 人话任务名，用于把 SIDE_ZHUJI_80144 翻成「丹房门影」；
+      * quest_types: 任务 id -> 类别（主线/红尘/委托…），让「任务提交 11363」能翻成主线；
       * cond_option: 条件 id -> 引用它的选项文本，用于把 _O1 翻成「言辞支开」。
     新增任务/选项只需重新导出快照即可，无需改代码。
     """
     quest_names = quest_names or {}
     cond_option = cond_option or {}
+    quest_types = quest_types or {}
     gate = {"alias": "", "text": "", "alias_text": "", "kind": "", "need": 0,
             "npc": 0, "attr_name": "", "source": ""}
     if not isinstance(cond_row, dict):
@@ -183,6 +227,11 @@ def _gate_from_condition(cond_row, npcs, grey_text="", quest_names=None, cond_op
         option_text = cond_option.get(_int(cond_row.get("id"))) or ("选项 %s" % m.group(2))
         text = "需完成「%s」并选择「%s」" % (quest_name, option_text)
         kind, need = "quest_option", quest_id
+    elif (m := re.search(r"_AFTER_(\d+)\s*$", upper)):
+        # 云嫣线 YUNYAN_INVITE_AFTER_11363 这类别名，条件树缺失时也能翻成人话。
+        quest_id = _int(m.group(1))
+        text = _quest_gate_text("已提交过", quest_id, quest_names, quest_types)
+        kind, need = "quest", quest_id
     elif re.search(r"INTIMACY|FAVOR", upper) and (m := re.search(r"(\d+)\s*$", upper)):
         text, kind, need = "好感≥%s" % m.group(1), "favor", int(m.group(1))
     elif "COST" in upper and (m := re.search(r"(\d+)\s*$", upper)):
@@ -193,15 +242,16 @@ def _gate_from_condition(cond_row, npcs, grey_text="", quest_names=None, cond_op
         m = re.search(r"_([A-Z]+)_(GE|LT|EQ|GT)_(\d+)\s*$", upper)
         if m:
             token, op, digits = m.group(1), m.group(2), int(m.group(3))
-            attr_name = _ATTR_TOKEN.get(token, token)
+            attr_name = _ATTR_TOKEN.get(token, "")
             symbol = {"GE": "≥", "GT": ">", "LT": "＜", "EQ": "＝"}[op]
-            text, kind, need = "%s%s%d" % (attr_name, symbol, digits), "attr", digits
+            # 认不出的属性词宁可写「属性」，也不要甩一个英文 token 给玩家。
+            text, kind, need = "%s%s%d" % (attr_name or "属性", symbol, digits), "attr", digits
         elif (m := re.search(r"_(GE|LT|EQ)_(\d+)\s*$", upper)):
             symbol = {"GE": "≥", "LT": "＜", "EQ": "＝"}[m.group(1)]
-            text, need = "%s%d" % (symbol, int(m.group(2))), int(m.group(2))
+            text, need = "属性%s%d" % (symbol, int(m.group(2))), int(m.group(2))
 
     if not text:
-        parsed = _expr_gate(cond_row.get("condition"), npcs)
+        parsed = _expr_gate(cond_row.get("condition"), npcs, quest_names, quest_types)
         if parsed:
             text = parsed.get("text") or ""
             kind, need = parsed.get("kind") or "", _int(parsed.get("need"))
@@ -277,10 +327,13 @@ def build_hongchen(tables):
     for row in _rows(tables.get("tbconditionexpr")):
         if isinstance(row, dict) and row.get("id") is not None:
             conds[_int(row["id"])] = row
-    # 任务 id -> 人话名；条件 id -> 引用它的选项文本。均为数据驱动，供 SIDE_ZHUJI 别名翻译。
-    quest_names = {}
+    # 任务 id -> 人话名 / 类别。取全表（不只红尘），这样「任务提交 11363」这种
+    # 指向主线的前置也能翻成「已提交过主线「天帷之破」」。
+    quest_names, quest_types = {}, {}
     for row in all_rows:
-        quest_names[_int(row["id"])] = _plain(row.get("name")) or str(_int(row["id"]))
+        qid = _int(row["id"])
+        quest_names[qid] = _plain(row.get("name")) or str(qid)
+        quest_types[qid] = type_names.get(_int(row.get("type"))) or ""
     cond_option = {}
     for row in _rows(tables.get("tbdialogue")):
         if not isinstance(row, dict):
@@ -311,7 +364,8 @@ def build_hongchen(tables):
             if option.get("optionCondition"):
                 gate = _gate_from_condition(
                     conds.get(_int(option["optionCondition"])), npcs,
-                    _text(option.get("optionGreyText")), quest_names, cond_option)
+                    _text(option.get("optionGreyText")), quest_names, cond_option,
+                    quest_types)
                 gate["source"] = "optionCondition"
             if did in hc_ids:
                 options_by_dialogue.setdefault(did, []).append({
@@ -360,7 +414,7 @@ def build_hongchen(tables):
             gates = list(acq_gates.get(qid) or [])
             if row.get("acqCondition"):
                 gate = _gate_from_condition(conds.get(_int(row["acqCondition"])), npcs,
-                                            "", quest_names, cond_option)
+                                            "", quest_names, cond_option, quest_types)
                 gate["source"] = "acqCondition"
                 if gate not in gates:
                     gates.append(gate)
@@ -511,6 +565,7 @@ def build_hongchen(tables):
         "schema": SCHEMA, "lines": lines, "quests": all_quests,
         "states": {str(k): v for k, v in HONGCHEN_STATE_NAMES.items()},
         "attr_names": attr_names, "stats": stats,
+        "spaces": _space_index(tables),
         "done_states": list(DONE_STATES), "doing_states": list(DOING_STATES),
     }
 

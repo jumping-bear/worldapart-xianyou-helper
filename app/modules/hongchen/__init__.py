@@ -6,11 +6,11 @@ from .build import build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "hongchen", "红尘"
-ORDER, SELECT, SCHEMA = 90, "latest", 3  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 90, "latest", 4  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "hongchen_meta.json"
 TABLES = frozenset({
     "tbquest", "tbquesttype", "tbdialogue", "tbconditionexpr", "tbnpcbasecfg",
-    "tbitem", "tbgameactionflow", "tbrewarddrop", "tbinteractattribute",
+    "tbitem", "tbgameactionflow", "tbrewarddrop", "tbinteractattribute", "tbspace",
 })
 
 
@@ -20,6 +20,6 @@ def builtin_ok(data):
 
 def empty():
     return {"schema": DATA_SCHEMA, "lines": [], "quests": [],
-            "states": {}, "types": {}, "attr_names": {}, "stats": {
+            "states": {}, "types": {}, "attr_names": {}, "spaces": {}, "stats": {
                 "lines": 0, "quests": 0, "with_gates": 0, "gates": 0, "branches": 0},
             "done_states": [2, 3], "doing_states": [1, 6]}
