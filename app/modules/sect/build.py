@@ -16,10 +16,14 @@ import re
 from meta_update import _int, _plain, _rows, _text, build_realms
 
 
-# 任务类型没有独立文案表，这里只做界面归类；贡献档位来自 tbsecttaskpool。
+# 任务类型没有独立文案表（已核对 tbsecttaskpool / tbquesttype 均无），这里只做界面归类；
+# 已知 4 类固定文案，未知类型兜底为「宗门任务·类型N」，不硬编码新类型。
 TASK_TYPES = {1: "外务委托", 2: "宗门差遣", 3: "宗门要务", 4: "宗门重任"}
-# 玩家可晋升的职位链；其余职位（执事、首座、宗主等）只作为宗门职级展示。
-CAREER = (1, 3, 4, 6, 9)
+
+
+def _task_type_name(task_type):
+    """任务类型文案：已知类型用固定文案，未知类型兜底为「宗门任务·类型N」。"""
+    return TASK_TYPES.get(task_type) or ("宗门任务·类型%d" % task_type)
 
 
 def _rows_of(tables, key):
@@ -199,8 +203,8 @@ def build(tables):
         positions.append(item)
         position_by_id[position_id] = item
     positions.sort(key=lambda item: (item["level"], item["id"]))
-    career = [position_by_id[position_id] for position_id in CAREER
-              if position_id in position_by_id]
+    # 玩家可晋升的职位链由职位表 is_player_promotable 决定；其余职位（执事、首座、宗主等）只作职级展示。
+    career = [item for item in positions if item.get("promotable")]
 
     # 境界 → 修炼层数：把每个境界的起始层数摊平成 {层数: 境界}，供存档侧判断。
     phases = {}
@@ -274,14 +278,15 @@ def build(tables):
             drop_id = _int(pool_row.get("reward_drop_id"))
             stones, sect_rep, _town_rep, extra = _sum_drop(drops.get(drop_id) or [], rep_map)
             quest_id = _int(pool_row.get("quest_id"))
+            task_type = _int(pool_row.get("task_type"))
+            type_name = _task_type_name(task_type)
             difficulty = _int(pool_row.get("task_difficulty"), 1)
             tasks.append({
                 "id": _int(pool_row.get("id")),
                 "quest": quest_id,
-                "name": quests.get(quest_id) or ("%s·难度%d" % (
-                    TASK_TYPES.get(_int(pool_row.get("task_type")), "宗门任务"), difficulty)),
-                "type": _int(pool_row.get("task_type")),
-                "type_name": TASK_TYPES.get(_int(pool_row.get("task_type")), "宗门任务"),
+                "name": quests.get(quest_id) or ("%s·难度%d" % (type_name, difficulty)),
+                "type": task_type,
+                "type_name": type_name,
                 "difficulty": difficulty,
                 "min_position": _int(pool_row.get("min_position_level")),
                 "min_position_name": (position_by_id.get(

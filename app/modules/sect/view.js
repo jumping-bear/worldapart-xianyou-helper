@@ -242,7 +242,7 @@ function shopHtml(rows){
    ${req.length?badge('需 '+req.join(' / '),'warn'):''}
    ${got?badge('模拟兑换 ×'+got,'ok'):''}
    <span class="sec-price">${num(entry.price)} 贡献</span>
-   <button type="button" class="sec-buy" data-buy="${esc(key)}" ${can?'':'disabled'}>兑换</button>
+   <button type="button" class="sec-buy" data-buy="${esc(key)}" ${can?'':'disabled'} title="仅规划，不进游戏存档">模拟 +1</button>
   </div>`;
  };
  const body=groups.filter(key=>cat[key].length).map(key=>{
