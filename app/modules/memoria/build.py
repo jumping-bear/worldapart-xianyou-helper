@@ -86,6 +86,111 @@ def _intimacies(tables):
             if isinstance(row, dict) and row.get("id") is not None}
 
 
+def _walk_strings(value):
+    """递归取出 Expr 结构里的字符串，用于识别「开始留影石且胜利」。"""
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from _walk_strings(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_strings(child)
+    elif isinstance(value, str):
+        yield value
+
+
+def _action_args(action):
+    """Expr 调用的参数：配置里形如 [["int", {"value": 2}], ...]。"""
+    values = []
+    for arg in action.get("args") or []:
+        if isinstance(arg, list) and len(arg) == 2 and isinstance(arg[1], dict):
+            value = _int(arg[1].get("value"), None)
+            if value is not None:
+                values.append(value)
+    return values
+
+
+def _shooting_quests(tables, quest_rows):
+    """任务目标「开始留影石且胜利」→ {shooting_id: {quest, name}}。"""
+    actions = {}
+    for row in _rows(tables.get("tbgameactionflow")):
+        if not isinstance(row, dict):
+            continue
+        action = row.get("action")
+        if not isinstance(action, dict):
+            continue
+        if "开始留影石且胜利" not in set(_walk_strings(action)):
+            continue
+        values = _action_args(action)
+        if len(values) >= 2:
+            actions[_int(row.get("id"))] = {"shooting": values[0], "npc": values[1]}
+    result = {}
+    for quest in quest_rows:
+        if not isinstance(quest, dict):
+            continue
+        for objective in quest.get("objectives") or []:
+            if not isinstance(objective, dict):
+                continue
+            hit = actions.get(_int(objective.get("activeFlowId")))
+            if not hit:
+                continue
+            result[hit["shooting"]] = {
+                "quest": _int(quest.get("id")),
+                "name": _clean(quest.get("name")),
+            }
+    return result
+
+
+def _shooting_entries(tables):
+    """NPC 互动菜单里的「留影石」入口：{shooting_id: row}。"""
+    result = {}
+    for row in _rows(tables.get("tbnpcinteractgameentry")):
+        if not isinstance(row, dict):
+            continue
+        if _int(row.get("interactGameType")) != 1:  # MAKEUP_PHOTO
+            continue
+        if _clean(row.get("interactButtonName")) != "留影石":
+            continue
+        shooting_id = _int(row.get("interactGameParam"))
+        if shooting_id:
+            result[shooting_id] = row
+    return result
+
+
+def _shooting_unlock(entry_row, quest_info, npc_id, entry_by_npc_sub, shooting_titles):
+    """单段留影的解锁条件：互动入口、前置段、好感、精力、支线。"""
+    result = {
+        "entry": bool(entry_row), "sub": 0, "dep": 0, "after": "",
+        "intimacy": 0, "stamina": 0, "quality": "", "tag": "",
+        "quest": 0, "quest_name": "", "reachable": False, "note": "",
+    }
+    if entry_row:
+        result.update({
+            "sub": _int(entry_row.get("subId")),
+            "dep": _int(entry_row.get("dependsSubId")),
+            "intimacy": _int(entry_row.get("UnlockIntimacy")),
+            "stamina": _int(entry_row.get("costStamina")),
+            "quality": _clean(entry_row.get("rewardDesc")),
+            "tag": _clean(entry_row.get("stateTagName")),
+            "reachable": True,
+        })
+        dep = result["dep"]
+        if dep:
+            previous = entry_by_npc_sub.get((npc_id, dep))
+            previous_shooting = _int(previous.get("interactGameParam")) if previous else 0
+            result["after"] = shooting_titles.get(previous_shooting, "")
+    if quest_info:
+        result.update({
+            "quest": _int(quest_info.get("quest")),
+            "quest_name": quest_info.get("name") or "",
+            "reachable": True,
+        })
+    if not result["reachable"]:
+        result["note"] = "当前版本无解锁入口"
+    elif result["quest"] and not result["entry"]:
+        result["note"] = "由支线解锁"
+    return result
+
+
 def build_memoria(tables):
     entries = []
     npc_ids = set()
@@ -98,6 +203,7 @@ def build_memoria(tables):
             npc_ids.add(npc_id)
         entries.append({
             "id": _int(row["id"]), "cat": category, "npc": npc_id,
+            "shooting": _int(row.get("shooting_id")),
             "title": _plain(row.get("title")), "hint": _plain(row.get("locked_hint")),
             "hidden": bool(row.get("hide_when_locked")),
             "sort": _int(row.get("sort")),
@@ -112,6 +218,24 @@ def build_memoria(tables):
     for row in quests:
         if row.get("id") is not None:
             quest_by_id[_int(row["id"])] = row
+
+    # 留影解锁条件：NPC 互动入口 + 前置段 + 好感门槛 + 任务直达。
+    shooting_quests = _shooting_quests(tables, quests)
+    shooting_entries = _shooting_entries(tables)
+    entry_by_npc_sub = {}
+    for row in shooting_entries.values():
+        entry_by_npc_sub[(_int(row.get("npcId")), _int(row.get("subId")))] = row
+    shooting_titles = {}
+    for entry in entries:
+        if entry["cat"] == 1 and entry["shooting"]:
+            shooting_titles[entry["shooting"]] = entry["title"]
+    for entry in entries:
+        if entry["cat"] != 1:
+            continue
+        entry["unlock"] = _shooting_unlock(
+            shooting_entries.get(entry["shooting"]),
+            shooting_quests.get(entry["shooting"]),
+            entry["npc"], entry_by_npc_sub, shooting_titles)
 
     realms, phases = _realms(tables)
     for entry in entries:
@@ -137,12 +261,17 @@ def build_memoria(tables):
         "intimacy": _intimacies(tables),
         "tournament": _name_map(tables["tbtournament"], "name"),
     }
+    shooting_total = sum(1 for row in entries if row["cat"] == 1)
+    shooting_reachable = sum(1 for row in entries
+                             if row["cat"] == 1 and row.get("unlock", {}).get("reachable"))
     stats = {
         "entries": len(entries),
-        "shooting": sum(1 for row in entries if row["cat"] == 1),
+        "shooting": shooting_total,
         "bond": sum(1 for row in entries if row["cat"] == 2),
         "adventure": sum(1 for row in entries if row["cat"] == 3),
         "bond_types": len(bond_types),
+        "shooting_reachable": shooting_reachable,
+        "shooting_blocked": shooting_total - shooting_reachable,
     }
     entries.sort(key=lambda row: (row["cat"], row["sort"], row["id"]))
     return {

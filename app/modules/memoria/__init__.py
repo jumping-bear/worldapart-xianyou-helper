@@ -7,12 +7,13 @@ from .build import build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "memoria", "留影石"
-ORDER, SELECT, SCHEMA = 80, "latest", 1  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 80, "latest", 2  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "memoria_meta.json"
 EXTRA_SNAPSHOTS = {"memoria_avatars_meta.json": build_avatars}
 TABLES = frozenset({
     "tbmemoriaentry", "tbmemoriabondtype", "tbnpcbasecfg", "tbitem",
     "tbquest", "tbcultivaterealm", "tbnpcintimacy", "tbmonster", "tbtournament",
+    "tbnpcinteractgameentry", "tbgameactionflow",
 })
 
 
@@ -24,4 +25,5 @@ def builtin_ok(data):
 def empty():
     return {"schema": DATA_SCHEMA, "entries": [], "cast": {}, "bond_types": {},
             "names": {}, "stats": {"entries": 0, "shooting": 0, "bond": 0,
-                                   "adventure": 0, "bond_types": 0}}
+                                   "adventure": 0, "bond_types": 0,
+                                   "shooting_reachable": 0, "shooting_blocked": 0}}

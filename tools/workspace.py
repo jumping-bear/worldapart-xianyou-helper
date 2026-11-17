@@ -13,6 +13,11 @@
     * 每个版本一条 release/<版本> 集成分支；
     * 每个任务一条 feature/<版本>-<任务> 分支，放在独立 worktree；
     * 开发分支不改 app/version.py，版本号由发布负责人在发布时统一修改。
+
+Trae agent 工具链：
+    使用 Trae 时工作区由 Trae 自动建在 ~/.trae-cn/worktrees/<仓库>/ 并自动合并，
+    不再需要手动 new/remove；list/check 会同时识别 Trae 与手动 worktree，
+    失效目录自动跳过并提示 git worktree prune，不会中断检查。
 """
 import argparse
 import os
@@ -23,6 +28,9 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKTREE_PARENT = os.path.join(os.path.dirname(ROOT), "xy-tasks")
+# Trae agent 工具链的工作区目录；由 Trae 自动创建与合并，本脚本只做识别和自检。
+TRAE_WORKTREE_ROOT = os.path.join(
+    os.path.expanduser("~"), ".trae-cn", "worktrees", os.path.basename(ROOT))
 VERSION_RE = re.compile(r"^\d+\.\d+(?:\.\d+)?$")
 
 
@@ -38,7 +46,7 @@ def git(args, cwd=None, check=True):
 
 
 def worktrees():
-    """解析 git worktree list --porcelain，返回 [{path, branch}]。"""
+    """解析 git worktree list --porcelain，返回 [{path, branch, prunable}]。"""
     output = git(["worktree", "list", "--porcelain"]).stdout
     items, current = [], {}
     for line in output.splitlines():
@@ -56,9 +64,21 @@ def worktrees():
             current["branch"] = "(detached)"
         elif key == "bare":
             current["branch"] = "(bare)"
+        elif key == "prunable":
+            current["prunable"] = True
     if current:
         items.append(current)
     return items
+
+
+def worktree_kind(path):
+    """区分 Trae 自动工作区、手动 worktree 与主工作区，便于分别提示。"""
+    target = os.path.normcase(os.path.abspath(path))
+    for root, label in ((TRAE_WORKTREE_ROOT, "trae"), (WORKTREE_PARENT, "manual")):
+        base = os.path.normcase(os.path.abspath(root))
+        if target == base or target.startswith(base + os.sep):
+            return label
+    return "main" if target == os.path.normcase(os.path.abspath(ROOT)) else "other"
 
 
 def branch_exists(name):
@@ -85,6 +105,8 @@ def version_of(path):
 
 
 def dirty_count(path):
+    if not os.path.isdir(path):
+        return -2  # git worktree list 仍会列出已失效目录，不能再对它执行 git 命令
     result = git(["status", "--porcelain"], cwd=path, check=False)
     if result.returncode != 0:
         return -1
@@ -118,6 +140,9 @@ def cmd_new(args):
     line = "release/%s" % version
     feature = "feature/%s-%s" % (version, task)
     target = os.path.abspath(args.dir or os.path.join(WORKTREE_PARENT, "%s-%s" % (version, task)))
+    if os.path.isdir(TRAE_WORKTREE_ROOT) and not args.dir:
+        print("提示：检测到 Trae 工作区目录 %s；若使用 Trae agent 工具链，"
+              "工作区由 Trae 自动创建，本命令仅用于手动场景。" % TRAE_WORKTREE_ROOT)
 
     if not valid_branch(feature):
         raise SystemExit("分支名不合法：%s" % feature)
@@ -171,7 +196,10 @@ def cmd_list(_args):
         mark = "*" if os.path.normcase(os.path.abspath(path)) == main_path else " "
         count = dirty_count(path)
         state = "无法读取" if count < 0 else ("干净" if count == 0 else "%d 处未提交" % count)
-        print("%s %s  [%s]  v%s  %s" % (mark, path, branch, version_of(path), state))
+        if count == -2:
+            state = "路径已不存在（可 git worktree prune 清理）"
+        print("%s %s  [%s]  %s  v%s  %s" % (
+            mark, path, branch, worktree_kind(path), version_of(path), state))
 
     lines = branch_names(["release/*", "feature/*", "fix/*"])
     if lines:
@@ -221,22 +249,33 @@ def cmd_check(_args):
     if not tag_exists("v%s" % main_version):
         notes.append("当前版本 v%s 还没有 tag，发布后请打 tag 作为热修锚点" % main_version)
 
-    versions = {}
+    line_versions, missing = {}, []
     print("工作区检查：")
     main_path = os.path.normcase(os.path.abspath(ROOT))
     for item in worktrees():
         path = item.get("path", "")
         branch = item.get("branch", "?")
+        if not os.path.isdir(path):
+            print("  %s  [%s]  %s  路径不存在（可 git worktree prune 清理）"
+                  % (path, branch, worktree_kind(path)))
+            missing.append(path)
+            continue
         count = dirty_count(path)
         version = version_of(path)
-        versions.setdefault(version, []).append(branch)
         state = "无法读取" if count < 0 else ("干净" if count == 0 else "%d 处未提交" % count)
-        print("  %s  [%s]  v%s  %s" % (path, branch, version, state))
+        print("  %s  [%s]  %s  v%s  %s" % (path, branch, worktree_kind(path), version, state))
         if count > 0:
             notes.append("%s 有 %d 处未提交改动" % (branch, count))
+        match = re.match(r"(?:feature|fix)/(\d+\.\d+(?:\.\d+)?)-", branch)
+        if match:
+            line_versions.setdefault("release/%s" % match.group(1), {}).setdefault(
+                version, []).append(branch)
         if os.path.normcase(os.path.abspath(path)) != main_path and not os.path.isfile(
                 os.path.join(path, "config.json")):
             notes.append("%s 缺少 config.json，首次运行需要重新定位游戏目录" % branch)
+
+    if missing:
+        notes.append("%d 个失效工作区，执行 git worktree prune 可从列表中清除" % len(missing))
 
     lines = set(branch_names(["release/*"]))
     for feature in branch_names(["feature/*"]):
@@ -246,9 +285,13 @@ def cmd_check(_args):
             if line not in lines:
                 notes.append("%s 没有对应的版本线 %s" % (feature, line))
 
-    if len(versions) > 1:
-        notes.append("多个工作区的版本号不一致：%s" % ", ".join(
-            "v%s=%s" % (key, "/".join(value)) for key, value in sorted(versions.items())))
+    for line, versions in sorted(line_versions.items()):
+        if len(versions) > 1:
+            notes.append("%s 上的工作区版本号不一致：%s" % (line, ", ".join(
+                "v%s=%s" % (key, "/".join(value)) for key, value in sorted(versions.items()))))
+    if os.path.isdir(TRAE_WORKTREE_ROOT):
+        notes.append("已识别 Trae 工作区：%s（由 Trae 自动创建与合并，workspace.py new 仅供手动场景）"
+                     % TRAE_WORKTREE_ROOT)
     if len(branch_names(["feature/*"])) > 1:
         notes.append("并行任务较多，合并顺序固定：模块代码 → 快照 → 版本与发布物料")
 

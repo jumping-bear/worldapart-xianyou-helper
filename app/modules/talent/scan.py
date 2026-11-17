@@ -2,6 +2,13 @@
 """NPC 天赋扫描。"""
 
 
+def _int(value):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def scan_talent(obj, meta):
     talents = {str(r.get("id")): r for r in meta.get("talents", []) if isinstance(r, dict)}
     npc_meta = meta.get("npcs") or {}
@@ -12,6 +19,9 @@ def scan_talent(obj, meta):
     rows = []
     for uid, npc in (obj.get("npcs") or {}).items():
         if not isinstance(npc, dict):
+            continue
+        # worldStatus 2 = Retired：寿元大限已到/已退隐，存档仍保留记录但世界中已不存在
+        if _int(npc.get("worldStatus")) == 2:
             continue
         saved_slots = (npc.get("talent") or {}).get("slots") or []
         if not saved_slots:

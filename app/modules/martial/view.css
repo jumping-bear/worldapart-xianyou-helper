@@ -1,0 +1,258 @@
+/* 心法与功法：仅本模块选择器，复用全局 badge / card / empty 语义。 */
+.martial-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.martial-tab{background:#171a21;border:1px solid #29303c;color:#9aa3b2;border-radius:9px;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit}
+.martial-tab:hover{background:#1d222b;color:#c6cfda}
+.martial-tab.active{background:#263b34;border-color:#3d735b;color:#c9f5dd}
+.martial-cards{margin:14px 0 18px}
+.martial-card-stat .v span{margin-left:6px}
+.martial-equip{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:16px;background:#15181f;border:1px solid #232833;border-radius:12px;padding:15px 17px;margin:0 0 18px}
+.martial-equip-main{display:flex;flex-wrap:wrap;gap:8px 26px;align-content:flex-start}
+.martial-equip-main div{min-width:110px}
+.martial-equip-main span{display:block;color:#7d8593;font-size:11px;margin-bottom:3px}
+.martial-equip-main b{font-size:15px;color:#e4eaf2;font-weight:600}
+.martial-spirit{display:flex;flex-direction:column;gap:7px;min-width:0}
+.martial-spirit-row{display:grid;grid-template-columns:20px 1fr 34px;align-items:center;gap:8px}
+.martial-spirit-name{color:#9aa3b2;font-size:12px}
+.martial-spirit-bar{height:7px;border-radius:4px;background:#232833;overflow:hidden}
+.martial-spirit-bar i{display:block;height:100%;background:linear-gradient(90deg,#3ddc84,#2f9e6b)}
+.martial-spirit-row b{font-size:12px;color:#cfd8e3;text-align:right;font-variant-numeric:tabular-nums}
+.martial-sec-title{display:flex;align-items:center;gap:8px;margin:22px 0 10px;font-size:14px;font-weight:650;color:#d7dee8}
+.martial-sec-title:before{content:"";width:3px;height:12px;border-radius:2px;background:#3d735b;flex:none}
+.martial-sec-title span{margin-left:auto;color:#778292;font-size:11px;font-weight:400}
+.martial-slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.martial-slot{background:#15181f;border:1px solid #293140;border-radius:12px;padding:13px 14px;min-width:0}
+.martial-slot.flash,.martial-cell.flash{animation:martialflash 1.4s ease-out}
+.martial-slot-head{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid #232833}
+.martial-slot-no{color:#7d8593;font-size:11px}
+.martial-slot-name{font-size:15px;font-weight:650;color:#e4eaf2}
+.martial-cells{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.martial-cell{display:flex;flex-direction:column;gap:4px;align-items:flex-start;text-align:left;background:#11151b;border:1px solid #242c37;border-radius:9px;padding:8px 10px;min-height:64px;cursor:pointer;font-family:inherit;color:inherit}
+.martial-cell:hover{border-color:#3d735b;background:#152019}
+.martial-cell.empty{cursor:default;border-style:dashed;opacity:.72}
+.martial-cell.empty:hover{border-color:#242c37;background:#11151b}
+.martial-cell-name{font-size:12px;color:#dfe6ef;font-weight:600;line-height:1.5}
+.martial-cell-meta{font-size:10px;color:#7d8593}
+.martial-resonance-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.martial-resonance{display:flex;align-items:center;gap:8px;background:#15181f;border:1px solid #293140;border-radius:10px;padding:11px 13px;min-width:0}
+.martial-resonance.empty{border-style:dashed;opacity:.72}
+.martial-resonance-no{color:#6f7787;font-size:11px;flex:none}
+.martial-resonance-name{font-size:13px;font-weight:600;color:#e4eaf2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.martial-diags{display:flex;flex-direction:column;gap:7px}
+.martial-diag{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:#15181f;border:1px solid #232833;border-left:3px solid #39424f;border-radius:9px;padding:9px 12px;cursor:pointer;font-family:inherit;color:#c9d2df}
+.martial-diag:hover{background:#1a2029}
+.martial-diag.high{border-left-color:#c4555f}
+.martial-diag.mid{border-left-color:#d4b45f}
+.martial-diag.low{border-left-color:#5f7fa8}
+.martial-diag.info{border-left-color:#4fbf83}
+.martial-diag.warn{border-left-color:#a06bb0}
+.martial-diag-lv{flex:none;font-size:10px;border-radius:5px;padding:2px 7px;background:#242a34;color:#9aa3b2}
+.martial-diag.high .martial-diag-lv{background:#3a2126;color:#e88b82}
+.martial-diag.mid .martial-diag-lv{background:#3a3226;color:#e8c76d}
+.martial-diag.info .martial-diag-lv{background:#22392e;color:#8ee6b3}
+.martial-diag.warn .martial-diag-lv{background:#2e2434;color:#cba6dd}
+.martial-diag-text{flex:1;min-width:0;font-size:12px;line-height:1.6}
+.martial-diag-id{flex:none;color:#6f7787;font-size:10px}
+.martial-bag{background:#15181f;border:1px solid #232833;border-radius:10px;padding:4px 12px}
+.martial-bag-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #20252e;font-size:12px}
+.martial-bag-row:last-child{border-bottom:0}
+.martial-bag-name{font-weight:600;color:#dfe6ef}
+.martial-bag-progress{margin-left:auto;color:#8b93a1;font-variant-numeric:tabular-nums}
+.martial-note{margin-top:16px;border:1px dashed #2b3441;border-radius:9px;background:#10151c;padding:0 12px}
+.martial-note>summary{cursor:pointer;list-style:none;padding:9px 0;color:#86909e;font-size:11px}
+.martial-note>summary::-webkit-details-marker{display:none}
+.martial-note>div{color:#778292;font-size:11px;line-height:1.9;padding:0 0 10px}
+.martial-filters{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;background:#171b23;border:1px solid #293140;border-radius:11px;padding:12px 13px;margin:0 0 12px}
+.martial-field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.martial-field.martial-wide{grid-column:span 2}
+.martial-field>span{color:#8b93a1;font-size:11px}
+.martial-field input,.martial-field select{width:100%;background:#10141a;border:1px solid #303949;border-radius:7px;color:#e8eaed;padding:8px 9px;font-size:12px;outline:none;font-family:inherit}
+.martial-field input:focus,.martial-field select:focus{border-color:#527c69}
+.martial-result{color:#8b93a1;font-size:12px;margin:8px 2px 10px}
+.martial-card,.martial-art{background:#15181f;border:1px solid #293140;border-radius:11px;margin:0 0 9px;overflow:hidden}
+.martial-card>summary,.martial-art>summary{display:flex;align-items:center;gap:7px;flex-wrap:wrap;list-style:none;cursor:pointer;padding:12px 14px}
+.martial-card>summary::-webkit-details-marker,.martial-art>summary::-webkit-details-marker{display:none}
+.martial-card>summary:before,.martial-art>summary:before{content:"›";color:#6f7787;font-size:18px;transition:.15s}
+.martial-card[open]>summary:before,.martial-art[open]>summary:before{transform:rotate(90deg)}
+.martial-card[open]>summary,.martial-art[open]>summary{background:#171d25}
+.martial-name{font-size:14px;font-weight:650;color:#e8eaed}
+.martial-body{border-top:1px solid #232833;padding:12px 14px 14px}
+.martial-desc{color:#b4bdca;font-size:12px;line-height:1.85;background:#10141a;border-radius:8px;padding:9px 11px;margin-bottom:11px}
+.martial-cols{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:16px}
+.martial-block{min-width:0}
+.martial-label{color:#9aa3b2;font-size:11px;margin-bottom:7px}
+.martial-line{color:#b4bdca;font-size:12px;line-height:1.9;display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.martial-line b{flex:none;color:#7d8593;font-weight:500;min-width:58px}
+.martial-chip{display:inline-flex;align-items:center;gap:4px;background:#1a2029;border:1px solid #2b3340;border-radius:6px;padding:2px 7px;font-size:11px;color:#b4bdca;margin:0 5px 5px 0}
+.martial-chip i{font-style:normal;color:#7fa695;font-size:10px}
+.martial-tiers{width:100%;border-collapse:separate;border-spacing:0 5px;margin-top:-5px}
+.martial-tiers th{text-align:left;color:#778292;font-size:11px;font-weight:500;padding:0 8px}
+.martial-tiers td{background:#11151b;padding:8px;font-size:11px;line-height:1.7;color:#b4bdca;vertical-align:top}
+.martial-tiers tr td:first-child{border-radius:7px 0 0 7px}
+.martial-tiers tr td:last-child{border-radius:0 7px 7px 0}
+.martial-need{white-space:nowrap;color:#d9c785;font-variant-numeric:tabular-nums}
+.martial-same-block{margin-top:12px;border-top:1px solid #232833;padding-top:10px}
+.martial-same{color:#9aa3b2;font-size:11px;line-height:1.8;margin-top:4px}
+.martial-same b{color:#c9d2df;font-weight:600;margin-right:4px}
+.martial-same-note{color:#6f7787;font-size:10px;line-height:1.7;margin-top:5px}
+.martial-price{margin-left:auto;color:#8b93a1;font-size:11px;font-variant-numeric:tabular-nums}
+.martial-mystery{background:#3a3226;color:#e8c76d}
+.martial-state.on{background:#22392e;color:#8ee6b3}
+.martial-state.learned{background:#27374a;color:#b9d9ff}
+.martial-state.bag{background:#3a3226;color:#e8c76d}
+.martial-state.off{background:#2a2d33;color:#8b93a1}
+.martial-state.special{background:#2e2434;color:#cba6dd}
+.martial-source{background:#1d2933;color:#9fc3e8}
+.martial-resonance-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+.martial-rescard{background:#15181f;border:1px solid #293140;border-radius:11px;padding:13px 14px;min-width:0}
+.martial-reshead{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+.martial-rescard .martial-desc{margin-bottom:8px}
+.martial-empty-hint{color:#778292;font-size:11px;margin-top:6px;line-height:1.7}
+.martial-flash{animation:martialflash 1.4s ease-out}
+.martial-plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:12px}
+.martial-plan{background:#15181f;border:1px solid #293140;border-radius:12px;padding:14px 15px;min-width:0}
+.martial-plan-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.martial-plan-head b{flex:1;font-size:14px;color:#e8eaed}
+.martial-confirm.ok{background:#22392e;color:#8ee6b3}
+.martial-confirm.review{background:#3a3226;color:#e8c76d}
+.martial-plan-summary{color:#9aa3b2;font-size:12px;line-height:1.7;margin-bottom:9px}
+.martial-steps{display:flex;flex-direction:column;gap:6px}
+.martial-steps-more{margin-top:6px}
+.martial-steps-more>summary{cursor:pointer;list-style:none;color:#8b93a1;font-size:11px;padding:7px 2px}
+.martial-steps-more>summary::-webkit-details-marker{display:none}
+.martial-steps-more>summary:before{content:"›";display:inline-block;margin-right:6px;transition:.15s}
+.martial-steps-more[open]>summary:before{transform:rotate(90deg)}
+.martial-step{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:#11151b;border:1px solid #242c37;border-radius:8px;padding:8px 10px;cursor:pointer;font-family:inherit;color:inherit}
+.martial-step:hover{border-color:#3d735b;background:#152019}
+.martial-step-no{flex:none;width:18px;height:18px;border-radius:50%;background:#242c37;color:#9aa3b2;font-size:10px;display:flex;align-items:center;justify-content:center}
+.martial-step-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;font-size:12px;color:#dfe6ef;line-height:1.55}
+.martial-step-body i{font-style:normal;color:#7d8593;font-size:10px}
+.martial-step-cost{flex:none;color:#8b93a1;font-size:10px;font-variant-numeric:tabular-nums}
+.martial-plan-total{margin-top:9px;color:#778292;font-size:11px;line-height:1.7}
+.martial-schools{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.martial-school{background:#15181f;border:1px solid #293140;border-radius:12px;padding:13px 14px;min-width:0}
+.martial-school-head{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+.martial-school-head b{font-size:14px;color:#e8eaed}
+.martial-chips{display:inline-flex;flex-wrap:wrap;gap:5px}
+.martial-chip-btn{border:1px solid #2b3340;cursor:pointer;font-family:inherit}
+.martial-chip-btn:hover{border-color:#3d735b;color:#c9f5dd}
+.martial-link{background:none;border:0;padding:0;color:#9fc3e8;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:2px}
+.martial-link:hover{color:#c9f5dd}
+.martial-pick{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#8b93a1;cursor:pointer;user-select:none}
+.martial-pick input{accent-color:#3d735b;cursor:pointer}
+.martial-compare-bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:#171b23;border:1px solid #293140;border-radius:11px;padding:10px 12px;margin:0 0 12px;position:sticky;top:0;z-index:5}
+.martial-compare-title{flex:none;color:#9aa3b2;font-size:11px}
+.martial-compare-hint{color:#e8c76d;font-size:11px}
+.martial-compare-btn{margin-left:auto;background:#263b34;border:1px solid #3d735b;color:#c9f5dd;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+.martial-compare-btn:disabled{background:#1a1f27;border-color:#293140;color:#6f7787;cursor:default}
+.martial-compare-clear{background:none;border:1px solid #293140;color:#9aa3b2;border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit}
+.martial-compare-wrap{overflow-x:auto;border:1px solid #293140;border-radius:11px;background:#15181f;margin:0 0 8px}
+.martial-compare{width:100%;border-collapse:collapse;min-width:620px}
+.martial-compare th,.martial-compare td{border-bottom:1px solid #232833;padding:9px 11px;text-align:left;vertical-align:top;font-size:12px;color:#b4bdca;min-width:140px}
+.martial-compare thead th{background:#171d25;color:#e8eaed;font-weight:600}
+.martial-compare tbody th{min-width:64px;background:#13171e;color:#7d8593;font-weight:500;white-space:nowrap}
+.martial-compare tr:last-child th,.martial-compare tr:last-child td{border-bottom:0}
+.martial-compare-desc{line-height:1.8}
+.martial-hero{background:linear-gradient(180deg,#1a2220,#15181f);border:1px solid #2e4a3f;border-radius:14px;padding:16px 18px;margin:0 0 6px}
+.martial-hero-top{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.martial-hero-title{font-size:19px;font-weight:650;color:#eef4f0}
+.martial-hero-title span{display:block;margin-top:4px;font-size:12px;font-weight:400;color:#8fe3b8}
+.martial-hero-stats{margin-left:auto;display:flex;gap:18px}
+.martial-hero-stats div{text-align:right}
+.martial-hero-stats b{display:block;font-size:20px;color:#e8f5ec;font-variant-numeric:tabular-nums}
+.martial-hero-stats b i{font-style:normal;font-size:12px;color:#7fa695;font-weight:400}
+.martial-hero-stats span{font-size:11px;color:#7d8593}
+.martial-hero-summary{margin-top:10px;padding-top:10px;border-top:1px solid #24322b;color:#c3d6cb;font-size:13px;line-height:1.6}
+.martial-spirit-inline{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px 14px;margin-top:10px}
+.martial-todos{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px}
+.martial-todo{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:#15181f;border:1px solid #232833;border-left:3px solid #39424f;border-radius:9px;padding:10px 12px;cursor:pointer;font-family:inherit;color:#dfe6ef}
+.martial-todo:hover{background:#1a2029}
+.martial-todo.high{border-left-color:#c4555f}
+.martial-todo.mid{border-left-color:#d4b45f}
+.martial-todo.info{border-left-color:#4fbf83}
+.martial-todo.ok{border-left-color:#4fbf83;cursor:default}
+.martial-todo-lv{flex:none;font-size:10px;border-radius:5px;padding:2px 7px;background:#242a34;color:#9aa3b2}
+.martial-todo.high .martial-todo-lv{background:#3a2126;color:#e88b82}
+.martial-todo.mid .martial-todo-lv{background:#3a3226;color:#e8c76d}
+.martial-todo.info .martial-todo-lv{background:#22392e;color:#8ee6b3}
+.martial-todo b{flex:1;min-width:0;font-size:12px;font-weight:500;line-height:1.6}
+.martial-todo-act{flex:none;color:#7fa695;font-size:11px}
+.martial-todo-more{color:#6f7787;font-size:11px;margin:2px}
+.martial-res{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}
+.martial-res-block{background:#15181f;border:1px solid #232833;border-radius:10px;padding:10px 12px;min-width:0}
+.martial-scroll-list{display:flex;flex-direction:column;gap:2px;max-height:180px;overflow:auto}
+.martial-scroll-row{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid #20252e;font-size:12px}
+.martial-scroll-row:last-child{border-bottom:0}
+.martial-fold{margin:14px 0 0;border:1px solid #293140;border-radius:12px;background:#141820;padding:0 14px}
+.martial-fold>summary{display:flex;align-items:center;gap:8px;list-style:none;cursor:pointer;padding:12px 0;color:#cdd6e2;font-size:13px;font-weight:600}
+.martial-fold>summary::-webkit-details-marker{display:none}
+.martial-fold>summary:before{content:"›";color:#6f7787;font-size:16px;transition:.15s}
+.martial-fold[open]>summary:before{transform:rotate(90deg)}
+.martial-fold>summary span{margin-left:auto;color:#778292;font-size:11px;font-weight:400}
+.martial-fold[open]{padding-bottom:12px}
+.martial-plan-group{margin:6px 0}
+.martial-plan-group>summary{display:flex;align-items:center;gap:8px;list-style:none;cursor:pointer;background:#1a2029;border:1px dashed #33404f;border-radius:8px;padding:9px 11px;color:#b9c6d6;font-size:12px}
+.martial-plan-group>summary::-webkit-details-marker{display:none}
+.martial-plan-group>summary:before{content:"›";color:#6f7787;transition:.15s}
+.martial-plan-group[open]>summary:before{transform:rotate(90deg)}
+.martial-plan-group .martial-steps{margin-top:6px}
+.martial-builder{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.martial-build-picks{display:flex;flex-direction:column;gap:10px;min-width:0}
+.martial-build-sec{background:#15181f;border:1px solid #293140;border-radius:11px;padding:11px 12px;min-width:0}
+.martial-build-sec .martial-label{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.martial-build-select,.martial-build-search{width:100%;background:#10141a;border:1px solid #303949;border-radius:7px;color:#e8eaed;padding:8px 9px;font-size:12px;outline:none;font-family:inherit;margin-bottom:8px}
+.martial-build-select:focus,.martial-build-search:focus{border-color:#527c69}
+.martial-build-actions{display:flex;gap:7px;flex-wrap:wrap}
+.martial-build-actions .martial-compare-btn{margin-left:0}
+.martial-build-list{display:flex;flex-direction:column;gap:3px;max-height:300px;overflow:auto;margin-top:7px}
+.martial-build-row{display:flex;align-items:center;gap:6px;padding:6px 7px;border-radius:7px;background:#11151b;border:1px solid #232833;font-size:12px;cursor:pointer;color:#c9d2df}
+.martial-build-row:hover{border-color:#33404f}
+.martial-build-row.match{background:#141f1a;border-color:#2e4a3f}
+.martial-build-row input{accent-color:#3d735b;cursor:pointer;flex:none}
+.martial-build-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.martial-build-result{display:flex;flex-direction:column;gap:10px;min-width:0}
+.martial-build-summary{background:#15181f;border:1px solid #2e4a3f;border-radius:11px;padding:12px 14px}
+.martial-build-summary.warn{border-color:#5c4a2a;background:#1b1812}
+.martial-build-conclusion{font-size:14px;font-weight:650;color:#dff3e6}
+.martial-build-summary.warn .martial-build-conclusion{color:#e8c76d}
+.martial-build-metrics{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}
+.martial-build-metrics b{display:block;font-size:17px;color:#e8eaed;font-variant-numeric:tabular-nums}
+.martial-build-metrics span{font-size:11px;color:#7d8593}
+.martial-build-block{background:#15181f;border:1px solid #232833;border-radius:10px;padding:11px 12px;min-width:0}
+.martial-build-issue{color:#c9a976;font-size:12px;line-height:1.7}
+.martial-build-issue.ok{color:#8ee6b3}
+.martial-build-hint{background:#15181f;border:1px solid #293140;border-left:3px solid #4fbf83;border-radius:9px;padding:9px 12px;font-size:12px;color:#b9c6d6;margin-bottom:12px;line-height:1.6}
+.martial-build-row{flex-wrap:wrap}
+.martial-build-name{flex:1 1 120px}
+.martial-chip.off{opacity:.45;border-color:#2a303a}
+.martial-build-core{background:#11151b;border:1px solid #232833;border-radius:8px;padding:9px 10px;margin-top:6px}
+.martial-build-core-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px}
+.martial-build-core-meta{color:#8b93a1;font-size:11px;margin:5px 0 6px;line-height:1.6}
+.martial-build-cond{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:7px 8px;border-radius:7px;background:#11151b;border:1px solid #232833;margin-top:5px;font-size:12px}
+.martial-build-cond.ok{border-left:3px solid #4fbf83}
+.martial-build-cond.warn{border-left:3px solid #c9a976}
+.martial-build-cond-state{margin-left:auto;color:#8b93a1;font-size:11px}
+.martial-build-cond.ok .martial-build-cond-state{color:#8ee6b3}
+.martial-build-cond.warn .martial-build-cond-state{color:#e8c76d}
+@keyframes martialflash{0%{box-shadow:0 0 0 2px #4f7fa6;background:#1a2530}100%{box-shadow:0 0 0 0 transparent}}
+@media(max-width:900px){
+ .martial-filters{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .martial-cols{grid-template-columns:1fr}
+ .martial-equip{grid-template-columns:1fr}
+ .martial-plans{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+ .martial-filters{grid-template-columns:1fr 1fr}
+ .martial-field.martial-wide{grid-column:span 2}
+ .martial-slot-grid,.martial-resonance-list,.martial-schools{grid-template-columns:1fr}
+ .martial-cells{grid-template-columns:1fr}
+ .martial-resonance-grid{grid-template-columns:1fr 1fr}
+ .martial-price{margin-left:0;width:100%}
+ .martial-hero{padding:13px 14px}
+ .martial-hero-stats{margin-left:0;width:100%;justify-content:space-between}
+ .martial-hero-title{font-size:17px}
+ .martial-todos,.martial-res{grid-template-columns:1fr}
+ .martial-builder{grid-template-columns:1fr}
+ .martial-step{flex-wrap:wrap;align-items:flex-start;row-gap:4px}
+ .martial-step-no{margin-top:2px}
+ .martial-step-cost{margin-left:26px}
+}

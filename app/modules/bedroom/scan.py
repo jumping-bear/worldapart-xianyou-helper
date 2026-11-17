@@ -1,6 +1,38 @@
 # -*- coding: utf-8 -*-
 """仙居楼互动（成就「十八摸」）扫描。"""
+import json
+import os
+from functools import lru_cache
+
 from ... import common
+
+# 头像快照由留影石（memoria/avatars.py）导出；模块间禁止 import，这里直接读快照文件，
+# 文件缺失或格式变化时静默退回首字头像。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_AVATARS_FILE = os.path.join(_ROOT, "memoria_avatars_meta.json")
+
+
+@lru_cache(maxsize=1)
+def _load_avatars():
+    try:
+        with open(_AVATARS_FILE, encoding="utf-8-sig") as handle:
+            raw = json.load(handle)
+    except (OSError, ValueError):
+        return {}, {}
+    if not isinstance(raw, dict):
+        return {}, {}
+    images = raw.get("avatars") if isinstance(raw.get("avatars"), dict) else {}
+    icons = raw.get("icons") if isinstance(raw.get("icons"), dict) else {}
+    clean_images = {str(key): value for key, value in images.items()
+                    if isinstance(value, str) and value.startswith("data:image/")}
+    clean_icons = {str(key): str(value) for key, value in icons.items()}
+    return clean_images, clean_icons
+
+
+def _avatar_for(npc_id):
+    images, icons = _load_avatars()
+    key = icons.get(str(npc_id))
+    return images.get(key, "") if key else ""
 
 
 def scan_bedroom(obj, meta):
@@ -31,7 +63,7 @@ def scan_bedroom(obj, meta):
                           "miss": [i for i in range(6) if i not in got]})
         rows.append({"cfg": cfg, "who": info.get("npcName") or ("#%s" % cfg),
                      "bed": info.get("bedroom") or "", "total": total, "parts": parts,
-                     "resident": len(unlocked) >= 3})
+                     "resident": len(unlocked) >= 3, "avatar": _avatar_for(cfg)})
     rows.sort(key=lambda r: (-r["total"], str(r["who"])))
     return rows
 
