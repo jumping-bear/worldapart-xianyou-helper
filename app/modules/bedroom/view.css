@@ -1,0 +1,5 @@
+/* 仙居楼互动：仙友头像列。 */
+.bedwho{display:flex;align-items:center;gap:9px}
+.bed-avatar{width:36px;height:36px;border-radius:50%;background:#243430;border:1px solid #3a5f4f;color:#bfe8d3;display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;flex:none;position:relative;overflow:hidden}
+.bed-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.bed-avatar.has-img{background:#11161c}
