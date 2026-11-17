@@ -7,8 +7,11 @@
 境界全称链路：propLayerId → tbcultivatelayer(phase,layer) →
 tbcultivatephase(phase_name,realm) → tbcultivaterealm(realm_name)，
 合成"炼气后期·十二层"这类展示文本；层 0 视为凡人。
+
+位置不在构建期推断：tbspace 只导出 id → "父地点 / 子地点" 的路径表，
+真正的"当前所在"由 scan 期用存档 spaces[].spaceId 查这张表得出。
 """
-from meta_update import SCHEMA, _int, _plain, _rows, _text
+from meta_update import SCHEMA, _int, _plain, _rows, _text, build_spaces
 
 # 善恶值映射到中轴色带的取值范围（evil 越小越恶）
 _EVIL_MIN, _EVIL_MAX = -500, 500
@@ -92,50 +95,32 @@ def _realm_for_layer(realms, layer_map, layer_id):
         "full": "凡人", "phase": "", "realm": "凡人", "layer": 0, "order": 0}
 
 
-def _places(tables):
-    """按 realm_id 给常驻地提示；行为场景映射多为占位，仅取可读地名。"""
-    places = {}
-    for row in _rows(tables.get("tbnpcbehaviorspacemapping")):
-        if not isinstance(row, dict):
-            continue
-        rid = str(_int(row.get("realm_id")))
-        name = _text(row.get("sapce_name"))
-        if not name or "占位" in name:
-            continue
-        places.setdefault(rid, [])
-        if name not in places[rid]:
-            places[rid].append(name)
-    # tbspace 提供各空间正式名称，作为 realm 地名兜底来源
-    for row in _rows(tables.get("tbspace")):
-        if not isinstance(row, dict):
-            continue
-        rid = str(_int(row.get("realm_id")))
-        name = _text(row.get("spaceName"))
-        if not name:
-            continue
-        places.setdefault(rid, [])
-        if name not in places[rid] and len(places[rid]) < 3:
-            places[rid].append(name)
-    return places
+def _space_index(tables):
+    """tbspace → {spaceId: "父地点 / 子地点"}。
+
+    只保留路径文本，scan 期按存档 spaceId 直接查；比存 id/name/region 三个字段省一半体积。
+    """
+    out = {}
+    for space_id, info in build_spaces(tables).items():
+        path = [part for part in (info.get("path") or []) if part]
+        if path:
+            out[str(space_id)] = " / ".join(path)
+    return out
 
 
-def _place_for(realm_id, places, realm_name, sect):
-    hits = places.get(str(_int(realm_id))) or []
-    if hits:
-        return "、".join(hits[:2])
-    return (realm_name + "修士" if realm_name and realm_name != "凡人" else (sect or "来历不明"))
+def _persona_desc(value):
+    """性格说明去掉"类似紫微斗数中的X星"这类命理包装，只留修仙世界的性格色彩。"""
+    text = _plain(value)
+    for marker in ("性格色彩：", "性格色彩:"):
+        if marker in text:
+            text = text.split(marker, 1)[1]
+            break
+    return text.strip()
 
 
 def _first_text(value, limit=160):
     text = _plain(value)
     return text if len(text) <= limit else text[:limit] + "…"
-
-
-def _greet(value, limit=120):
-    """greetings 是本地化 dict 的列表；取第一条的中文文案。"""
-    if isinstance(value, list) and value and isinstance(value[0], dict):
-        return _first_text(value[0], limit)
-    return _first_text(value, limit)
 
 
 def _avatar_stem(value):
@@ -170,7 +155,7 @@ def build(tables):
     elements = _name_map(tables.get("tbelement"), "element_name")
     talents = {str(r["id"]): _text(r.get("name")) for r in _rows(tables.get("tbnpctalent"))
                if isinstance(r, dict) and r.get("id") is not None}
-    places = _places(tables)
+    space_index = _space_index(tables)
 
     # 关联内容：按 npc_id / npcId 聚合，NPC 卡只存计数与前几个标题
     memoria = {}
@@ -212,8 +197,7 @@ def build(tables):
              "desc": _text(r.get("intimacyPrompt"))} for r in intimacy_tiers],
         "personalities": {
             key: {"name": _text(r.get("personalityName")),
-                  "tip": _text(r.get("personalityPrompt")),
-                  "hover": _text(r.get("propHoverTip"))}
+                  "desc": _persona_desc(r.get("personalityPrompt"))}
             for key, r in personas.items()},
         "attack_rules": [
             {"good": _int(r.get("playerGoodDelta")),
@@ -230,7 +214,7 @@ def build(tables):
              "prob": _int(r.get("chase_probability"))} for r in chase_rules],
         "realms": realms, "sects": sects, "races": races,
         "elements": elements, "talents": talents,
-        "places": places,
+        "spaces": space_index,
     }
 
     # tier_pack 用 enumerate 编号，匹配时也需按 enumerate 找 id
@@ -244,14 +228,17 @@ def build(tables):
         return 0
 
     npcs = []
-    stats = {"total": 0, "with_avatar": 0, "dao": 0, "killable": 0,
-             "safe_target": 0, "evil_negative": 0, "evil_positive": 0,
-             "merchant": 0, "with_memoria": 0, "with_topics": 0}
+    stats = {"total": 0, "killable": 0, "safe_target": 0,
+             "evil_negative": 0, "evil_positive": 0, "merchant": 0,
+             "dao_capable": 0, "with_memoria": 0, "with_topics": 0}
     for row in npc_rows:
         if not isinstance(row, dict) or row.get("id") is None:
             continue
         npc_id = _int(row.get("id"))
-        name = _text(row.get("npcName")) or ("匿名 NPC %s" % npc_id)
+        name = _text(row.get("npcName"))
+        # id<0 或"匿名 NPC"是配置占位，玩家永远遇不到，不进图鉴
+        if npc_id <= 0 or not name or name.startswith("匿名"):
+            continue
         evil = _int(row.get("propEvil"))
         repute = _int(row.get("propRepute"))
         charm = _int(row.get("propCharm"))
@@ -263,18 +250,17 @@ def build(tables):
         sect = sect or "无门无派"
         layer_id = row.get("propLayerId")
         realm = _realm_for_layer(realms, layer_map, layer_id)
-        place = _place_for(realm.get("realm_id", 0), places, realm.get("realm"), sect)
         element_names = [elements.get(str(e)) for e in (row.get("element") or [])
                          if str(e) in elements]
 
         pid = str(_int(row.get("propPersonality")))
         persona = personas.get(pid) or {}
-        pLabel = _plain(row.get("PersonalityDesc")) or _text(persona.get("personalityName"))
+        pLabel = _text(persona.get("personalityName"))
 
         dao = bool(row.get("can_be_dao_companion"))
         spar = bool(row.get("can_spar"))
-        kill_raw = _int(row.get("can_kill"))
-        killable = kill_raw > 0
+        # can_kill: 1=可击杀、3=不可击杀；寿元/剧情保护角色一律不可杀
+        killable = _int(row.get("can_kill")) == 1 and not bool(row.get("is_lifespan_protected"))
         steal = bool(row.get("can_steal"))
         merchant = bool(row.get("is_merchant"))
         safe_target = killable and evil < 0
@@ -311,12 +297,12 @@ def build(tables):
 
         npcs.append({
             "id": npc_id, "name": name, "avatar": avatar,
+            "title": _text(row.get("npcTitle")),
             "sex": sex, "age": _int(row.get("age")),
             "lifespan": _int(row.get("lifespanAdjustment")),
             "race": race, "sect": sect, "realm": realm["full"],
             "realm_short": realm["realm"], "realm_raw": realm["phase"],
             "layer": realm["layer"], "layer_order": realm["order"],
-            "place": place,
             "element": element_names,
             "personality_id": pid, "personality": pLabel,
             "evil": evil, "evil_tier": tier_id(evil_tiers, evil, "min"),
@@ -324,7 +310,7 @@ def build(tables):
             "repute": repute, "repute_tier": tier_id(repute_tiers, repute, "min"),
             "charm": charm, "charm_tier": tier_id(charm_tiers, charm, "min"),
             "wisdom": wisdom, "wisdom_tier": tier_id(wisdom_tiers, wisdom, "min_wisdom"),
-            "dao": int(dao), "spar": int(spar), "kill": kill_raw,
+            "dao_capable": int(dao), "spar": int(spar),
             "steal": int(steal), "merchant": int(merchant), "killable": int(killable),
             "safe_target": int(safe_target),
             "slots": len(row.get("talent_slots") or []), "talents": fixed_talents,
@@ -332,13 +318,11 @@ def build(tables):
             "topics": len(topic_titles), "topic_titles": topic_titles[:6],
             "persuade": len(pers_titles),
             "attack": attack,
-            "greet": _greet(row.get("greetings")),
             "death": _first_text(row.get("death_narrative_text"), 80),
         })
 
         stats["total"] += 1
-        stats["with_avatar"] += 1 if avatar else 0
-        stats["dao"] += 1 if dao else 0
+        stats["dao_capable"] += 1 if dao else 0
         stats["killable"] += 1 if killable else 0
         stats["safe_target"] += 1 if safe_target else 0
         stats["evil_negative"] += 1 if evil < 0 else 0

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""人物志扫描：按 npcId 标注玩家与该 NPC 的实际关系与状态。
+"""人物图鉴扫描：按 npcId 标注玩家与该 NPC 的实际关系与状态。
 
 只读存档，不改任何数据。数据来源：
+- 当前位置：存档 spaces[currentSpaceUuid].spaceId → 构建期 meta.spaces（"父地点 / 子地点"）；
 - 好感：npcs[].intimacy（与 quest 一致）；
 - 关系网：playerModel.npc_relation（师承/道侣/朋友/敌人/冰封/已故/弟子）；
 - 道侣：npc_dao_ally.npc_ids + npc_relation.dao_companion_npc_ids；
@@ -89,9 +90,12 @@ def _avatar_for(npc_id):
 
 
 def scan(obj, meta_obj, state=None):
-    """产出 {states, stats, player}，玩家实际状态按 npcId 索引。"""
+    """产出 {states, locs, stats, player}，玩家实际状态按 npcId 索引。"""
     player = (obj or {}).get("playerModel") or {}
-    tiers = ((meta_obj or {}).get("meta") or {}).get("intimacy_tiers") or []
+    built_meta = (meta_obj or {}).get("meta") or {}
+    tiers = built_meta.get("intimacy_tiers") or []
+    space_index = built_meta.get("spaces") or {}
+    save_spaces = (obj or {}).get("spaces") or {}
 
     # NPC id -> 名字（来自构建期全息卡，用于关系网展示）
     name_of = {}
@@ -99,17 +103,27 @@ def scan(obj, meta_obj, state=None):
         if isinstance(card, dict) and card.get("id") is not None:
             name_of[_int(card["id"])] = card.get("name") or str(card["id"])
 
-    # 好感/亲密：与 quest 一致，从 npcs 记录取 npcCfgId + intimacy
+    # 好感/亲密 + 实时位置：只取存档里的 NPC 实例（未结识的也在，位置仅对已结识开放）
     favor = {}
-    met = set()
-    for record in (obj or {}).get("npcs", {}).values() if isinstance((obj or {}).get("npcs"), dict) else []:
+    locs = {}
+    records = (obj or {}).get("npcs")
+    for record in records.values() if isinstance(records, dict) else ():
         if not isinstance(record, dict):
             continue
         npc_id = _int(record.get("npcCfgId"))
         if not npc_id:
             continue
-        met.add(npc_id)
         favor[npc_id] = _int(record.get("intimacy"), 0)
+        space = save_spaces.get(record.get("currentSpaceUuid")) or {}
+        path = space_index.get(str(space.get("spaceId"))) or ""
+        parts = [part for part in path.split(" / ") if part] if path else []
+        locs[npc_id] = {
+            "path": " / ".join(parts),
+            "name": parts[-1] if parts else "",
+            "region": parts[0] if parts else "",
+            # worldStatus 2 = 寿元已尽/已退隐，存档保留记录但世界里已经没有这个人
+            "gone": _int(record.get("worldStatus")) == 2,
+        }
 
     rel = player.get("npc_relation") or {}
     master = _int(rel.get("master_npc_id"))
@@ -136,7 +150,6 @@ def scan(obj, meta_obj, state=None):
                 continue
             if npc_id not in favor and ("intimacy" in value or "favor" in value):
                 favor[npc_id] = _int(value.get("intimacy", value.get("favor")), 0)
-                met.add(npc_id)
 
     # 住处：residents 为槽位 -> npcId
     housing = player.get("npc_housing") or {}
@@ -170,9 +183,13 @@ def scan(obj, meta_obj, state=None):
     for nid in deceased:
         put(nid, "deceased", deceased - {nid})
 
+    # 已结识：有过好感、或存档关系表/仙居里出现过。存档里 1007 个 NPC 实例全有位置，
+    # 但没打过交道的人不该在图鉴里被当成"认识"，所以不能拿 npcs 表本身当结识依据。
+    met_ids = {nid for nid, value in favor.items() if value > 0}
+    met_ids |= dao_ids | set(rel_map) | residents
+
     states = {}
-    all_ids = set(favor) | met | dao_ids | set(rel_map) | residents
-    for npc_id in all_ids:
+    for npc_id in met_ids:
         value = _int(favor.get(npc_id), 0)
         is_dao = npc_id in dao_ids
         tier = _intimacy_tier(tiers, value) or {}
@@ -190,9 +207,10 @@ def scan(obj, meta_obj, state=None):
                 elif pid in name_of:
                     names.append(name_of[pid])
             detail[label] = names or [str(pid) for pid in peers]
+        live = locs.get(npc_id) or {}
         states[str(npc_id)] = {
             "favor": value,
-            "met": npc_id in met or is_dao or bool(raw_roles),
+            "met": True,
             "dao": is_dao,
             "tier": tier.get("name") or "",
             "tier_index": tiers.index(tier) if tier in tiers else -1,
@@ -200,6 +218,10 @@ def scan(obj, meta_obj, state=None):
             "rel_detail": detail,
             "housed": npc_id in residents,
             "housing_open": housing_open,
+            "loc": live.get("path") or "",
+            "loc_name": live.get("name") or "",
+            "region": live.get("region") or "",
+            "gone": bool(live.get("gone")),
         }
 
     cult = player.get("npc_cultivation_history") or {}
@@ -228,10 +250,10 @@ def scan(obj, meta_obj, state=None):
     }
 
     stats = {
-        "met": len(met), "dao": len(dao_ids), "tracked": len(states),
+        "met": len(met_ids), "dao": len(dao_ids), "tracked": len(states),
         "housed": len(residents), "friend": len(friends), "enemy": len(enemies),
     }
-    return {"states": states, "stats": stats, "player": player_state}
+    return {"states": states, "locs": locs, "stats": stats, "player": player_state}
 
 
 def post(rows, state, original, path):
@@ -253,27 +275,44 @@ def enrich(module, meta_obj, state=None):
 
     npcs = []
     avatar_map = {}
+    evil_met = merchant_met = 0
     for card in built.get("npcs") or []:
         npc = dict(card)
-        live = states.get(str(npc.get("id"))) or {}
+        npc_id = _int(npc.get("id"), 0)
+        # 配置占位（匿名/负 id）玩家永远遇不到，页面层直接过滤
+        if npc_id <= 0 or str(npc.get("name") or "").startswith("匿名"):
+            continue
+        live = states.get(str(npc_id)) or {}
         favor = _int(live.get("favor"), 0)
         npc["favor"] = favor
         npc["met"] = bool(live.get("met"))
-        npc["dao"] = bool(live.get("dao")) or bool(npc.get("dao"))
+        npc["dao"] = bool(live.get("dao"))
         npc["roles"] = live.get("roles") or []
         npc["rel_detail"] = live.get("rel_detail") or {}
         npc["housed"] = bool(live.get("housed"))
         npc["housing_open"] = bool(live.get("housing_open"))
+        # 当前所在只对已结识的人开放；未结识显示"尚未结识"
+        npc["loc"] = live.get("loc") or ""
+        npc["loc_name"] = live.get("loc_name") or ""
+        npc["region"] = live.get("region") or ""
+        npc["gone"] = bool(live.get("gone"))
         tier = _intimacy_tier(tiers, favor) or {}
         npc["intimacy_name"] = live.get("tier") or tier.get("name") or ""
         idx = live.get("tier_index", -1)
         if (idx is None or idx < 0) and tier in tiers:
             idx = tiers.index(tier)
         npc["intimacy_index"] = idx
-        uri = _avatar_for(npc.get("id"))
+        if npc["met"]:
+            evil_met += 1 if _int(npc.get("evil"), 0) < 0 else 0
+            merchant_met += 1 if npc.get("merchant") else 0
+        uri = _avatar_for(npc["id"])
         if uri:
             avatar_map[str(npc["id"])] = uri
         npcs.append(npc)
+
+    live_stats = dict(live_stats)
+    live_stats["evil_met"] = evil_met
+    live_stats["merchant_met"] = merchant_met
 
     module["npcs"] = npcs
     module["meta"] = meta
