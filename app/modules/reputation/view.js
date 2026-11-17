@@ -58,7 +58,7 @@ function townTable(){
   const cross=(row.crossed||[]).map(item=>badge(item.label,'ok')).join('')||'<span class="rep-muted">—</span>';
   const next=row.next_gate?`${num(row.next_gate.rep)} · ${esc(row.next_gate.label)}`:'<span class="rep-muted">已满</span>';
   const offers=row.state==='本期未刷新'?'<span class="rep-muted">本期未刷新</span>'
-   :`${num(row.offers.length)} 条 · +${num(row.reputation_gain)} 声望 · +${num(row.stones_gain)} 灵石`;
+   :`${num(row.offers.length)} 条${row.accepted?`（${num(row.accepted)} 进行中）`:''} · 可获 +${num(row.available_gain)} 声望 · +${num(row.available_stones??row.stones_gain)} 灵石`;
   return `<div class="rep-tr${on?' on':''}${row.active?'':' off'}" data-town="${n(row.id)}">
    <span class="rep-town-name">${esc(row.name)}${row.active?'':badge('未开放','off')}${row.seen?badge('已见解锁','ok'):''}</span>
    <span class="rep-rep">${num(row.reputation)}</span>

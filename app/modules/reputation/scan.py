@@ -119,6 +119,7 @@ def scan(obj, meta_obj, state=None):
         reputation_gain = sum(_int(entry.get("reputation")) for entry in offers)
         available_gain = sum(_int(entry.get("reputation")) for entry in available)
         stones_gain = sum(_int(entry.get("stones")) for entry in offers)
+        available_stones = sum(_int(entry.get("stones")) for entry in available)
         after = reputation + reputation_gain
         gates = _gates(town)
         next_gate = next((value for value in gates if value > reputation), 0)
@@ -156,6 +157,7 @@ def scan(obj, meta_obj, state=None):
             "reputation_gain": reputation_gain,
             "available_gain": available_gain,
             "stones_gain": stones_gain,
+            "available_stones": available_stones,
             "after": after,
             "crossed": [{"rep": value, "label": _gate_label(town, value)} for value in crossed],
             "next_gate": ({"rep": next_gate, "label": _gate_label(town, next_gate)}
@@ -172,9 +174,9 @@ def scan(obj, meta_obj, state=None):
     totals = {
         "towns": len(active),
         "total_reputation": sum(row["reputation"] for row in active),
-        "available_gain": sum(row["reputation_gain"] for row in active),
-        "available_stones": sum(row["stones_gain"] for row in active),
-        "available_tasks": sum(len(row["offers"]) for row in active),
+        "available_gain": sum(row["available_gain"] for row in active),
+        "available_stones": sum(row["available_stones"] for row in active),
+        "available_tasks": sum(row["available"] for row in active),
         "accepted_tasks": sum(row["accepted"] for row in active),
         "unlocked_shelf": sum(1 for row in active
                               if any(tier["unlocked"] for tier in row["tier_states"])),

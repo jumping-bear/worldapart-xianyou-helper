@@ -21,6 +21,11 @@
 .rep-tr{display:grid;grid-template-columns:128px 88px 130px 230px 78px 180px 210px;gap:8px;align-items:center;min-width:1060px;padding:9px 13px;border-bottom:1px solid #20252e;font-size:12px;color:#b9c2cf}
 .rep-tr:last-child{border-bottom:0}
 .rep-tr.rep-th{color:#7d8593;font-size:11px;background:#12161d;position:sticky;top:0}
+/* 横向滚动时固定城镇列，窄屏不必来回拖才能对上货架数据 */
+.rep-tr>span:first-child{position:sticky;left:0;z-index:1;background:#15181f;box-shadow:8px 0 8px -8px #000}
+.rep-tr.rep-th>span:first-child{background:#12161d}
+.rep-tr.on>span:first-child{background:#1d2c26}
+.rep-tr:not(.rep-th):hover>span:first-child{background:#1a2029}
 .rep-tr:not(.rep-th){cursor:pointer}
 .rep-tr:not(.rep-th):hover{background:#1a2029}
 .rep-tr.on{background:#1d2c26;box-shadow:3px 0 0 #3d735b inset}

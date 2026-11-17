@@ -317,6 +317,10 @@ def build(tables):
         for key, value in row.items():
             if isinstance(value, (int, float, str)):
                 constants[key] = value
+    # 灵石 id 按道具名派生，未来换 id 时不用改代码；找不到时保留旧回退值。
+    stone_id = next((item_id for item_id, row in item_rows.items()
+                     if _plain(row.get("itemName")) == "灵石"), 0)
+    constants.setdefault("STONE_ITEM_ID", stone_id or 50000)
 
     return {
         "schema": 1,

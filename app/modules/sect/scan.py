@@ -111,9 +111,17 @@ def scan(obj, meta_obj, state=None):
     records = _key_map(tasks_state.get("task_records"))
     completed_ids = set()
     for pool_id, record in records.items():
-        code = _int(record.get("state"), -1) if isinstance(record, dict) else _int(record, -1)
-        if code in (1, 2, 3, -1):
+        if isinstance(record, dict):
+            # 未来版本可能把任务池 id 放进记录体内，或调整键名，这里两种都认。
+            pool_id = _int(record.get("pool_id") or record.get("task_pool_id") or pool_id)
+            code = _int(record.get("state"), 0)
+        else:
+            code = _int(record, 0)
+        if code in (1, 2, 3):
             completed_ids.add(pool_id)
+        elif code not in (0,):
+            # 未知状态不再当作已完成，只提示，避免误报进度。
+            warnings.append("任务记录 %s 状态未识别（%s），按未完成处理" % (pool_id, code))
 
     offers = []
     for pool_id in tasks_state.get("current_offer_pool_ids") or []:
@@ -171,7 +179,11 @@ def scan(obj, meta_obj, state=None):
             "targets": _key_map(progression.get("promotion_quest_targets")),
         }
 
-    contribution = bag.get(50002, 0)
+    constants = meta_obj.get("constants") or {}
+    # 优先用快照里的道具 id（build 从 tbitem 名称派生），旧快照缺字段时回退。
+    contribution_id = _int(constants.get("SECT_CONTRIBUTION_ITEM_ID"), 50002)
+    stone_id = _int(constants.get("STONE_ITEM_ID"), 50000)
+    contribution = bag.get(contribution_id, 0)
     affordable = sum(1 for entry in exchange
                      if _int(entry.get("price")) <= contribution
                      and _int(entry.get("position")) <= _int(position.get("level"))
@@ -188,7 +200,7 @@ def scan(obj, meta_obj, state=None):
         "layer": layer,
         "contribution": contribution,
         "contribution_total": _int(player.get("sect_contribution_total")),
-        "stones": bag.get(50000, 0),
+        "stones": bag.get(stone_id, 0),
         "reputation": sect_reputes.get(sect_id, 0),
         "reputations": [{"sect": key, "name": (sects.get(key) or {}).get("name", ""), "value": _int(value)}
                         for key, value in sorted(sect_reputes.items()) if _int(value)],

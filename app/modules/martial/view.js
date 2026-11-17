@@ -143,10 +143,21 @@ function artsTab(m){
  </div><div id="martial-arts-list"></div>`;
 }
 
+function syncFilter(node){
+ const key=node.dataset.f;
+ if(!(key in FILTER_DEFAULTS))return;
+ if(node.tagName==='SELECT'&&![...node.options].some(item=>item.value===String(filters[key]??''))){
+  // 切页签或换角色后，旧筛选值可能已不在选项里；不清理会让列表假空。
+  filters[key]=FILTER_DEFAULTS[key];
+  store.set(FILTER_KEY,filters);
+ }
+ node.value=filters[key]??'';
+}
+
 function bindFilters(m,kind){
  const listId=kind==='core'?'martial-core-list':'martial-arts-list';
  root.querySelectorAll('[data-f]').forEach(node=>{
-  node.value=filters[node.dataset.f]??'';
+  syncFilter(node);
   node.addEventListener(node.tagName==='INPUT'?'input':'change',()=>{
    filters[node.dataset.f]=node.value;store.set(FILTER_KEY,filters);
    const list=$(listId);
