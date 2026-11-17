@@ -197,11 +197,24 @@ def build_exe():
     return staging
 
 
+PRIVATE_ARTIFACTS = {"config.json", "仙友助手.html", "仙友助手版本.js", "仙友助手-示例.html"}
+
+
+def clean_private_artifacts():
+    """清掉本机路径与个人存档页面，避免随发布包或工坊内容外泄。"""
+    for name in PRIVATE_ARTIFACTS:
+        path = os.path.join(APP_DIR, name)
+        if os.path.isfile(path):
+            os.remove(path)
+
+
 def make_zip(staging, version):
     target = os.path.join(staging, "仙友助手v%s.zip" % version)
     files = []
     for base, _dirs, names in os.walk(APP_DIR):
         for name in names:
+            if name in PRIVATE_ARTIFACTS or name.endswith(".tmp"):
+                continue
             path = os.path.join(base, name)
             files.append((os.path.relpath(path, APP_DIR).replace("\\", "/"), path))
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -231,6 +244,7 @@ def release(version):
         update_readme(version)
         staging = build_exe()
         archive = make_zip(staging, version)
+        clean_private_artifacts()
         generate_vdf(os.path.join(WORKSHOP_DIR, "workshop.vdf"), version, APP_DIR)
         print("发布产物就绪：%s" % archive)
         print("下一步：人工执行 workshop_release\\upload_to_workshop.bat")
