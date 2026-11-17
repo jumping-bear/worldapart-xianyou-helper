@@ -117,7 +117,8 @@
     if (filters.friend && (c.roles || []).indexOf('朋友') < 0) return false;
     if (filters.housed && !c.housed) return false;
     if (filters.evilneg && !(c.evil < 0)) return false;
-    if (filters.safe && !c.safe_target) return false;
+    // 安全击杀默认给"在世视角"：图鉴口径 185 位，玩家真正能去杀的只有在世的
+    if (filters.safe && !(c.safe_target && c.present)) return false;
     if (filters.spar && !c.spar) return false;
     if (filters.steal && !c.steal) return false;
     if (filters.merchant && !c.merchant) return false;
@@ -231,7 +232,7 @@
     var safeNow = rows.filter(function (c) { return c.safe_now; }).length;
     info.innerHTML = '命中 <b>' + rows.length + '</b> / ' + total + ' 位 · 在世 <b>' + present +
       '</b> 位 · 有交情 <b>' + met + '</b> 位' +
-      (filters.safe ? ' · 可安全击杀 <b>' + safe + '</b> 位（在世 <b>' + safeNow + '</b> 位）' : '');
+      (filters.safe ? ' · 可安全击杀 <b>' + safe + '</b> 位（可现在动手 <b>' + safeNow + '</b> 位）' : '');
   }
 
   function renderCards(m, reset) {
@@ -469,6 +470,8 @@
         return '<div class="rolebook-pstat"><b>' + esc(x[1]) + '</b><span>' + esc(x[0]) + '</span></div>';
       }).join('') + '</div>' +
       '<div class="rolebook-player-note">共收录 <b>' + esc(stats.total || 0) + '</b> 位 NPC · ' +
+      '安全击杀 <b>' + esc(live.safe_target || 0) + '</b> 位（在世 <b>' +
+        esc(live.safe_target_present || 0) + '</b> 位）· ' +
       '你的善恶值 <b>' + esc((m.player || {}).evil || 0) + '</b>' +
       ((m.player || {}).demonic ? ' · <span class="rolebook-demon">魔修气 ' + esc(m.player.demon_qi) + '</span>' : '') +
       '</div></div>';
@@ -579,7 +582,13 @@
         '<div class="rolebook-chips">' +
           '<span class="rolebook-chips-label">快捷筛选</span>' +
           CHIPS.map(function (p) {
-            return '<button type="button" id="rolebook-f-' + p[0] + '" class="rolebook-chip">' + p[1] + '</button>';
+            var tip = p[0] === 'safe'
+              ? ' title="图鉴口径 ' + esc((m.live_stats || {}).safe_target || 0) +
+                ' 位；默认只列在世、现在就能去杀的 ' +
+                esc((m.live_stats || {}).safe_target_present || 0) + ' 位"'
+              : '';
+            return '<button type="button" id="rolebook-f-' + p[0] + '" class="rolebook-chip"' + tip + '>' +
+              p[1] + '</button>';
           }).join('') +
           '<button type="button" id="rolebook-reset" class="rolebook-chip rolebook-chip-reset">清空</button>' +
         '</div>' +
