@@ -49,7 +49,7 @@ function initQuest(){
    const path=(l.path&&l.path.length)?l.path.join(' / '):l.name;return (r.spot?r.spot+' · ':'')+path};
  const rewardTip=x=>[(x.sources||[]).join('/'),x.type?('类型：'+x.type):'',x.price?('参考价 '+x.price):''].filter(Boolean).join(' · ');
  const rewardChips=(r,limit)=>{
-   const list=(r.rewards||[]).filter(x=>x.item!==50000&&x.name!=='灵石');
+   const list=(r.rewards||[]).filter(x=>x.name!=='灵石');
    const stone=r.reward_stone||0,cap=limit||3;
    let out=list.slice(0,cap).map(x=>`<span class="sq-rw f${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}</span>`);
    if(list.length>cap)out.push(`<span class="sq-rw more">+${list.length-cap}</span>`);
@@ -301,7 +301,7 @@ function initQuest(){
    `<div class="card"><div class="k">还能拿的灵石</div><div class="v">${stats.stones_todo||0}</div><div class="s">未完成支线的奖励</div></div>`+
    `<div class="card"><div class="k">隐藏任务</div><div class="v">${stats.hidden||0} <span>个</span></div><div class="s">不会显示在游戏任务面板</div></div>`+
    `</div>`;
- const legend=`<div class="legend"><span>奖励颜色：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span></div>`;
+ const legend=`<div class="legend"><span>物品品质(0-5)：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span></div>`;
  host.innerHTML=sourceHtml(m)+cards+
    `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找任务 / 剧情线 / 委托人 / 地点 / 奖励</span><input id="qs" placeholder="输入任务名、剧情线、委托人、地点或奖励"></label></div></div>`+
    `<div class="chips" id="qview"><span class="chip-label">视图</span>`+

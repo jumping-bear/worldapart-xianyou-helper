@@ -199,7 +199,7 @@
         '<div class="rolebook-card-id">' +
           '<div class="rolebook-card-name">' + esc(c.name) + '</div>' +
           '<div class="rolebook-card-title">' + esc(c.title || c.sect) + '</div>' +
-          '<div class="rolebook-card-realm">' + esc(c.realm) + '</div>' +
+          '<div class="rolebook-card-realm">' + esc(c.realm_short || c.realm) + '</div>' +
         '</div></div>' +
       '<div class="rolebook-card-place' + (place.off ? ' rolebook-card-place-off' : '') + '" title="' + esc(place.sub) + '">' +
         '<span class="rolebook-pin">⌖</span>' +

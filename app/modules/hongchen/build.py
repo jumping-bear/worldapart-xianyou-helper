@@ -293,7 +293,7 @@ def _gate_from_condition(cond_row, npcs, grey_text="", quest_names=None, cond_op
             symbol = {"GE": "≥", "GT": ">", "LT": "＜", "EQ": "＝"}[op]
             if token == "REALM":
                 # 境界门槛里的数字是境界 id（2 = 筑基期），不是属性值，不能写成「境界≥2」。
-                realm_name = realms.get(str(digits)) or ("境界 %d" % digits)
+                realm_name = realms.get(str(digits)) or ("境界%d" % digits)
                 text, kind, need = "境界 %s %s" % (symbol, realm_name), "realm", digits
             else:
                 attr_name = _ATTR_TOKEN.get(token, "")

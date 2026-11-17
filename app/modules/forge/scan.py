@@ -41,7 +41,7 @@ def scan_forge(obj, meta):
         return name or ("物品 %s" % item_id), quality, realm_id
 
     def realm_name(realm_id):
-        return realms.get(str(realm_id)) or ("境界 %s" % realm_id)
+        return realms.get(str(realm_id)) or ("境界%s" % realm_id)
 
     owned = {}
     for entry in bag_entries(player.get("bag")):

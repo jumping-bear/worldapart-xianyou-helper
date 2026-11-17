@@ -73,7 +73,7 @@ def _realms(tables):
         if not isinstance(row, dict) or row.get("id") is None:
             continue
         realm_id = _int(row["id"])
-        name = _clean(row.get("realm_name")) or ("境界 %s" % realm_id)
+        name = _clean(row.get("realm_name")) or ("境界%s" % realm_id)
         realms[str(realm_id)] = name
         for phase in row.get("phases") or []:
             phases[str(_int(phase))] = name

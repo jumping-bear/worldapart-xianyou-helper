@@ -40,7 +40,7 @@ def _tier_name(meta, tier):
     start = (meta.get("tier_phase") or {}).get(str(tier))
     if start and str(start) in phases:
         return phases[str(start)]
-    return phases.get(str(tier)) or ("境界 %s" % tier)
+    return phases.get(str(tier)) or ("境界%s" % tier)
 
 
 def _current_tier(rows, meta):
