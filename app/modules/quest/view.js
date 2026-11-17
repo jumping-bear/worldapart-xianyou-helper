@@ -28,7 +28,7 @@ function initQuest(){
    if(stone)out.push(`<span class="sq-stone">灵石 ${stone}</span>`);
    return out.join('');
  };
- const hay=(r)=>[r.name,r.desc,r.group,r.chain_name,(r.giver||{}).name,locText(r),
+ const hay=(r)=>[r.name,r.desc,r.group,(r.giver||{}).name,locText(r),
    (r.objectives||[]).map(o=>o.text).join(' '),
    (r.rewards||[]).map(x=>x.name).join(' '),
    (r.option_gates||[]).map(g=>(g.option||'')+' '+(g.text||'')).join(' ')].join(' ').toLowerCase();
