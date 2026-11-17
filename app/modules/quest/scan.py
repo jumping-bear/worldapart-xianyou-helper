@@ -17,7 +17,8 @@ def _int(value, default=0):
 def meta(metadata):
     return metadata.get("quest") or {
         "quests": [], "groups": [], "realms": {"0": "凡人"},
-        "states": {}, "types": {}, "phases": {}, "chains": [], "branches": [], "stats": {},
+        "states": {}, "types": {}, "phases": {}, "chains": [], "branches": [],
+        "edges": [], "diagnostics": {}, "stats": {},
     }
 
 
@@ -188,6 +189,11 @@ def scan(obj, meta_obj, state=None):
             "branch_siblings": quest.get("acq_branch_siblings") or [],
             "prev_options": quest.get("prev_options") or [],
             "acq_cond": cond,
+            "acq_readable": (cond or {}).get("readable") or "",
+            "acq_mixed": bool((cond or {}).get("mixed")),
+            "option_gates": quest.get("option_gates") or [],
+            "trigger_detail": quest.get("trigger_detail"),
+            "trigger_label": (quest.get("trigger_detail") or {}).get("label") or "",
             "cond_text": (cond or {}).get("text") or "",
             "cond_fail_text": cond_fail,
             "cond_need": 0,
@@ -485,6 +491,8 @@ def scan(obj, meta_obj, state=None):
     }
     return {"rows": rows, "stats": stats, "groups": meta_obj.get("groups") or [],
             "chains": meta_obj.get("chains") or [], "branches": meta_obj.get("branches") or [],
+            "edges": meta_obj.get("edges") or [],
+            "diagnostics": meta_obj.get("diagnostics") or {},
             "realms": realms, "states": states}
 
 
