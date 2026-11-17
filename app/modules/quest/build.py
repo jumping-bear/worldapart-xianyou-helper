@@ -763,6 +763,12 @@ def _chapter_from_realms(ids, quests, realms):
     for quest_id in ids:
         values.extend(value for value in quests[quest_id].get("realm_ids") or [] if value > 0)
     if not values:
+        # 没配境界 id 的旧任务，用地点所在境界兜底（河望镇 → 炼气），否则同名任务只能标“支线”。
+        for quest_id in ids:
+            realm = _int((quests[quest_id].get("location") or {}).get("realm"))
+            if realm > 0:
+                values.append(realm)
+    if not values:
         return "支线"
     realm_name = str(realms.get(str(min(values))) or "").replace("期", "").strip()
     return realm_name or "支线"
@@ -1523,6 +1529,39 @@ def build_quests(tables):
     chapter_order, chapter_tones = _chapter_layout(realms)
     storylines = _build_storylines(quests, edges, realms, region_names, chapter_order)
 
+    # 同名任务：不同章节/不同剧情链里可能各有一个「小蝶所托」这种同名任务，
+    # 玩家容易把已完成的那条当成眼前这条的前置。这里按名字分组，全部来自配置，不写死。
+    line_meta = {}
+    for line in storylines:
+        for quest_id in line.get("quests") or []:
+            line_meta[quest_id] = line
+    name_groups = {}
+    for quest_id, quest in quests.items():
+        name = quest["name"]
+        if name:
+            name_groups.setdefault(name, []).append(quest_id)
+    dup_names, same_name_map = {}, {}
+    for name, ids in name_groups.items():
+        if len(ids) < 2:
+            continue
+        ids = sorted(ids)
+        entries = []
+        for quest_id in ids:
+            quest = quests[quest_id]
+            line = line_meta.get(quest_id) or {}
+            entries.append({
+                "id": quest_id,
+                "chapter": line.get("chapter") or "",
+                "line": line.get("name") or quest.get("chain_name") or "",
+                "region": line.get("region") or (quest.get("location") or {}).get("region") or "",
+                "giver": (quest.get("giver") or {}).get("name") or "",
+            })
+        dup_names[name] = entries
+        for quest_id in ids:
+            same_name_map[quest_id] = [other for other in ids if other != quest_id]
+    for quest_id, quest in quests.items():
+        quest["same_name"] = sorted(same_name_map.get(quest_id, []))
+
     stats = {
         "quests": len(result),
         "with_rewards": sum(1 for quest in result if quest["rewards"]),
@@ -1552,6 +1591,7 @@ def build_quests(tables):
     return {"schema": SCHEMA, "quests": result, "groups": sorted(groups.values(), key=lambda g: g["name"]),
             "chains": sorted(chains, key=lambda item: chain_order.get(item["id"], 0)),
             "storylines": storylines,
+            "dup_names": dup_names,
             "chapter_order": chapter_order, "chapter_tones": chapter_tones,
             "quest_index": quest_index,
             "branches": sorted(branches.values(), key=lambda item: item["key"]),
