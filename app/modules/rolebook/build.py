@@ -128,6 +128,18 @@ def _avatar_stem(value):
     return name.rsplit(".", 1)[0] if name else ""
 
 
+def _rule_kind(lo, hi):
+    """按 NPC 善恶区间判断规则类型：恶名 / 中性 / 善良。
+
+    页面据此决定文案与配色，不再让前端按数字猜。
+    """
+    if hi <= -1:
+        return "evil"
+    if lo >= 1:
+        return "good"
+    return "neutral"
+
+
 def build(tables):
     npc_rows = _rows(tables.get("tbnpcbasecfg"))
     personas = {str(r["id"]): r for r in _rows(tables.get("tbnpcpersonality"))
@@ -186,6 +198,29 @@ def build(tables):
             out.append(pack)
         return out
 
+    # 击杀善恶规则：按 NPC 善恶区间给奖惩，priority 高者先命中。
+    # NPC 卡只存规则下标，文案与数字都在这里（一份）。
+    alignment_rules = []
+    for index, rule in enumerate(attack_rules):
+        lo = _int(rule.get("minNpcAlignment"))
+        hi = _int(rule.get("maxNpcAlignment"))
+        alignment_rules.append({
+            "id": index, "min": lo, "max": hi,
+            "priority": _int(rule.get("priority")),
+            "kind": _rule_kind(lo, hi),
+            "good_delta": _int(rule.get("playerGoodDelta")),
+            "evil_delta": _int(rule.get("playerEvilDelta")),
+            "city_rep": _int(rule.get("cityReputationDelta")),
+            "sect_rep": _int(rule.get("sectReputationDelta")),
+            "desc": _text(rule.get("ruleDesc")),
+        })
+
+    def kill_rule_of(evil):
+        for rule in alignment_rules:
+            if rule["min"] <= evil <= rule["max"]:
+                return rule["id"]
+        return -1
+
     meta = {
         "evil_tiers": tier_pack(evil_tiers, "min", "evilName", "evilPrompt"),
         "repute_tiers": tier_pack(repute_tiers, "min", "reputeName", "reputePrompt"),
@@ -199,12 +234,7 @@ def build(tables):
             key: {"name": _text(r.get("personalityName")),
                   "desc": _persona_desc(r.get("personalityPrompt"))}
             for key, r in personas.items()},
-        "attack_rules": [
-            {"good": _int(r.get("playerGoodDelta")),
-             "evil": _int(r.get("playerEvilDelta")),
-             "city": _int(r.get("cityReputationDelta")),
-             "sect": _int(r.get("sectReputationDelta")),
-             "desc": _text(r.get("ruleDesc"))} for r in attack_rules],
+        "alignment_rules": alignment_rules,
         "alignment_titles": [
             {"min": _int(r.get("minAlignment")), "max": _int(r.get("maxAlignment")),
              "name": _text(r.get("titleName")), "desc": _text(r.get("titleDesc"))}
@@ -278,18 +308,8 @@ def build(tables):
         topic_titles = topics.get(str(npc_id)) or []
         pers_titles = persuade.get(str(npc_id)) or []
 
-        # 攻击此人：按 NPC alignment 区间匹配奖惩规则
-        attack = {}
-        for rule in attack_rules:
-            if _int(rule.get("minNpcAlignment")) <= evil <= _int(rule.get("maxNpcAlignment")):
-                attack = {
-                    "good": _int(rule.get("playerGoodDelta")),
-                    "evil": _int(rule.get("playerEvilDelta")),
-                    "city": _int(rule.get("cityReputationDelta")),
-                    "sect": _int(rule.get("sectReputationDelta")),
-                    "desc": _text(rule.get("ruleDesc")),
-                }
-                break
+        # 击杀后果：只落规则下标，文案/数字在 meta.alignment_rules
+        kill_rule = kill_rule_of(evil)
 
         evil_pos = int(round((evil - _EVIL_MIN) / float(_EVIL_MAX - _EVIL_MIN) * 100))
         evil_pos = max(0, min(100, evil_pos))
@@ -317,7 +337,7 @@ def build(tables):
             "memoria": len(mem_titles), "memoria_titles": mem_titles[:6],
             "topics": len(topic_titles), "topic_titles": topic_titles[:6],
             "persuade": len(pers_titles),
-            "attack": attack,
+            "kill_rule": kill_rule,
             "death": _first_text(row.get("death_narrative_text"), 80),
         })
 

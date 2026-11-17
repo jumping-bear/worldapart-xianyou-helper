@@ -280,6 +280,7 @@ def enrich(module, meta_obj, state=None):
     npcs = []
     avatar_map = {}
     evil_met = merchant_met = present_count = 0
+    safe_present = safe_ready = 0
     for card in built.get("npcs") or []:
         npc = dict(card)
         npc_id = _int(npc.get("id"), 0)
@@ -302,6 +303,8 @@ def enrich(module, meta_obj, state=None):
         npc["loc_name"] = place.get("name") or ""
         npc["region"] = place.get("region") or ""
         npc["gone"] = bool(place.get("gone"))
+        # 安全击杀目标：杀他不掉善恶、不扣声望；safe_now 才是"现在就能去杀"的
+        npc["safe_now"] = bool(npc.get("safe_target")) and npc["present"] and not npc["gone"]
         tier = _intimacy_tier(tiers, favor) or {}
         npc["intimacy_name"] = live.get("tier") or tier.get("name") or ""
         idx = live.get("tier_index", -1)
@@ -310,6 +313,12 @@ def enrich(module, meta_obj, state=None):
         npc["intimacy_index"] = idx
         if npc["present"]:
             present_count += 1
+        if npc.get("safe_target"):
+            # 在世口径与"在世"一致（present）；safe_now 再多排除已退隐
+            if npc["present"]:
+                safe_present += 1
+            if npc["safe_now"]:
+                safe_ready += 1
         if npc["met"]:
             evil_met += 1 if _int(npc.get("evil"), 0) < 0 else 0
             merchant_met += 1 if npc.get("merchant") else 0
@@ -323,6 +332,13 @@ def enrich(module, meta_obj, state=None):
     live_stats["absent"] = len(npcs) - present_count
     live_stats["evil_met"] = evil_met
     live_stats["merchant_met"] = merchant_met
+    # 安全击杀：safe_target 是图鉴口径（恶名 + 可击杀，185）；
+    # safe_target_present 是与"在世"一致的可定位人数，safe_target_ready 再排除已退隐
+    safe_total = sum(1 for card in npcs if card.get("safe_target"))
+    live_stats["safe_target"] = safe_total
+    live_stats["safe_target_present"] = safe_present
+    live_stats["safe_target_ready"] = safe_ready
+    live_stats["safe_target_absent"] = safe_total - safe_present
 
     module["npcs"] = npcs
     module["meta"] = meta

@@ -182,10 +182,21 @@
 .rolebook-act{border:1px solid #2c3442;background:#191e28;color:#8b93a1;border-radius:7px;padding:5px 11px;font-size:12px}
 .rolebook-act.on{background:#1e2b25;border-color:#356047;color:#bfe8d3}
 .rolebook-act.off{color:#5f6774}
-.rolebook-attack-grid{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
-.rolebook-delta{border-radius:6px;padding:4px 9px;font-size:12px;font-weight:600}
-.rolebook-delta-up{background:#1e2b25;border:1px solid #356047;color:#8fd0a9}
-.rolebook-delta-down{background:#2e1e22;border:1px solid #6b3440;color:#ff9aa8}
+/* 安全击杀小标记：杀他不掉善恶、不扣声望 */
+.rolebook-safe{font-size:10px;line-height:1.7;border-radius:5px;padding:1px 7px;background:#1e2b25;border:1px solid #356047;color:#8fd0a9;font-weight:600}
+
+/* 击杀后果：数字在前，规则原文退居小字 */
+.rolebook-kill{background:#171d28;border:1px solid #2a3444;border-radius:10px;padding:12px 14px}
+.rolebook-kill-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px}
+.rolebook-kill-delta{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;padding:2px 8px;border-radius:6px;border:1px solid #2c3442;background:#1b2130;color:#c2ccda}
+.rolebook-kill-up{background:#1e2b25;border-color:#356047;color:#8fd0a9}
+.rolebook-kill-down{background:#2e1e22;border-color:#6b3440;color:#ff9aa8}
+.rolebook-kill-flat{color:#7d8593}
+.rolebook-kill-sep{color:#4a5464;font-size:11px}
+.rolebook-kill-raw{color:#7d8593;font-size:11px}
+.rolebook-kill-tip{color:#a9c7b8;font-size:12px;line-height:1.8;margin:9px 0 0}
+.rolebook-kill-tip b{color:#dff0e5}
+.rolebook-kill-warn{color:#e0b98a}
 .rolebook-chase{margin-top:12px}
 .rolebook-chase>span{color:#c2ccda;font-size:12px}
 .rolebook-chase ul{margin:7px 0 0;padding-left:18px}
