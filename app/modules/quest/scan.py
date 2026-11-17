@@ -6,6 +6,23 @@ import os
 DONE_STATES = (2, 3)
 DOING_STATES = (1, 6)
 
+# 展示层只保留玩家看得懂的六类状态；底层判定词一律不往外露。
+STATUS_DONE = "已完成"
+STATUS_DOING = "进行中"
+STATUS_READY = "可接取"
+STATUS_COND = "条件不足"
+STATUS_WAIT = "未触发（需满足条件）"
+STATUS_UNPICKED = "未选分支"
+
+STATUS_KEYS = {
+    STATUS_DONE: "done",
+    STATUS_DOING: "doing",
+    STATUS_READY: "ready",
+    STATUS_COND: "cond",
+    STATUS_WAIT: "wait",
+    STATUS_UNPICKED: "unpicked",
+}
+
 
 def _attr_level(exp, thresholds):
     """探索属性经验 → 等级，阈值来自 tbinteractattribute.levelConfigs.maxExp。"""
@@ -22,9 +39,33 @@ def _cmp(op, cur, need):
     return ops.get(op)
 
 
-def _egg_matches(note, quest_id, cond):
-    return (_int(note.get("quest")) == quest_id
-            or (note.get("alias") and (cond or {}).get("alias") == note.get("alias")))
+def _int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _realm_name(ctx, realm_id):
+    return (ctx.get("realms") or {}).get(str(_int(realm_id))) or ""
+
+
+def _lookup_rep(mapping, keys):
+    """城镇声望可能按城镇 id 或声望 id 落库，两种键都试。"""
+    if not isinstance(mapping, dict):
+        return 0
+    for key in keys:
+        if key in (None, "", 0):
+            continue
+        if str(key) in mapping:
+            return _int(mapping[str(key)])
+        if key in mapping:
+            return _int(mapping[key])
+    for raw_key, value in mapping.items():
+        for key in keys:
+            if key not in (None, "", 0) and _int(raw_key) == _int(key):
+                return _int(value)
+    return 0
 
 
 def _eval_check(check, ctx):
@@ -32,110 +73,122 @@ def _eval_check(check, ctx):
     kind = check.get("kind") or ""
     need = _int(check.get("need"))
     text = check.get("text") or "条件"
-    cur, ok, is_level = None, None, False
+    neg = bool(check.get("neg"))
+    cur, raw_ok, is_level = None, None, False
     if kind == "favor":
         cur = ctx["favor"].get(_int(check.get("npc")), 0)
-        ok = cur >= need
+        raw_ok = cur >= need
     elif kind == "city_rep":
-        cur = _int(ctx["city_rep"].get(str(_int(check.get("city"))), 0))
-        ok = cur >= need
+        cur = _lookup_rep(ctx["city_rep"], [check.get("city"), check.get("rep")])
+        raw_ok = cur >= need
     elif kind == "sect_rep":
         cur = ctx["sect_rep"]
-        ok = cur >= need
+        raw_ok = cur >= need
     elif kind in ("phase", "realm"):
         cur = ctx["player_realm"]
-        ok = cur >= need
+        raw_ok = cur >= need
     elif kind == "layer":
         cur = ctx["layer"]
-        ok = cur >= need
+        raw_ok = cur >= need
     elif kind == "money":
         cur = ctx["money"]
-        ok = cur >= need
+        raw_ok = cur >= need
     elif kind in ("quest_done", "quest_hold", "quest_accepted", "quest_active"):
         quest_id = _int(check.get("quest"))
-        code = ctx["quests"].get(quest_id, -1)
+        code = ctx["quests"].get(quest_id)
         if kind == "quest_done":
             cur = 1 if code in DONE_STATES else 0
         elif kind == "quest_hold":
             cur = 1 if code in DOING_STATES else 0
         elif kind == "quest_accepted":
-            cur = 1 if quest_id in ctx["quests"] else 0
+            cur = 1 if code is not None else 0
         else:
             cur = 1 if code in DOING_STATES else 0
-        ok = cur >= need
-        text = text or "任务状态"
+        raw_ok = cur >= need
+    elif kind == "quest_none":
+        quest_id = _int(check.get("quest"))
+        code = ctx["quests"].get(quest_id)
+        cur = 1 if (code in DOING_STATES or code in DONE_STATES) else 0
+        raw_ok = cur == 0
     elif kind == "attr":
         attr_id = _int(check.get("attr"))
         exp = ctx["attr_exp"].get(str(attr_id), ctx["attr_exp"].get(attr_id, 0))
         cur, is_level = _attr_level(exp, ctx["attr_levels"].get(str(attr_id)) or [])
-        ok = cur >= need
+        raw_ok = cur >= need
     elif kind == "npc_realm":
         cur = ctx["npc_realms"].get(_int(check.get("npc")))
         if cur is not None:
-            ok = _cmp(check.get("op") or "≥", cur, need)
+            raw_ok = _cmp(check.get("op") or "≥", cur, need)
+    ok = None if raw_ok is None else (not raw_ok if neg else raw_ok)
+
     if cur is None:
         cur_text = "未知"
-    elif is_level:
+    elif kind in ("phase", "realm", "npc_realm"):
+        cur_text = _realm_name(ctx, cur) or str(cur)
+    elif kind == "attr" or is_level:
         cur_text = "Lv%d" % cur
     elif kind in ("quest_done", "quest_hold", "quest_accepted", "quest_active"):
-        cur_text = "已完成" if cur >= need else "未完成"
+        code = ctx["quests"].get(_int(check.get("quest")))
+        cur_text = "已完成" if code in DONE_STATES else ("进行中" if code in DOING_STATES else "未开始")
+    elif kind == "quest_none":
+        cur_text = "已选过" if cur else "未涉及"
     else:
         cur_text = str(cur)
+
     gap = ""
     if ok is False:
-        if is_level:
+        if neg:
+            gap = "目前已经%s" % (check.get("pos_text") or text)
+        elif is_level:
             gap = "%s（需 Lv%d，当前 Lv%d）" % (text, need, cur)
-        elif kind == "npc_realm":
-            gap = "%s（当前 %s）" % (text, cur_text)
-        elif kind in ("quest_done", "quest_hold", "quest_accepted", "quest_active"):
+        elif kind in ("phase", "realm", "npc_realm"):
+            gap = "%s，当前 %s" % (text, cur_text)
+        elif kind in ("quest_done", "quest_hold", "quest_accepted", "quest_active",
+                      "quest_none"):
             gap = text
         else:
             gap = "%s（需 %d，当前 %s）" % (text, need, cur_text)
     return {"kind": kind, "text": text, "need": need, "cur": cur,
-            "cur_text": cur_text, "ok": ok, "gap": gap}
+            "cur_text": cur_text, "ok": ok, "gap": gap, "neg": neg,
+            "pos_text": check.get("pos_text") or text,
+            "neg_text": check.get("neg_text") or text}
 
 
 def _eval_tree(tree, ctx):
     """递归判定条件树，保留 且/或/非 逻辑，输出可展示的缺口链。"""
-    checks = []
-
     def walk(node):
         if not isinstance(node, dict):
             return {"ok": None, "gaps": [], "text": "", "checks": []}
         op = node.get("op")
-        if op:
+        if op in ("and", "or"):
             children = [walk(child) for child in (node.get("children") or [])]
-            vals = [child["ok"] for child in children]
-            gaps = [g for child in children for g in child["gaps"]]
+            values = [child["ok"] for child in children]
             if op == "and":
-                ok = False if False in vals else (None if None in vals else True)
-            elif op == "or":
-                ok = True if True in vals else (None if None in vals else False)
-                if ok is True:
-                    gaps = []
-                else:
-                    parts = [c["gaps"][0] if c["gaps"] else c["text"] for c in children]
-                    gaps = ["满足其一：" + " 或 ".join(p for p in parts if p)]
-            elif op == "not":
-                inner = children[0] if children else {"ok": None, "gaps": [], "text": "", "checks": []}
-                ok = None if inner["ok"] is None else (not inner["ok"])
-                # 展示时把“非(条件)”整体翻转，避免 ✓ 出现在需要“不满足”的条件上造成误读
-                flipped = []
-                for check in inner.get("checks") or []:
-                    item = dict(check)
-                    item["ok"] = None if check.get("ok") is None else (not check["ok"])
-                    item["text"] = "非（%s）" % check.get("text", "")
-                    item["gap"] = "" if item["ok"] is not False else "目前仍满足「%s」" % check.get("text", "")
-                    flipped.append(item)
-                gaps = ["目前仍满足「%s」" % inner["text"]] if inner["ok"] is True else []
-                return {"ok": ok, "gaps": gaps,
-                        "text": "非（%s）" % inner.get("text", ""), "checks": flipped}
+                ok = False if False in values else (None if None in values else True)
+                gaps = [] if ok else [gap for child in children for gap in child["gaps"]]
             else:
-                ok = None
+                ok = True if True in values else (None if None in values else False)
+                gaps = []
+                if ok is False:
+                    parts = [child["text"] for child in children]
+                    gaps = ["任选其一：" + " 或 ".join(part for part in parts if part)]
             return {"ok": ok, "gaps": gaps, "text": node.get("text") or "",
-                    "checks": [c for child in children for c in child["checks"]]}
+                    "checks": [check for child in children for check in child["checks"]]}
+        if op == "not":
+            inner = walk((node.get("children") or [{}])[0])
+            ok = None if inner["ok"] is None else (not inner["ok"])
+            checks = []
+            for check in inner["checks"]:
+                item = dict(check)
+                item["ok"] = None if check["ok"] is None else (not check["ok"])
+                item["text"] = (check.get("pos_text") if check.get("neg")
+                                else (check.get("neg_text") or check.get("text")))
+                item["neg"] = not check.get("neg", False)
+                item["gap"] = "" if item["ok"] is not False else ("目前已经%s" % check.get("text"))
+                checks.append(item)
+            gaps = [check["gap"] for check in checks if check["gap"]] if ok is False else []
+            return {"ok": ok, "gaps": gaps, "text": node.get("text") or "", "checks": checks}
         ev = _eval_check(node.get("leaf") or {}, ctx)
-        checks.append(ev)
         return {"ok": ev["ok"], "gaps": [ev["gap"]] if ev["gap"] else [],
                 "text": ev["text"], "checks": [ev]}
 
@@ -163,25 +216,18 @@ def _tree_logic(tree):
                 walk(child)
 
     walk(tree)
-    if flags["not"] or (flags["and"] and flags["or"]):
-        return "混合逻辑（且/或/非）"
-    if flags["or"]:
-        return "满足其一（或）"
-    if flags["and"]:
-        return "全部满足（且）"
-    return "单一条件"
-
-
-def _int(value, default=0):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+    if flags["or"] and not flags["and"]:
+        return "满足其一"
+    if flags["and"] and not flags["or"]:
+        return "全部满足"
+    if flags["and"] and flags["or"]:
+        return "部分条件满足其一"
+    return ""
 
 
 def meta(metadata):
     return metadata.get("quest") or {
-        "quests": [], "groups": [], "realms": {"0": "凡人"},
+        "quests": [], "groups": [], "storylines": [], "realms": {"0": "凡人"},
         "states": {}, "types": {}, "phases": {}, "chains": [], "branches": [],
         "edges": [], "diagnostics": {}, "stats": {},
     }
@@ -202,29 +248,21 @@ def _realm_for_layer(phases, layer):
     return _int((phases or {}).get(str(best)))
 
 
-def _start_text(root):
-    """剧情线起点的进入方式，用于“整条线未开始”的提示。"""
-    label = root.get("status_label")
-    giver = (root.get("giver") or {}).get("name") or ""
-    if label == "可接取":
-        return "：与%s对话接取" % giver if giver else "：与委托人对话接取"
-    if label == "待触发":
-        return "：" + (root.get("status_hint") or "完成前置后自动触发")
-    if label == "条件不足":
-        return "，但接取条件未满足：%s" % (root.get("cond_text") or "")
-    if label == "剧情接取":
-        return "：在剧情对话中接取"
-    if label == "疑似已跳过":
-        return "：同一段剧情里可能已经选了别的分支"
-    if label == "触发未知":
-        return "：触发方式不固定，需要在剧情中留意"
-    if label == "疑似已触发":
-        return "：前置已完成但本环没有记录"
-    if label == "未选分支":
-        return "：" + (root.get("status_hint") or "已选择另一分支")
-    if label == "不可达":
-        return "：" + (root.get("unreachable_text") or "已无法接取")
-    return ""
+def _fallback_storylines(rows):
+    """旧快照没有 storylines 时，按 chain 兜底聚成线，保证页面不空白。"""
+    clusters = {}
+    for row in rows:
+        key = row.get("chain_id") or ("q%d" % row["id"])
+        clusters.setdefault(key, []).append(row)
+    out = []
+    for key, items in clusters.items():
+        items.sort(key=lambda row: (row.get("chain_index") or 0, row["id"]))
+        out.append({"id": key, "name": items[0].get("chain_name") or items[0]["name"],
+                    "chapter": "支线", "group": items[0].get("group") or "",
+                    "quests": [row["id"] for row in items],
+                    "depths": {str(row["id"]): row.get("chain_index") or 1 for row in items},
+                    "npc": [], "size": len(items), "first": items[0]["id"]})
+    return out
 
 
 def scan(obj, meta_obj, state=None):
@@ -272,20 +310,9 @@ def scan(obj, meta_obj, state=None):
         "attr_levels": meta_obj.get("attr_levels") or {},
         "npc_realms": npc_realms,
         "phases": phases,
+        "realms": realms,
     }
     egg_notes = meta_obj.get("egg_notes") or []
-    gate_diag = []
-    for gate in ((meta_obj.get("diagnostics") or {}).get("option_gates") or []):
-        leaf = gate.get("leaf") or {}
-        gate_diag.append({
-            "quest": _int(gate.get("quest")), "quest_name": gate.get("quest_name") or "",
-            "dialogue": _int(gate.get("dialogue")), "sub": _int(gate.get("sub")),
-            "alias": gate.get("alias") or "", "text": gate.get("text") or "",
-            "option": gate.get("option") or "", "no_grey": bool(gate.get("no_grey")),
-            "grey": gate.get("grey") or "", "priority": gate.get("priority") or "",
-            "context": gate.get("context") or {},
-            "eval": _eval_check(leaf, ctx) if leaf else None,
-        })
 
     rows = []
     for quest in meta_obj.get("quests") or []:
@@ -302,9 +329,7 @@ def scan(obj, meta_obj, state=None):
         if cond:
             cond_eval = _eval_tree(cond.get("tree"), ctx)
             cond_ok = cond_eval["ok"]
-            cond_fail = "、".join(cond_eval["gaps"])
-            if cond.get("mode") == "unknown" and not (cond.get("tree") or {}).get("op"):
-                cond_ok = None
+            cond_fail = "；".join(cond_eval["gaps"])
         gate_eval = []
         for gate in (quest.get("option_gates") or []):
             leaf = gate.get("leaf") or {}
@@ -314,22 +339,25 @@ def scan(obj, meta_obj, state=None):
                 "sub": _int(gate.get("sub")),
                 "option": gate.get("option") or "",
                 "text": gate.get("text") or "",
-                "no_grey": bool(gate.get("no_grey")),
-                "alias": gate.get("alias") or "",
+                "hint": gate.get("hint") or "",
+                "hint_missing": bool(gate.get("hint_missing")),
                 "context": gate.get("context") or {},
                 "eval": ev,
             })
         reasons = []
         if realm_ids and player_realm and player_realm not in realm_ids:
-            reasons.append("境界已过（限%s）" % "/".join(realms.get(str(value), str(value))
-                                                       for value in realm_ids))
+            reasons.append("境界已过（这条支线限%s）" % "/".join(
+                realms.get(str(value), str(value)) for value in realm_ids))
         if giver_id and giver_id in retired:
             reasons.append("委托人%s已退隐" % (giver.get("name") or ""))
         space_closed = bool(location.get("realm") and player_realm
                             and player_realm > _int(location.get("realm")))
+        egg_note = next((note for note in egg_notes
+                         if _int(note.get("quest")) == quest_id
+                         or quest_id in [_int(v) for v in note.get("to") or []]), None)
         rows.append({
             "id": quest_id,
-            "name": quest.get("name") or ("支线 %s" % quest_id),
+            "name": quest.get("name") or "未命名支线",
             "group": quest.get("group") or "",
             "desc": quest.get("desc") or "",
             "hidden": bool(quest.get("hidden")),
@@ -359,18 +387,16 @@ def scan(obj, meta_obj, state=None):
             "prev_options": quest.get("prev_options") or [],
             "acq_cond": cond,
             "acq_readable": (cond or {}).get("readable") or "",
-            "acq_mixed": bool((cond or {}).get("mixed")),
             "option_gates": quest.get("option_gates") or [],
             "trigger_detail": quest.get("trigger_detail"),
+            "trigger_text": quest.get("trigger_text") or "",
             "trigger_label": (quest.get("trigger_detail") or {}).get("label") or "",
             "cond_text": (cond or {}).get("text") or "",
             "cond_fail_text": cond_fail,
-            "cond_need": 0,
-            "cond_cur": None,
             "cond_ok": cond_ok,
             "cond_eval": cond_eval,
             "gate_eval": gate_eval,
-            "egg_note": next((note for note in egg_notes if _egg_matches(note, quest_id, cond)), None),
+            "egg_note": egg_note,
             "gate": quest.get("gate"),
             "acq_dialogue": quest.get("acq_dialogue"),
             "acq_flows": quest.get("acq_flows") or [],
@@ -402,13 +428,12 @@ def scan(obj, meta_obj, state=None):
         prev_row = by_id.get(row["prev"])
         if not (row["done"] and prev_row and not prev_row["done"]):
             continue
-        # 已完成的环如果挂在没走的选项后，改挂到同段剧情里实际走的那个选项
         for peer in rows:
             if (peer["id"] != row["id"] and peer["done"] and peer["prev"] == prev_row["prev"]
                     and peer["chain_id"] == prev_row["chain_id"]):
                 row["prev"] = peer["id"]
                 break
-    # 后续环自己没有委托人时，沿用前置环的地点。
+
     for row in rows:
         row["place_inherited"] = False
 
@@ -428,18 +453,20 @@ def scan(obj, meta_obj, state=None):
 
     for row in rows:
         place_of(row)
+
     for row in rows:
         gate = row.get("gate") or {}
         ids = [_int(value) for value in gate.get("quests") or []]
         names, done = [], True
         for gate_id in ids:
             gate_row = by_id.get(gate_id)
-            names.append(gate_row["name"] if gate_row else ("任务 %s" % gate_id))
+            names.append(gate_row["name"] if gate_row else "未收录任务")
             if not gate_row or not gate_row["done"]:
                 done = False
         row["gate_names"] = "、".join(names)
-        row["gate_event"] = gate.get("event") or "任务提交"
+        row["gate_event"] = gate.get("event") or ""
         row["gate_done"] = bool(ids) and done
+        row["gate_pending"] = bool(ids) and not row["gate_done"]
         row["gate_space"] = _int(gate.get("space"))
         row["gate_space_name"] = space_names.get(str(row["gate_space"]), "")
         row["gate_layer"] = _int(gate.get("layer"))
@@ -447,9 +474,9 @@ def scan(obj, meta_obj, state=None):
         row["gate_favor"] = _int(gate.get("favor"))
         ready, hint = False, ""
         if ids:
-            hint = "完成「%s」后自动触发（%s）" % (row["gate_names"], row["gate_event"])
+            hint = "完成「%s」后自动触发" % row["gate_names"]
         elif row["gate_space"]:
-            hint = "进入「%s」后触发" % (row["gate_space_name"] or ("场景 %s" % row["gate_space"]))
+            hint = "进入「%s」后触发" % (row["gate_space_name"] or "指定地点")
         elif row["gate_layer"]:
             ready = _int(layer) >= row["gate_layer"]
             hint = "修炼层数达到 %d 后触发（当前 %d）" % (row["gate_layer"], _int(layer))
@@ -457,11 +484,11 @@ def scan(obj, meta_obj, state=None):
             cur_favor = favor.get(row["gate_npc"], 0)
             ready = cur_favor >= row["gate_favor"]
             hint = "%s好感度达到 %d 后触发（当前 %d）" % (
-                npc_names.get(str(row["gate_npc"])) or ("NPC %s" % row["gate_npc"]),
+                npc_names.get(str(row["gate_npc"])) or "对方",
                 row["gate_favor"], cur_favor)
         elif row["gate_event"] == "接取条件满足":
             ready = row["cond_ok"] is True
-            hint = "接取条件满足后自动触发"
+            hint = "满足条件后自动触发"
         row["gate_ready"] = ready
         row["gate_hint"] = hint
 
@@ -493,7 +520,6 @@ def scan(obj, meta_obj, state=None):
         row["record_gap"] = (not row["done"] and not row["doing"]
                              and any(by_id[n]["done"] for n in row["next"] if n in by_id))
 
-    # 流水按“已提交某剧情选项”条件接取：没走那条选项的分支就是未选分支。
     for row in rows:
         row["branch_of_name"] = ""
         row["branch_of_done"] = False
@@ -515,14 +541,7 @@ def scan(obj, meta_obj, state=None):
             row["branch_chosen"] = chosen["name"]
             row["branch_via"] = req_row["name"]
 
-    def chain_root(row):
-        seen, cur = {row["id"]}, row
-        while cur["prev"] in by_id and cur["prev"] not in seen:
-            seen.add(cur["id"])
-            cur = by_id[cur["prev"]]
-        return cur
-
-    # 前置链传播：起点不可达或已选另一分支时，后续环同样走不到
+    # 前置链传播：起点无法再接或已选另一分支时，后续环同样走不到。
     for row in rows:
         if row["done"] or row["doing"] or row["unreachable"] or row["branch_missed"]:
             continue
@@ -540,7 +559,8 @@ def scan(obj, meta_obj, state=None):
                 missed_names.append(cur["name"])
         if blocked is not None:
             row["unreachable"] = True
-            row["unreachable_text"] = "前置「%s」不可达：%s" % (blocked["name"], blocked["unreachable_text"])
+            row["unreachable_text"] = "前置「%s」无法再接：%s" % (blocked["name"],
+                                                               blocked["unreachable_text"])
             row["blocked_by"] = blocked["name"]
         elif missed is not None:
             row["branch_missed"] = True
@@ -550,79 +570,108 @@ def scan(obj, meta_obj, state=None):
                 row["branch_path"] = " › ".join(reversed(missed_names))
 
     for row in rows:
+        exclusive_failed = any(check.get("kind") == "quest_none" and check.get("ok") is False
+                               for check in ((row.get("cond_eval") or {}).get("checks") or []))
         if row["done"]:
-            label, cls = row["state_name"], "ok"
+            label = STATUS_DONE
         elif row["doing"]:
-            label, cls = row["state_name"], ""
-        elif row["unreachable"]:
-            label, cls = "不可达", "warn"
-        elif row["branch_missed"]:
-            label, cls = "未选分支", ""
+            label = STATUS_DOING
+        elif row["branch_missed"] or row["same_flow_done"] or exclusive_failed:
+            label = STATUS_UNPICKED
         elif row["cond_ok"] is False:
-            label, cls = "条件不足", "warn"
-        elif row["record_gap"]:
-            label, cls = "后续已完成", "warn"
+            label = STATUS_WAIT if row["trigger_text"] else STATUS_COND
+        elif row["unreachable"]:
+            label = STATUS_WAIT
         elif row["prev"] and not row["prev_done"]:
-            label, cls = "前置未完成", ""
-        elif row["same_flow_done"]:
-            label, cls = "疑似已跳过", "warn"
-        elif row["gate_done"]:
-            label, cls = "疑似已触发", "warn"
-        elif row["gate_ready"]:
-            label, cls = "疑似已触发", "warn"
-        elif row["gate_names"] or row.get("gate_hint"):
-            label, cls = "待触发", ""
-        elif row["acq_source"] == 2 and (row.get("acq_dialogue") or row.get("acq_flows")):
-            label, cls = "剧情接取", ""
-        elif row["acq_source"] == 2:
-            label, cls = "触发未知", ""
-        elif row["acq_source"] == 1:
-            label, cls = "可接取", "ok"
+            label = STATUS_WAIT
+        elif row["record_gap"]:
+            label = STATUS_WAIT
+        elif row["gate_pending"]:
+            label = STATUS_WAIT
+        elif row["cond_text"] and row["cond_ok"] is not True:
+            label = STATUS_WAIT
+        elif row["accepted"] and row["state"] in (4, 5):
+            label = STATUS_WAIT
         else:
-            label, cls = "未接取", ""
-        row["status_label"], row["status_cls"] = label, cls
-        root = chain_root(row)
-        row["chain_root_id"], row["chain_root_name"] = root["id"], root["name"]
-        row["chain_stalled"] = bool(not root["accepted"] and root is not row)
-        if row["accepted"]:
+            label = STATUS_READY
+        row["status_label"] = label
+        row["status_key"] = STATUS_KEYS[label]
+        row["status_cls"] = ("ok" if label in (STATUS_DONE, STATUS_READY)
+                             else ("warn" if label in (STATUS_COND,) else ""))
+
+        if row["done"] or row["doing"]:
             hint = ""
+        elif row["branch_missed"]:
+            if row.get("branch_path"):
+                hint = "前面的「%s」只能选一条，你走的是「%s」" % (
+                    row["branch_path"], row["branch_chosen"])
+            elif row.get("branch_via"):
+                hint = "「%s」处只能选一条，你走的是「%s」" % (
+                    row["branch_via"], row["branch_chosen"])
+            elif row["branch_chosen"]:
+                hint = "这处只能选一条，你走的是「%s」" % row["branch_chosen"]
+            else:
+                hint = "这处只能选一条"
+        elif row["same_flow_done"]:
+            hint = "与「%s」出自同一段剧情，只能走其中一条" % row["same_flow_done"]
+        elif exclusive_failed:
+            hint = "这处只能二选一，你已经走了另一条"
         elif row["unreachable"]:
             hint = row["unreachable_text"]
-        elif row["branch_missed"]:
-            if row.get("branch_via"):
-                hint = "需要走「%s」分支，但已选「%s」" % (
-                    row.get("branch_path") or row["branch_via"], row["branch_chosen"])
-            else:
-                hint = ("已选择另一条同名路线（%s）" if row["branch_chosen"] == row["name"]
-                        else "已选择另一分支：%s") % row["branch_chosen"]
         elif row["cond_ok"] is False:
-            hint = "接取条件：%s" % (row["cond_fail_text"] or row["cond_text"])
+            hint = "还差：%s" % (row["cond_fail_text"] or row["cond_text"])
         elif row["record_gap"]:
-            hint = "后续任务已完成，可能是自动跳过或记录缺失"
+            hint = "后续环节已完成，这一环可能已被跳过"
         elif row["prev"] and not row["prev_done"]:
-            if row["chain_stalled"]:
-                hint = "整条剧情线未开始，起点「%s」%s" % (root["name"], _start_text(root))
-            else:
-                hint = "需先完成：%s（%s）" % (row["prev_name"], row["prev_state_name"])
-        elif row["same_flow_done"]:
-            hint = "与「%s」由同一段剧情接取，可能是同源分支，也可能已完成但没留下记录" % row["same_flow_done"]
-        elif row["gate_done"]:
-            hint = "前置「%s」已完成但本环无记录，可能已触发过或记录缺失" % row["gate_names"]
-        elif row["gate_ready"]:
-            hint = "%s，但本环无记录，可能已触发过" % (row.get("gate_hint") or "触发条件已满足")
-        elif row.get("gate_hint"):
+            hint = "先完成「%s」" % row["prev_name"]
+        elif row["gate_pending"]:
             hint = row["gate_hint"]
-        elif row["acq_source"] == 2 and row.get("acq_dialogue"):
-            hint = "在剧情对话中接取（对话 %s）" % (row["acq_dialogue"].get("dialogue") or "")
-        elif row["acq_source"] == 2:
-            hint = "配置里没有触发条件，通常由剧情脚本或对话触发，游戏内没有固定入口"
+        elif row["trigger_text"]:
+            hint = row["trigger_text"]
+        elif row["accepted"] and row["state"] in (4, 5):
+            hint = "任务已%s，回委托人处可以重接" % row["state_name"]
         elif row["acq_source"] == 1:
-            hint = "与委托人对话接取"
-            if row["cond_text"]:
-                hint += "，条件：%s" % row["cond_text"]
+            giver_name = (row.get("giver") or {}).get("name") or "委托人"
+            hint = "与%s对话接取" % giver_name
+        elif row.get("acq_dialogue"):
+            hint = "在剧情对话中接取"
+        elif row["gate_hint"]:
+            hint = row["gate_hint"]
+        elif row["cond_text"]:
+            hint = "条件：%s" % row["cond_text"]
+        elif row["acq_source"] == 2:
+            hint = "剧情推进到这里时自动出现"
         else:
-            hint = "接取方式未知"
+            hint = "与委托人对话后出现"
         row["status_hint"] = hint
+
+    storylines = []
+    for line in (meta_obj.get("storylines") or _fallback_storylines(rows)):
+        ids = [_int(value) for value in line.get("quests") or [] if _int(value) in by_id]
+        if not ids:
+            continue
+        nodes = [by_id[quest_id] for quest_id in ids]
+        done = sum(1 for node in nodes if node["done"])
+        unpicked = sum(1 for node in nodes if node["status_key"] == "unpicked")
+        reachable = [node for node in nodes if node["status_key"] != "unpicked"]
+        stones_left = sum(node["reward_stone"] for node in reachable if not node["done"])
+        next_node = next((node for node in nodes
+                          if not node["done"] and node["status_key"] in ("ready", "cond", "wait")), None)
+        storylines.append({
+            "id": line.get("id") or ("s%d" % ids[0]),
+            "name": line.get("name") or nodes[0]["name"],
+            "chapter": line.get("chapter") or "支线",
+            "group": line.get("group") or "",
+            "quests": ids,
+            "depths": line.get("depths") or {},
+            "npc": line.get("npc") or [],
+            "size": len(ids),
+            "done": done,
+            "total": len(reachable),
+            "stones_left": stones_left,
+            "next": next_node["id"] if next_node else 0,
+            "doing": sum(1 for node in nodes if node["doing"]),
+        })
 
     total = len(rows)
     reward_rows = [r for r in rows if r["rewards"]]
@@ -635,38 +684,30 @@ def scan(obj, meta_obj, state=None):
         "with_rewards": len(reward_rows),
         "rewards_done": sum(1 for r in reward_rows if r["done"]),
         "rewards_todo": sum(1 for r in reward_rows if not r["done"]),
-        "stones_todo": sum(r["reward_stone"] for r in reward_rows if not r["done"]),
+        "stones_todo": sum(r["reward_stone"] for r in reward_rows
+                           if not r["done"] and r["status_key"] != "unpicked"),
         "stones_done": sum(r["reward_stone"] for r in reward_rows if r["done"]),
         "hidden": sum(1 for r in rows if r["hidden"]),
         "branch": sum(1 for r in rows if r["branch"]),
         "branches": _int((meta_obj.get("stats") or {}).get("branches")),
         "chains": _int((meta_obj.get("stats") or {}).get("chains")),
+        "storylines": len(storylines),
         "unreachable": sum(1 for r in rows if not r["done"] and r["unreachable"]),
         "unreachable_stones": sum(r["reward_stone"] for r in rows if not r["done"] and r["unreachable"]),
-        "can_accept": sum(1 for r in rows if r["status_label"] == "可接取"),
-        "waiting": sum(1 for r in rows if r["status_label"] == "待触发"),
-        "cond_fail": sum(1 for r in rows if r["status_label"] == "条件不足"),
-        "suspect": sum(1 for r in rows if r["status_label"] == "疑似已触发"),
-        "dialogue": sum(1 for r in rows if r["status_label"] == "剧情接取"),
-        "skipped": sum(1 for r in rows if r["status_label"] == "疑似已跳过"),
-        "unknown": sum(1 for r in rows if r["status_label"] == "触发未知"),
-        "blocked_prev": sum(1 for r in rows if r["status_label"] == "前置未完成"),
-        "missed": sum(1 for r in rows if r["status_label"] == "未选分支"),
-        "record_gap": sum(1 for r in rows if r["status_label"] == "后续已完成"),
-        "worth": sum(1 for r in rows if not r["accepted"] and not r["unreachable"]
-                     and not r.get("branch_missed") and r["rewards"]
-                     and r["status_label"] in ("可接取", "待触发", "剧情接取", "前置未完成")),
-        "blocked_by_prev": sum(1 for r in rows if r.get("blocked_by")),
+        "can_accept": sum(1 for r in rows if r["status_key"] == "ready"),
+        "cond_fail": sum(1 for r in rows if r["status_key"] == "cond"),
+        "waiting": sum(1 for r in rows if r["status_key"] == "wait"),
+        "missed": sum(1 for r in rows if r["status_key"] == "unpicked"),
         "player_layer": _int(layer),
         "player_realm": player_realm,
         "player_realm_name": realms.get(str(player_realm)) or "",
     }
-    return {"rows": rows, "stats": stats, "groups": meta_obj.get("groups") or [],
+    return {"rows": rows, "stats": stats, "storylines": storylines,
+            "groups": meta_obj.get("groups") or [],
             "chains": meta_obj.get("chains") or [], "branches": meta_obj.get("branches") or [],
             "edges": meta_obj.get("edges") or [],
             "diagnostics": meta_obj.get("diagnostics") or {},
             "egg_notes": egg_notes,
-            "gate_diag": gate_diag,
             "attr_names": meta_obj.get("attr_names") or {},
             "realms": realms, "states": states}
 
@@ -683,6 +724,6 @@ def enrich(module, meta_obj, state=None):
 
 def summary(module):
     stats = (module.get("rows") or {}).get("stats") or {}
-    return "支线：%d 个，已完成 %d 个，进行中 %d 个，未接取 %d 个；带奖励 %d 个，当前不可达 %d 个" % (
+    return "支线：%d 个，已完成 %d 个，进行中 %d 个，未接取 %d 个；剧情线 %d 条" % (
         stats.get("total", 0), stats.get("done", 0), stats.get("doing", 0),
-        stats.get("todo", 0), stats.get("with_rewards", 0), stats.get("unreachable", 0))
+        stats.get("todo", 0), stats.get("storylines", 0))
