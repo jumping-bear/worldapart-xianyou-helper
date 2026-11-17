@@ -8,11 +8,12 @@
   doing       进行中
   ready       可接取（前置完成且条件满足）
   unpicked    另一条路（已到分叉点且明确选了另一个互斥选项）—— 不计入完成度分母
+  skipped     已跳过（孤立节点，本线剧情已推进到更深处，永远接不到）—— 同样不计入分母
   notstarted  未开始（前置未完成，还没走到这里）—— 中性灰，不算漏做
   locked      未解锁（前置已到但好感/属性/灵石等条件不足）
 
-完成度分母 = 全部任务 - 因分支选择放弃的任务(unpicked)。这样二选一选了另一个
-不会再被当成"未完成"，玩家能够 100%。
+完成度分母 = 全部任务 - 因分支选择放弃的任务(unpicked) - 已跳过(skipped)。
+这样二选一选了另一个、或剧情已越过同义变体，都不会再被当成"未完成"，玩家能够 100%。
 
 每条线另外产出 remaining（"还差什么"清单）与 rings（每环剩余数），供前端
 直接回答"我还剩哪些任务、为什么没做"，而不是让玩家自己在任务树里找。
@@ -37,7 +38,8 @@ def _int(value, default=0):
 def meta(metadata):
     return metadata.get("hongchen") or {
         "lines": [], "quests": [], "states": {}, "types": {}, "stats": {},
-        "attr_names": {}, "done_states": list(DONE_STATES), "doing_states": list(DOING_STATES),
+        "attr_names": {}, "spaces": {}, "done_states": list(DONE_STATES),
+        "doing_states": list(DOING_STATES),
     }
 
 
@@ -126,6 +128,45 @@ def _eval_gate(gate, ctx):
     return None, "", 0, need
 
 
+def _location(obj, npc_id, spaces):
+    """女主此刻在哪：存档 spaces[当前 spaceUuid].spaceId -> 配置里的地点路径。
+
+    不在 obj["npcs"] 里就是"不在当前世界"，绝不拿配置常驻地冒充。
+    worldStatus == 2 表示已退隐/寿元已尽，存档保留记录但人已不在。
+    """
+    empty = {"name": "", "path": "", "region": "", "gone": False, "present": False}
+    if not npc_id:
+        return empty
+    records = (obj or {}).get("npcs")
+    found = None
+    for record in records.values() if isinstance(records, dict) else ():
+        if not isinstance(record, dict) or _int(record.get("npcCfgId")) != npc_id:
+            continue
+        # 同一配置可能有多份记录（分身/旧档残留），优先选还在世的那个。
+        if found is None or (_int(found.get("worldStatus")) == 2
+                             and _int(record.get("worldStatus")) != 2):
+            found = record
+    if found is None:
+        return empty
+    space = ((obj or {}).get("spaces") or {}).get(found.get("currentSpaceUuid")) or {}
+    path = (spaces or {}).get(str(space.get("spaceId"))) or ""
+    parts = [part for part in str(path).split(" / ") if part]
+    return {"name": parts[-1] if parts else "", "path": " / ".join(parts),
+            "region": parts[0] if parts else "",
+            "gone": _int(found.get("worldStatus")) == 2, "present": True}
+
+
+def _edge_nodes(line):
+    """本线任务树里出现过边的任务 id；不在集合里 = 孤立节点。"""
+    nodes = set()
+    for edge in line.get("edges") or []:
+        for field in ("from", "to"):
+            value = _int((edge or {}).get(field))
+            if value:
+                nodes.add(value)
+    return nodes
+
+
 def _is_done(code):
     return code in DONE_STATES
 
@@ -152,6 +193,15 @@ def _status_of(quest, code, ctx):
     names = ctx.get("_names", {})
     codes = ctx.get("_codes", {})
     active = ctx.get("_active", set())
+
+    # 已跳过：与线内任何任务都没有边（孤立的互斥变体），没接没做，
+    # 而本线已有更深的已完成任务 —— 说明剧情早越过它了，永远不会再出现。
+    # 不写死任务 id，纯结构判定。
+    if (not code
+            and not is_branch
+            and qid not in (ctx.get("_edge_nodes") or set())
+            and _int(ctx.get("_done_max_depth")) > _int(quest.get("depth"), 1)):
+        return "已跳过", "skipped", "这条分支在本档已跳过（剧情已推进到后面）", []
 
     # 附加条件（好感/属性/灵石）与门槛提示。
     fails, hints, gate_ok = [], [], True
@@ -318,6 +368,7 @@ def _rings(quests):
             "left": sum(1 for q in here if q["status_cls"] in ("ready", "doing", "notstarted", "locked")),
             "ready": sum(1 for q in here if q["status_cls"] == "ready"),
             "unpicked": sum(1 for q in here if q["status_cls"] == "unpicked"),
+            "skipped": sum(1 for q in here if q["status_cls"] == "skipped"),
             "branch": any(q["branch"] for q in here),
         })
     return rings
@@ -353,6 +404,7 @@ def scan(obj, meta_obj, state=None):
                 branch_parent[bkey] = _int(branch.get("parent"))
 
     lines = []
+    spaces = meta_obj.get("spaces") or {}
     for line in meta_obj.get("lines") or []:
         ctx = _context(obj, meta_obj, line.get("npc_id"))
         ctx["_codes"] = codes
@@ -362,6 +414,10 @@ def scan(obj, meta_obj, state=None):
         ctx["_branch_members"] = branch_members
         ctx["_branch_parent"] = branch_parent
         ctx["_option_by_target"] = option_by_target
+        ctx["_edge_nodes"] = _edge_nodes(line)
+        ctx["_done_max_depth"] = max(
+            [_int(q.get("depth"), 1) for q in line.get("quests") or []
+             if _is_done(codes.get(_int(q.get("id")), 0))] or [0])
 
         quests = []
         for quest in line.get("quests") or []:
@@ -418,11 +474,12 @@ def scan(obj, meta_obj, state=None):
         done = sum(1 for q in quests if q["done"])
         doing = sum(1 for q in quests if q["doing"])
         unpicked = sum(1 for q in quests if q["status_cls"] == "unpicked")
+        skipped = sum(1 for q in quests if q["status_cls"] == "skipped")
         ready = sum(1 for q in quests if q["status_cls"] == "ready")
         notstarted = sum(1 for q in quests if q["status_cls"] == "notstarted")
         locked = sum(1 for q in quests if q["status_cls"] == "locked")
-        # 完成度分母剔除因分支选择放弃的任务，二选一不再算漏做。
-        base = total - unpicked
+        # 完成度分母剔除"选了另一条路"和"已跳过"的任务，两者都不可能再做。
+        base = total - unpicked - skipped
         pct = int(round(done * 100 / base)) if base else 0
         remaining = _remaining(quests, ctx, base, done)
         lines.append({
@@ -431,6 +488,7 @@ def scan(obj, meta_obj, state=None):
             "npc_id": _int(line.get("npc_id")),
             "portrait": line.get("portrait") or "",
             "color": line.get("color") or "#c9866b",
+            "location": _location(obj, _int(line.get("npc_id")), spaces),
             "quests": quests,
             "roots": line.get("roots") or [],
             "edges": line.get("edges") or [],
@@ -439,7 +497,8 @@ def scan(obj, meta_obj, state=None):
             "remaining": remaining,
             "progress": {"total": total, "base": base, "done": done, "doing": doing,
                          "ready": ready, "notstarted": notstarted, "locked": locked,
-                         "unpicked": unpicked, "missed": unpicked, "pct": pct,
+                         "unpicked": unpicked, "skipped": skipped,
+                         "missed": unpicked, "pct": pct,
                          "left": remaining["left"], "headline": remaining["headline"]},
         })
 
@@ -450,7 +509,8 @@ def scan(obj, meta_obj, state=None):
              "ready": sum(line["progress"]["ready"] for line in lines),
              "notstarted": sum(line["progress"]["notstarted"] for line in lines),
              "locked": sum(line["progress"]["locked"] for line in lines),
-             "unpicked": sum(line["progress"]["unpicked"] for line in lines)}
+             "unpicked": sum(line["progress"]["unpicked"] for line in lines),
+             "skipped": sum(line["progress"]["skipped"] for line in lines)}
     return {"rows": lines, "stats": stats,
             "states": meta_obj.get("states") or {},
             "types": meta_obj.get("types") or {}}
@@ -475,7 +535,7 @@ def summary(module):
     rows = (module.get("rows") or {}) if isinstance(module, dict) else {}
     stats = rows.get("stats") or {}
     return ("红尘：%d 条角色线 / %d 个任务，已完成 %d，进行中 %d，可接取 %d，"
-            "未开始 %d，未解锁 %d，分支选了另一条路 %d（不算漏做）" % (
+            "未开始 %d，未解锁 %d，分支选了另一条路 %d，已跳过 %d（后两者不算漏做）" % (
                 stats.get("lines", 0), stats.get("quests", 0), stats.get("done", 0),
                 stats.get("doing", 0), stats.get("ready", 0), stats.get("notstarted", 0),
-                stats.get("locked", 0), stats.get("unpicked", 0)))
+                stats.get("locked", 0), stats.get("unpicked", 0), stats.get("skipped", 0)))
