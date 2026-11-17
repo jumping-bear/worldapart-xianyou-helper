@@ -891,7 +891,7 @@ def build_event(tables):
         event["location"] = location
         realm = _int(location.get("realm")) if location else 0
         event["realm"] = realm
-        event["realm_name"] = realms.get(str(realm)) or ("境界 %s" % realm if realm else "未知境界")
+        event["realm_name"] = realms.get(str(realm)) or ("境界%s" % realm if realm else "未知境界")
         key = (location or {}).get("conf") or "unknown"
         stats[key] = stats.get(key, 0) + 1
     stats["events"] = len(result)

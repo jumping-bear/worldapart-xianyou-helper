@@ -129,7 +129,7 @@ def _realms(tables):
     for row in _rows(tables["tbcultivaterealm"]):
         if not isinstance(row, dict) or row.get("id") is None:
             continue
-        name = _text(row.get("realm_name")) or ("境界 %s" % row["id"])
+        name = _text(row.get("realm_name")) or ("境界%s" % row["id"])
         realms[str(row["id"])] = name
         raw = row.get("phases") or []
         starts = [_int(v) for v in raw if _int(v)]

@@ -28,7 +28,7 @@ def _realm_maps(tables):
     for row in _rows(tables.get("tbcultivaterealm")):
         if not isinstance(row, dict) or row.get("id") is None:
             continue
-        name = realms.get(str(row["id"])) or ("境界 %s" % row["id"])
+        name = realms.get(str(row["id"])) or ("境界%s" % row["id"])
         for phase in row.get("phases") or []:
             phase = _int(phase)
             if phase:

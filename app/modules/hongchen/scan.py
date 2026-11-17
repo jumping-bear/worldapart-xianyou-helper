@@ -148,8 +148,8 @@ def _eval_gate(gate, ctx):
     if kind == "realm":
         # need 是境界 id（2 = 筑基期），比较玩家当前境界。
         cur = _int(ctx.get("player_realm"))
-        need_name = (ctx.get("realms") or {}).get(str(need)) or ("境界 %d" % need)
-        cur_name = (ctx.get("realms") or {}).get(str(cur)) or ("境界 %d" % cur)
+        need_name = (ctx.get("realms") or {}).get(str(need)) or ("境界%d" % need)
+        cur_name = (ctx.get("realms") or {}).get(str(cur)) or ("境界%d" % cur)
         return cur >= need, "境界 %s/%s" % (cur_name, need_name), cur_name, need_name
     if kind in ("phase", "layer"):
         # need 是层数/阶段 id（10 = 炼气后期），按阶段表翻成人话，不写死数字。

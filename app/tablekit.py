@@ -40,7 +40,7 @@ def build_realms(tables):
     realms = {"0": "凡人"}
     for row in _rows(tables["tbcultivaterealm"]):
         if isinstance(row, dict) and row.get("id") is not None:
-            realms[str(row["id"])] = _text(row.get("realm_name")) or ("境界 %s" % row["id"])
+            realms[str(row["id"])] = _text(row.get("realm_name")) or ("境界%s" % row["id"])
     return realms
 
 

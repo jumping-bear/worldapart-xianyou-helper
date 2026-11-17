@@ -192,7 +192,7 @@ def _prototype_info(proto_id, prototypes, items, realms):
     slot = _int(proto.get("slot_type"))
     return {
         "id": _int(proto_id), "name": name,
-        "realm": realm_id, "realm_name": realms.get(str(realm_id)) or ("境界 %s" % realm_id),
+        "realm": realm_id, "realm_name": realms.get(str(realm_id)) or ("境界%s" % realm_id),
         "slot": slot, "slot_name": SLOT_NAMES.get(str(slot), ""),
     }
 
