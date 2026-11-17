@@ -8,7 +8,7 @@ import re
 
 from meta_update import (
     SCHEMA, _call_parts, _clip, _const_args, _expr_ints, _int,
-    _plain, _rows, _text, build_spaces,
+    _plain, _rows, _text, build_realms, build_spaces,
 )
 
 
@@ -53,6 +53,48 @@ def _space_index(tables):
         path = [part for part in (info.get("path") or []) if part]
         if path:
             out[str(space_id)] = " / ".join(path)
+    return out
+
+
+def _build_phase_names(tables):
+    """阶段 id → 阶段名（33 → 结丹后期），供把修炼层数门槛翻译成人话。"""
+    out = {}
+    for row in _rows(tables.get("tbcultivatephase")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            name = _text(row.get("phase_name")) or ""
+            if name:
+                out[str(_int(row["id"]))] = name
+    return out
+
+
+def _build_realm_phases(tables):
+    """阶段 id → 境界 id（21 → 2），供把玩家修炼层数换算成境界。"""
+    out = {}
+    for row in _rows(tables.get("tbcultivaterealm")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            realm_id = _int(row.get("id"))
+            for phase in row.get("phases") or []:
+                out[str(_int(phase))] = realm_id
+    return out
+
+
+def _build_layer_phases(tables):
+    """层数 id → 阶段全称（10 → 炼气后期），供把「修炼层数 10」翻译成人话。"""
+    realms = build_realms(tables)
+    phase_names, phase_realms = {}, {}
+    for row in _rows(tables.get("tbcultivatephase")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            phase_id = str(_int(row["id"]))
+            phase_names[phase_id] = _text(row.get("phase_name")) or ""
+            phase_realms[phase_id] = _int(row.get("realm"))
+    out = {}
+    for row in _rows(tables.get("tbcultivatelayer")):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        phase_id = str(_int(row.get("phase")))
+        name = phase_names.get(phase_id) or realms.get(str(phase_realms.get(phase_id, 0))) or ""
+        if name:
+            out[str(_int(row["id"]))] = name
     return out
 
 
@@ -197,7 +239,7 @@ def _expr_gate(node, npcs, quest_names=None, quest_types=None):
 
 
 def _gate_from_condition(cond_row, npcs, grey_text="", quest_names=None, cond_option=None,
-                         quest_types=None):
+                         quest_types=None, realms=None, layer_phases=None, phase_names=None):
     """把 optionCondition 引用的条件行翻译成人话门槛 + 可判定结构。
 
     quest_names / cond_option / quest_types 由配置表动态构建（见 build_hongchen）：
@@ -205,10 +247,16 @@ def _gate_from_condition(cond_row, npcs, grey_text="", quest_names=None, cond_op
       * quest_types: 任务 id -> 类别（主线/红尘/委托…），让「任务提交 11363」能翻成主线；
       * cond_option: 条件 id -> 引用它的选项文本，用于把 _O1 翻成「言辞支开」。
     新增任务/选项只需重新导出快照即可，无需改代码。
+
+    realms / layer_phases / phase_names 用于把「境界≥2」「修炼层数 10」这类门槛翻成
+    玩家看得懂的境界名/阶段名，而不是裸数字或英文 token。
     """
     quest_names = quest_names or {}
     cond_option = cond_option or {}
     quest_types = quest_types or {}
+    realms = realms or {}
+    layer_phases = layer_phases or {}
+    phase_names = phase_names or {}
     gate = {"alias": "", "text": "", "alias_text": "", "kind": "", "need": 0,
             "npc": 0, "attr_name": "", "source": ""}
     if not isinstance(cond_row, dict):
@@ -242,10 +290,22 @@ def _gate_from_condition(cond_row, npcs, grey_text="", quest_names=None, cond_op
         m = re.search(r"_([A-Z]+)_(GE|LT|EQ|GT)_(\d+)\s*$", upper)
         if m:
             token, op, digits = m.group(1), m.group(2), int(m.group(3))
-            attr_name = _ATTR_TOKEN.get(token, "")
             symbol = {"GE": "≥", "GT": ">", "LT": "＜", "EQ": "＝"}[op]
-            # 认不出的属性词宁可写「属性」，也不要甩一个英文 token 给玩家。
-            text, kind, need = "%s%s%d" % (attr_name or "属性", symbol, digits), "attr", digits
+            if token == "REALM":
+                # 境界门槛里的数字是境界 id（2 = 筑基期），不是属性值，不能写成「境界≥2」。
+                realm_name = realms.get(str(digits)) or ("境界 %d" % digits)
+                text, kind, need = "境界 %s %s" % (symbol, realm_name), "realm", digits
+            else:
+                attr_name = _ATTR_TOKEN.get(token, "")
+                # 认不出的属性词宁可写「属性」，也不要甩一个英文 token 给玩家。
+                text, kind, need = "%s%s%d" % (attr_name or "属性", symbol, digits), "attr", digits
+        elif (m := re.search(r"_LAYER_(\d+)\s*$", upper)):
+            # 修炼层数门槛（SIDE_SHENTONGTONG_QI_LAYER_10）：数字是层数 id，翻成阶段名。
+            layer_id = int(m.group(1))
+            layer_name = (layer_phases.get(str(layer_id))
+                          or phase_names.get(str(layer_id))
+                          or ("第 %d 层" % layer_id))
+            text, kind, need = "境界达到 %s" % layer_name, "layer", layer_id
         elif (m := re.search(r"_(GE|LT|EQ)_(\d+)\s*$", upper)):
             symbol = {"GE": "≥", "LT": "＜", "EQ": "＝"}[m.group(1)]
             text, need = "属性%s%d" % (symbol, int(m.group(2))), int(m.group(2))
@@ -349,6 +409,11 @@ def build_hongchen(tables):
     for row in _rows(tables.get("tbinteractattribute")):
         if isinstance(row, dict) and row.get("id") is not None:
             attr_names[str(_int(row["id"]))] = _text(row.get("name"))
+    # 境界/阶段/层数映射：把「境界≥2」「修炼层数 10」翻成人话（2 → 筑基期，10 → 炼气后期）。
+    realms = build_realms(tables)
+    realm_phases = _build_realm_phases(tables)
+    phase_names = _build_phase_names(tables)
+    layer_phases = _build_layer_phases(tables)
 
     # 对话按 id 汇总（同一段剧情分散在多个 subId 行）。
     options_by_dialogue, acq_gates, dialogue_targets = {}, {}, {}
@@ -365,7 +430,7 @@ def build_hongchen(tables):
                 gate = _gate_from_condition(
                     conds.get(_int(option["optionCondition"])), npcs,
                     _text(option.get("optionGreyText")), quest_names, cond_option,
-                    quest_types)
+                    quest_types, realms, layer_phases, phase_names)
                 gate["source"] = "optionCondition"
             if did in hc_ids:
                 options_by_dialogue.setdefault(did, []).append({
@@ -414,7 +479,8 @@ def build_hongchen(tables):
             gates = list(acq_gates.get(qid) or [])
             if row.get("acqCondition"):
                 gate = _gate_from_condition(conds.get(_int(row["acqCondition"])), npcs,
-                                            "", quest_names, cond_option, quest_types)
+                                            "", quest_names, cond_option, quest_types,
+                                            realms, layer_phases, phase_names)
                 gate["source"] = "acqCondition"
                 if gate not in gates:
                     gates.append(gate)
@@ -566,6 +632,8 @@ def build_hongchen(tables):
         "states": {str(k): v for k, v in HONGCHEN_STATE_NAMES.items()},
         "attr_names": attr_names, "stats": stats,
         "spaces": _space_index(tables),
+        "realms": realms, "phases": realm_phases, "phase_names": phase_names,
+        "layer_phases": layer_phases,
         "done_states": list(DONE_STATES), "doing_states": list(DOING_STATES),
     }
 

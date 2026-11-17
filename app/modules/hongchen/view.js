@@ -273,11 +273,23 @@ function inspectHtml(q,line){
     +(q.fail_text?'<div class="hongchen-ir full"><b>进度提示</b><span>'+esc(q.fail_text)+'</span></div>':'')
     +'</div>'
     +(gates.length?'<div class="hongchen-igates"><b>选项门槛</b>'+gates.map(g=>{
-        const val=g.need?('当前 '+(g.cur===undefined?'?':g.cur)+' / 需 '+g.need):'';
-        const state=g.ok===true?'已满足':(g.ok===false?'未满足':'');
         const cls=g.ok===true?' ok':(g.ok===false?' no':'');
+        let val='';
+        if(g.kind==='quest'){
+          // 任务门槛：显示「已提交过主线「探访云嫣」 · 已提交 ✓」，不再写裸状态码。
+          const mark=g.ok===true?'✓':(g.ok===false?'✗':'');
+          val=' · '+(g.cur||'未接取')+(mark?' '+mark:'');
+        }else{
+          const haveCur=(g.cur!==undefined&&g.cur!==null&&g.cur!=='');
+          const haveNeed=(g.need!==undefined&&g.need!==null&&g.need!=='');
+          if(haveCur||haveNeed){
+            val='当前 '+(haveCur?g.cur:'?')+' / 需 '+(haveNeed?g.need:'?');
+            const state=g.ok===true?'已满足':(g.ok===false?'未满足':'');
+            if(state)val+=' · '+state;
+          }
+        }
         return '<span class="hongchen-badge gate'+cls+'">'+esc(g.text)
-          +(val?'<em class="hongchen-gate-val">'+esc(val)+(state?' · '+state:'')+'</em>':'')+'</span>';
+          +(val?'<em class="hongchen-gate-val">'+esc(val)+'</em>':'')+'</span>';
       }).join('')+'</div>':'')
     +'</div>';
 }

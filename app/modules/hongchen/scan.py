@@ -71,6 +71,22 @@ def _realm_layer(player):
     return _int((player.get("combat") or {}).get("cultivate_layer_id"))
 
 
+def _realm_for_layer(phases, layer):
+    """玩家修炼层数 -> 境界 id（10 → 1 炼气期，29 → 2 筑基期）。
+
+    阶段 id 与层数 id 同源（个位/十位即境界段），取 <= 当前层数的最大阶段，
+    再回到该阶段所属境界。数据来自快照里的 phases（阶段 id -> 境界 id）。
+    """
+    if layer is None:
+        return 0
+    best = 0
+    for raw, realm_id in (phases or {}).items():
+        phase = _int(raw)
+        if phase <= _int(layer) and phase > best:
+            best = phase
+    return _int((phases or {}).get(str(best)))
+
+
 def _money(player):
     bag = player.get("bag") or {}
     total = 0
@@ -96,15 +112,22 @@ def _context(obj, meta_obj, npc_id):
             name2attr[attr_name] = _int(attr_id)
     for key, value in (player.get("interact_attributes") or {}).items():
         attrs[str(_int(key))] = _int(value)
+    layer = _realm_layer(player)
     return {"favor": favor, "attrs": attrs, "name2attr": name2attr,
-            "money": _money(player), "layer": _realm_layer(player),
+            "money": _money(player), "layer": layer,
+            "player_realm": _realm_for_layer(meta_obj.get("phases") or {}, layer),
+            "realms": meta_obj.get("realms") or {},
+            "phases": meta_obj.get("phases") or {},
+            "phase_names": meta_obj.get("phase_names") or {},
+            "layer_phases": meta_obj.get("layer_phases") or {},
             "npc_id": _int(npc_id)}
 
 
 def _eval_gate(gate, ctx):
     """返回 (True/False/None, 说明, 当前值, 需求值)。
 
-    None 表示无法判定，只当提示；cur 供前端展示"当前 712 / 需 3"。
+    None 表示无法判定，只当提示。境界/阶段/任务门槛的 cur/need 返回人话标签，
+    前端直接展示「境界 ≥ 筑基期 · 当前 炼气期」，不再出现裸数字状态码。
     """
     kind = gate.get("kind") or ""
     need = _int(gate.get("need"))
@@ -122,17 +145,31 @@ def _eval_gate(gate, ctx):
     if kind == "money":
         cur = ctx["money"]
         return cur >= need, "灵石 %d/%d" % (cur, need), cur, need
-    if kind in ("realm", "phase", "layer"):
-        cur = ctx["layer"]
-        return cur >= need, "修炼层数 %d/%d" % (cur, need), cur, need
+    if kind == "realm":
+        # need 是境界 id（2 = 筑基期），比较玩家当前境界。
+        cur = _int(ctx.get("player_realm"))
+        need_name = (ctx.get("realms") or {}).get(str(need)) or ("境界 %d" % need)
+        cur_name = (ctx.get("realms") or {}).get(str(cur)) or ("境界 %d" % cur)
+        return cur >= need, "境界 %s/%s" % (cur_name, need_name), cur_name, need_name
+    if kind in ("phase", "layer"):
+        # need 是层数/阶段 id（10 = 炼气后期），按阶段表翻成人话，不写死数字。
+        cur = _int(ctx.get("layer"))
+        need_name = ((ctx.get("layer_phases") or {}).get(str(need))
+                     or (ctx.get("phase_names") or {}).get(str(need))
+                     or ("第 %d 层" % need))
+        cur_name = ((ctx.get("layer_phases") or {}).get(str(cur))
+                    or (ctx.get("phase_names") or {}).get(str(cur))
+                    or ("第 %d 层" % cur))
+        return cur >= need, "境界 %s/%s" % (cur_name, need_name), cur_name, need_name
     if kind == "quest":
         # 门槛是"必须已提交某个任务"（如「任务提交 11363」= 主线「天帷之破」）。
-        code = _int((ctx.get("_codes") or {}).get(need), -1)
-        if code < 0:
-            return False, "还没有接过这个前置任务", 0, 2
-        label = {0: "可接取", 1: "进行中", 2: "已完成", 3: "已提交",
-                 4: "已失败", 5: "已放弃", 6: "待提交"}.get(code, "未完成")
-        return code in (2, 3), "前置任务 %s" % label, code, 2
+        # 查存档全部任务（含主线/委托），不能只查红尘任务，否则 80139 的
+        # 前置 11311「探访云嫣」会因不在红尘任务表里而被误判成"没接过"。
+        rec = (ctx.get("_saved") or {}).get(need)
+        code = _int(rec.get("state"), -1) if isinstance(rec, dict) else -1
+        label = {0: "未接取", 1: "进行中", 2: "已完成", 3: "已提交",
+                 4: "已失败", 5: "已放弃", 6: "待提交"}.get(code, "未接取")
+        return code in (2, 3), "前置任务 %s" % label, label, "已提交"
     return None, "", 0, need
 
 
@@ -416,6 +453,7 @@ def scan(obj, meta_obj, state=None):
     for line in meta_obj.get("lines") or []:
         ctx = _context(obj, meta_obj, line.get("npc_id"))
         ctx["_codes"] = codes
+        ctx["_saved"] = saved
         ctx["_active"] = {qid for qid, code in codes.items()
                           if _is_done(code) or _is_doing(code)}
         ctx["_names"] = names
