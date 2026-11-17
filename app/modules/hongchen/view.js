@@ -339,7 +339,7 @@ function render(host,stats){
       +'<span class="hongchen-place'+((line.location&&line.location.gone)?' is-gone':'')
       +((line.location&&line.location.present)?'':' is-away')+'" title="存档里的实时位置">'
       +esc(placeText(line))+'</span>'
-      +'<span class="hongchen-cardmeta">已完成 '+(p.done||0)+'/'+(p.base||p.total||0)+'</span>'
+      +'<span class="hongchen-cardmeta">已完成 '+(p.done||0)+'/'+(p.base||p.total||0)+(p.ready?' · <b class="hongchen-ready-count">可接取 '+p.ready+'</b>':'')+'</span>'
       +'<span class="hongchen-cardmeta hongchen-cardleft'+((line.remaining&&line.remaining.done)?' is-done':'')+'">'
       +esc((line.remaining&&line.remaining.brief)||'')+'</span></span>'
       +'<span class="hongchen-ring">'+ring(p.pct||0,line.color)+'</span>'

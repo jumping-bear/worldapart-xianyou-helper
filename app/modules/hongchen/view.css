@@ -32,7 +32,7 @@
 .hongchen-cardmeta{font-size:11px;color:#9aa3b2;margin-top:3px;line-height:1.4;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hongchen-cardleft{color:#c9a184;margin-top:1px}
-.hongchen-cardleft.is-done{color:#8fd7ad}
+.hongchen-ready-count{color:#d5ad63;font-weight:600}.hongchen-cardleft.is-done{color:#8fd7ad}
 .hongchen-ring{position:relative;flex:0 0 42px;width:42px;height:42px;display:flex;align-items:center;justify-content:center}
 .hongchen-ring-svg{position:absolute;inset:0;width:42px;height:42px;transform:rotate(-90deg)}
 .hongchen-ring-bg{fill:none;stroke:#2c333f;stroke-width:3.6}

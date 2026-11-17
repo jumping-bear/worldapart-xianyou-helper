@@ -78,7 +78,8 @@ function dashboardHtml(rows){
  }
  const stats=[
   ['当前贡献',num(rows.contribution)],
-  ['委托板',`${(rows.offers||[]).length} 条 · +${num(rows.offer_contribution)}`],
+  ['可同时接',`${n(rows.slots&&rows.slots.limit)} 条`],
+  ['委托板本期',`${(rows.offers||[]).length} 条`],
   ['累计贡献',num(rows.contribution_total)],
   ['宗门声望',num(rows.reputation)],
   ['灵石',num(rows.stones)]
@@ -171,9 +172,9 @@ function tasksHtml(rows){
   </div>`;
  };
  const group=(title,items)=>items.length?`<div class="sec-sub">${title} ${items.length} 条</div>`+items.map(card).join(''):'';
- // 委托板：每周期只挂 3 条外务委托，到期轮换；「3 条」≠「可同时接上限」。
+ // 委托板是轮换的：本期挂出数量以存档为准（不写死「3 条」）；「可同时接」上限由职位决定。
  const refreshText=refresh.next?`每周期轮换 · 下次刷新 ${esc(refresh.next)}`:'每周期轮换';
- const offerHint=`委托板每周期只挂 <b>${list.length}</b> 条外务委托${refresh.next?`，下次刷新 <b>${esc(refresh.next)}</b>`:''}；做完或换周期才出新的一批。「${list.length} 条」只是本期挂出的数量，不是「只能做 ${list.length} 个」，与可同时接上限 <b>${n(slots.limit)}</b> 条是两回事。`;
+ const offerHint=`委托板本期挂出 <b>${list.length}</b> 条外务委托${refresh.next?`，下次刷新 <b>${esc(refresh.next)}</b>`:''}，会轮换出新的一批。「本期挂出 ${list.length} 条」不等于「只能同时接 ${list.length} 个」——你能同时接的上限是 <b>${n(slots.limit)}</b> 条（由职位决定）。`;
  const offerBody=list.length?list.map(item=>{
   const state=item.completed?badge('已完成','ok'):(item.locked?badge('职位不足','warn'):badge('可领取',''));
   return `<div class="sec-task${item.completed?' done':''}">

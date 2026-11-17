@@ -1,10 +1,10 @@
 /* 人物图鉴：以"现在在哪、他和我什么关系、能对他做什么"为主线的 NPC 档案墙。 */
 (function () {
   'use strict';
-  var STORE_KEY = 'worldapart.rolebook.filters.v5';
+  var STORE_KEY = 'worldapart.rolebook.filters.v6';
   var DEFAULTS = {
     q: '', rel: '', evil: '', realm: '', sect: '', personality: '',
-    present: 0, met: 0, dao: 0, friend: 0, housed: 0, evilneg: 0,
+    present: 1, met: 0, dao: 0, friend: 0, housed: 0, evilneg: 0,
     safe: 0, spar: 0, steal: 0, merchant: 0, attackable: 0, memoria: 0, talent: 0,
     sort: 'relevance'
   };
