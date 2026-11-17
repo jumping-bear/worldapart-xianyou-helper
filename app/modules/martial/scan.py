@@ -2,6 +2,7 @@
 """心法与功法扫描：把存档状态翻译成「已运转 / 已学会 / 卷册在包 / 尚未获得」，
 并生成可定位的体检结论。所有规则只读快照与存档，不修改任何输入。
 """
+from .plans import build_plans
 
 STATE_ORDER = {"已运转": 0, "卷册在包": 1, "已学会未运转": 2, "尚未获得": 3, "特殊": 4}
 LEVEL_ORDER = {"high": 0, "mid": 1, "low": 2, "info": 3, "warn": 4}
@@ -310,7 +311,8 @@ def scan_martial(obj, meta, state=None):
     if idle_cores:
         names = "、".join("「%s」" % row["name"] for row in idle_cores[:2])
         more = "等 %d 本" % len(idle_cores) if len(idle_cores) > 2 else ""
-        add("R02", "mid", "%s%s已学但没装槽" % (names, more),
+        suffix = "（槽位已满，需要替换）" if capacity and len(installed_ids) >= capacity else ""
+        add("R02", "mid", "%s%s已学但没装槽%s" % (names, more, suffix),
             {"kind": "core", "id": idle_cores[0]["id"]})
 
     for row in slot_rows:
@@ -419,7 +421,7 @@ def scan_martial(obj, meta, state=None):
         "resonance_used": len(installed_support), "resonance_total": support_capacity,
         "issues": len(diagnosis),
     }
-    return {
+    result = {
         "character": character,
         "equip": {"sect": sects.get(str(character["sect_id"])) or {}, "realm": character["realm"],
                   "layer": character["layer"], "layer_index": character["layer_index"],
@@ -432,6 +434,8 @@ def scan_martial(obj, meta, state=None):
         "diagnosis": diagnosis,
         "stats": stats,
     }
+    result.update(build_plans(result, meta))
+    return result
 
 
 def meta(metadata):
