@@ -13,6 +13,75 @@ QUEST_STATE_NAMES = {
     4: "已失败", 5: "已放弃", 6: "待提交",
 }
 
+# 彩蛋注解表：只对已确认的隐藏结局做人工解读，按需维护；其余内容仍全部来自配置派生。
+# key 用条件 alias，便于脱离具体任务 id 复用；item 会在 build 阶段从物品表补上真实道具名/说明。
+EGG_NOTES = {
+    "JIXIAODIE_CULTIVATION_WAIT": {
+        "title": "未竟之约 · 小蝶的隐藏结局",
+        "trigger": "完成「一番劝言」或「暂歇片刻」后自动触发。这是隐藏任务，不会出现在任务列表里。",
+        "complete": "接取「未竟之约」后，要让纪小蝶的境界达到炼气（≥1），才会触发后续「小蝶近况」。对仍是凡人的小蝶使用「洗髓灵液」，可为她开启修炼资质、踏入炼气一层。",
+        "egg": "如果不用洗髓灵液、直接突破结丹，小蝶会死——这是藏起来的坏结局。",
+        "item": 100100,
+    },
+}
+
+
+def _dialogue_context(dialogue_id, sub_id, dialogue_index, npcs):
+    """还原选项所在的对话情境：剧情线名、相关 NPC、前后台词、同段所有选项。"""
+    subs = sorted((r for r in dialogue_index.get(dialogue_id, []) if isinstance(r, dict)),
+                  key=lambda r: _int(r.get("subId")))
+    lines = []
+    for sub in subs:
+        text = _plain(sub.get("text"))
+        if text and len(lines) < 5:
+            lines.append({"sub": _int(sub.get("subId")), "text": _clip(text, 160)})
+    npc_id, npc_name = 0, ""
+    for sub in subs:
+        candidate = _int(sub.get("npcId"))
+        if candidate > 0 and npcs.get(candidate):
+            npc_id, npc_name = candidate, npcs[candidate]
+            break
+    siblings = []
+    for sub in subs:
+        if _int(sub.get("subId")) == sub_id:
+            siblings = [_text(o.get("optionText")) for o in (sub.get("options") or [])
+                        if isinstance(o, dict) and _text(o.get("optionText"))]
+            break
+    # 剧情线名优先用对话里出现的高亮人名（如 <color>云嫣</color>），其次用 NPC 名。
+    story = npc_name
+    if not story:
+        for sub in subs:
+            raw = _text(sub.get("text"))
+            match = re.search(r"<color=[^>]+>(.*?)</color>", raw, re.S)
+            if match:
+                story = _plain(match.group(1))
+                break
+    if not story:
+        story = "剧情对话 %s" % dialogue_id
+    return {"story": story, "npc": npc_id, "npc_name": npc_name,
+            "lines": lines, "siblings": siblings}
+
+
+def _build_egg_notes(items, quests=None, edges=None):
+    out = []
+    for alias, note in EGG_NOTES.items():
+        entry = dict(note)
+        item = items.get(_int(note.get("item"))) or {}
+        entry["item_name"] = item.get("name") or ("物品 %s" % note.get("item"))
+        entry["item_desc"] = item.get("desc") or ""
+        owner = next((q for q in (quests or []).values()
+                      if (q.get("acq_cond") or {}).get("alias") == alias), None)
+        if owner:
+            entry["quest"] = owner["id"]
+            entry["quest_name"] = owner["name"]
+            entry["hidden"] = bool(owner.get("hidden"))
+        entry["from"] = sorted({e["from"] for e in (edges or [])
+                                if e.get("to") == entry.get("quest")})
+        entry["to"] = sorted({e["to"] for e in (edges or [])
+                              if e.get("from") == entry.get("quest")})
+        out.append(entry)
+    return out
+
 
 def _quest_call_name(spec):
     """从 Luban 调用/索引表达式里取 玩家.获得奖励 这类名字。"""
@@ -222,9 +291,12 @@ def _cond_leaf(node, npcs, quest_names=None, attr_names=None):
         if left_name == "指定NPC" and isinstance(left_index, str):
             left_values = _const_args(left_args) or _expr_ints(left)
             npc_id = _int(left_values[0]) if left_values else 0
+            label = npcs.get(npc_id) or ("NPC %s" % npc_id)
+            if left_index == "境界":
+                return {"kind": "npc_realm", "npc": npc_id, "op": "≥", "need": need,
+                        "text": "%s的境界 ≥ %d" % (label, need)}
             return {"kind": "", "need": need,
-                    "text": "%s的%s ≥ %d" % (npcs.get(npc_id) or ("NPC %s" % npc_id),
-                                             left_index, need)}
+                    "text": "%s的%s ≥ %d" % (label, left_index, need)}
         if left_name == "玩家" and left_index == "城镇声望至少" and len(values) >= 2:
             return {"kind": "city_rep", "city": _int(values[0]), "need": _int(values[1]),
                     "text": "城镇声望（%s）≥ %d" % (_int(values[0]), _int(values[1]))}
@@ -249,9 +321,12 @@ def _cond_leaf(node, npcs, quest_names=None, attr_names=None):
             left_values = _const_args(left_args) or _expr_ints(left)
             npc_id = _int(left_values[0]) if left_values else 0
             op = {"等于": "=", "不等于": "≠", "大于": ">", "小于": "<", "小于等于": "≤"}[name]
+            label = npcs.get(npc_id) or ("NPC %s" % npc_id)
+            if left_index == "境界":
+                return {"kind": "npc_realm", "npc": npc_id, "op": op, "need": need,
+                        "text": "%s的境界 %s %d" % (label, op, need)}
             return {"kind": "", "need": need,
-                    "text": "%s的%s %s %d" % (npcs.get(npc_id) or ("NPC %s" % npc_id),
-                                              left_index, op, need)}
+                    "text": "%s的%s %s %d" % (label, left_index, op, need)}
     if name == "NPC" and index == "好感度至少" and len(values) >= 2:
         npc_id = _int(values[0])
         return {"kind": "favor", "npc": npc_id, "need": _int(values[1]),
@@ -519,9 +594,15 @@ def build_quests(tables):
                 "desc": _plain(row.get("itemDesc")),
             }
     attr_names = {}
+    attr_levels = {}
     for row in _rows(tables.get("tbinteractattribute")):
         if isinstance(row, dict) and row.get("id") is not None:
-            attr_names[_int(row["id"])] = _text(row.get("name")) or ("属性 %s" % row["id"])
+            attr_id = _int(row["id"])
+            attr_names[attr_id] = _text(row.get("name")) or ("属性 %s" % attr_id)
+            thresholds = [_int(c.get("maxExp")) for c in (row.get("levelConfigs") or [])
+                          if isinstance(c, dict) and isinstance(c.get("maxExp"), (int, float))
+                          and _int(c.get("maxExp")) > 0]
+            attr_levels[str(attr_id)] = thresholds
 
     spaces = build_spaces(tables)
     realms = build_realms(tables)
@@ -561,6 +642,12 @@ def build_quests(tables):
                 if child_id:
                     acq_dialogues.setdefault(child_id, {"dialogue": dialogue_id,
                                                         "npc": dialogue_npc})
+
+    # 对话上下文索引：把一个 dialogue 的所有 subId 收集起来，供选项门槛还原“完整对话情境”。
+    dialogue_index = {}
+    for row in _rows(tables.get("tbdialogue")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            dialogue_index.setdefault(_int(row["id"]), []).append(row)
 
     quests = {}
     for row in side:
@@ -735,7 +822,9 @@ def build_quests(tables):
                         if name.rsplit(".", 1)[-1] == "接取任务" and args and args[0]]
             gate = {"cond": cond_id, "alias": alias, "text": text, "priority": priority,
                     "dialogue": dialogue_id, "sub": sub_id, "option": opt_text,
-                    "grey": grey, "no_grey": not bool(grey), "children": children}
+                    "grey": grey, "no_grey": not bool(grey), "children": children,
+                    "leaf": leaf or {}, "context": _dialogue_context(
+                        dialogue_id, sub_id, dialogue_index, npcs)}
             option_gates[(dialogue_id, sub_id, cond_id, opt_text)] = gate
             all_option_gates.append(gate)
             for child_id in children:
@@ -1078,9 +1167,11 @@ def build_quests(tables):
         linked = next((child for child in gate["children"] if child in quests), 0)
         diagnostics["option_gates"].append({
             "quest": linked, "quest_name": quests[linked]["name"] if linked else "",
-            "dialogue": gate["dialogue"], "alias": gate["alias"],
-            "text": gate["text"], "option": gate["option"],
-            "no_grey": gate["no_grey"], "grey": gate["grey"],
+            "dialogue": gate["dialogue"], "sub": gate["sub"], "cond": gate["cond"],
+            "alias": gate["alias"], "text": gate["text"], "option": gate["option"],
+            "priority": gate["priority"], "no_grey": gate["no_grey"], "grey": gate["grey"],
+            "children": gate["children"], "leaf": gate.get("leaf") or {},
+            "context": gate.get("context") or {},
         })
     diagnostics["option_gates"].sort(key=lambda item: (not item["no_grey"], item["quest"]))
 
@@ -1141,6 +1232,9 @@ def build_quests(tables):
             "npc_names": {str(key): value for key, value in npcs.items()},
             "realms": realms, "phases": phases,
             "edges": edges, "diagnostics": diagnostics,
+            "egg_notes": _build_egg_notes(items, quests, edges),
+            "attr_names": {str(key): value for key, value in attr_names.items()},
+            "attr_levels": attr_levels,
             "states": {str(k): v for k, v in QUEST_STATE_NAMES.items()},
             "types": {str(k): v for k, v in type_names.items()}, "stats": stats}
 

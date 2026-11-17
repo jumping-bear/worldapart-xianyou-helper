@@ -7,6 +7,171 @@ DONE_STATES = (2, 3)
 DOING_STATES = (1, 6)
 
 
+def _attr_level(exp, thresholds):
+    """探索属性经验 → 等级，阈值来自 tbinteractattribute.levelConfigs.maxExp。"""
+    levels = [value for value in thresholds or [] if isinstance(value, int) and value > 0]
+    if not levels:
+        return 0, False
+    return sum(1 for value in levels if exp > value) + 1, True
+
+
+def _cmp(op, cur, need):
+    ops = {">=": cur >= need, "≥": cur >= need, "=": cur == need,
+           "≠": cur != need, "!=": cur != need, ">": cur > need,
+           "<": cur < need, "≤": cur <= need, "<=": cur <= need}
+    return ops.get(op)
+
+
+def _egg_matches(note, quest_id, cond):
+    return (_int(note.get("quest")) == quest_id
+            or (note.get("alias") and (cond or {}).get("alias") == note.get("alias")))
+
+
+def _eval_check(check, ctx):
+    """按当前存档判定单个条件；返回 ok(True/False/None)、当前显示值与缺口描述。"""
+    kind = check.get("kind") or ""
+    need = _int(check.get("need"))
+    text = check.get("text") or "条件"
+    cur, ok, is_level = None, None, False
+    if kind == "favor":
+        cur = ctx["favor"].get(_int(check.get("npc")), 0)
+        ok = cur >= need
+    elif kind == "city_rep":
+        cur = _int(ctx["city_rep"].get(str(_int(check.get("city"))), 0))
+        ok = cur >= need
+    elif kind == "sect_rep":
+        cur = ctx["sect_rep"]
+        ok = cur >= need
+    elif kind in ("phase", "realm"):
+        cur = ctx["player_realm"]
+        ok = cur >= need
+    elif kind == "layer":
+        cur = ctx["layer"]
+        ok = cur >= need
+    elif kind == "money":
+        cur = ctx["money"]
+        ok = cur >= need
+    elif kind in ("quest_done", "quest_hold", "quest_accepted", "quest_active"):
+        quest_id = _int(check.get("quest"))
+        code = ctx["quests"].get(quest_id, -1)
+        if kind == "quest_done":
+            cur = 1 if code in DONE_STATES else 0
+        elif kind == "quest_hold":
+            cur = 1 if code in DOING_STATES else 0
+        elif kind == "quest_accepted":
+            cur = 1 if quest_id in ctx["quests"] else 0
+        else:
+            cur = 1 if code in DOING_STATES else 0
+        ok = cur >= need
+        text = text or "任务状态"
+    elif kind == "attr":
+        attr_id = _int(check.get("attr"))
+        exp = ctx["attr_exp"].get(str(attr_id), ctx["attr_exp"].get(attr_id, 0))
+        cur, is_level = _attr_level(exp, ctx["attr_levels"].get(str(attr_id)) or [])
+        ok = cur >= need
+    elif kind == "npc_realm":
+        cur = ctx["npc_realms"].get(_int(check.get("npc")))
+        if cur is not None:
+            ok = _cmp(check.get("op") or "≥", cur, need)
+    if cur is None:
+        cur_text = "未知"
+    elif is_level:
+        cur_text = "Lv%d" % cur
+    elif kind in ("quest_done", "quest_hold", "quest_accepted", "quest_active"):
+        cur_text = "已完成" if cur >= need else "未完成"
+    else:
+        cur_text = str(cur)
+    gap = ""
+    if ok is False:
+        if is_level:
+            gap = "%s（需 Lv%d，当前 Lv%d）" % (text, need, cur)
+        elif kind == "npc_realm":
+            gap = "%s（当前 %s）" % (text, cur_text)
+        elif kind in ("quest_done", "quest_hold", "quest_accepted", "quest_active"):
+            gap = text
+        else:
+            gap = "%s（需 %d，当前 %s）" % (text, need, cur_text)
+    return {"kind": kind, "text": text, "need": need, "cur": cur,
+            "cur_text": cur_text, "ok": ok, "gap": gap}
+
+
+def _eval_tree(tree, ctx):
+    """递归判定条件树，保留 且/或/非 逻辑，输出可展示的缺口链。"""
+    checks = []
+
+    def walk(node):
+        if not isinstance(node, dict):
+            return {"ok": None, "gaps": [], "text": "", "checks": []}
+        op = node.get("op")
+        if op:
+            children = [walk(child) for child in (node.get("children") or [])]
+            vals = [child["ok"] for child in children]
+            gaps = [g for child in children for g in child["gaps"]]
+            if op == "and":
+                ok = False if False in vals else (None if None in vals else True)
+            elif op == "or":
+                ok = True if True in vals else (None if None in vals else False)
+                if ok is True:
+                    gaps = []
+                else:
+                    parts = [c["gaps"][0] if c["gaps"] else c["text"] for c in children]
+                    gaps = ["满足其一：" + " 或 ".join(p for p in parts if p)]
+            elif op == "not":
+                inner = children[0] if children else {"ok": None, "gaps": [], "text": "", "checks": []}
+                ok = None if inner["ok"] is None else (not inner["ok"])
+                # 展示时把“非(条件)”整体翻转，避免 ✓ 出现在需要“不满足”的条件上造成误读
+                flipped = []
+                for check in inner.get("checks") or []:
+                    item = dict(check)
+                    item["ok"] = None if check.get("ok") is None else (not check["ok"])
+                    item["text"] = "非（%s）" % check.get("text", "")
+                    item["gap"] = "" if item["ok"] is not False else "目前仍满足「%s」" % check.get("text", "")
+                    flipped.append(item)
+                gaps = ["目前仍满足「%s」" % inner["text"]] if inner["ok"] is True else []
+                return {"ok": ok, "gaps": gaps,
+                        "text": "非（%s）" % inner.get("text", ""), "checks": flipped}
+            else:
+                ok = None
+            return {"ok": ok, "gaps": gaps, "text": node.get("text") or "",
+                    "checks": [c for child in children for c in child["checks"]]}
+        ev = _eval_check(node.get("leaf") or {}, ctx)
+        checks.append(ev)
+        return {"ok": ev["ok"], "gaps": [ev["gap"]] if ev["gap"] else [],
+                "text": ev["text"], "checks": [ev]}
+
+    result = walk(tree)
+    unique, seen = [], set()
+    for check in result["checks"]:
+        key = (check["kind"], check["text"], check["need"], check.get("cur"))
+        if key not in seen:
+            seen.add(key)
+            unique.append(check)
+    return {"ok": result["ok"], "checks": unique, "gaps": result["gaps"],
+            "logic": _tree_logic(tree)}
+
+
+def _tree_logic(tree):
+    flags = {"and": False, "or": False, "not": False}
+
+    def walk(node):
+        if not isinstance(node, dict):
+            return
+        op = node.get("op")
+        if op:
+            flags[op] = True
+            for child in node.get("children") or []:
+                walk(child)
+
+    walk(tree)
+    if flags["not"] or (flags["and"] and flags["or"]):
+        return "混合逻辑（且/或/非）"
+    if flags["or"]:
+        return "满足其一（或）"
+    if flags["and"]:
+        return "全部满足（且）"
+    return "单一条件"
+
+
 def _int(value, default=0):
     try:
         return int(value)
@@ -73,7 +238,8 @@ def scan(obj, meta_obj, state=None):
     player_realm = _realm_for_layer(meta_obj.get("phases") or {}, layer)
 
     retired, npc_places = set(), {}
-    favor = {}
+    favor, npc_realms = {}, {}
+    phases = meta_obj.get("phases") or {}
     spaces = obj.get("spaces") or {}
     space_names = meta_obj.get("space_names") or {}
     npc_homes = meta_obj.get("npc_homes") or {}
@@ -83,6 +249,9 @@ def scan(obj, meta_obj, state=None):
             continue
         npc_id = _int(record.get("npcCfgId"))
         favor[npc_id] = _int(record.get("intimacy"))
+        cultivation = record.get("cultivation_state") or {}
+        if cultivation.get("cultivate_layer_id") is not None:
+            npc_realms[npc_id] = _realm_for_layer(phases, cultivation.get("cultivate_layer_id"))
         if _int(record.get("worldStatus")) == 2:
             retired.add(npc_id)
         space_uuid = record.get("currentSpaceUuid") or ""
@@ -92,6 +261,31 @@ def scan(obj, meta_obj, state=None):
     behavior = player.get("behavior_value") or {}
     city_rep = behavior.get("city_reputes") or {}
     sect_rep = behavior.get("sect_reputes") or {}
+    ctx = {
+        "favor": favor, "city_rep": city_rep,
+        "sect_rep": max([_int(v) for v in sect_rep.values()] or [0]),
+        "player_realm": player_realm, "layer": _int(layer),
+        "money": _int(player.get("money")),
+        "quests": {quest_id: _int((value or {}).get("state"), 0)
+                   for quest_id, value in saved.items()},
+        "attr_exp": player.get("interact_attributes") or {},
+        "attr_levels": meta_obj.get("attr_levels") or {},
+        "npc_realms": npc_realms,
+        "phases": phases,
+    }
+    egg_notes = meta_obj.get("egg_notes") or []
+    gate_diag = []
+    for gate in ((meta_obj.get("diagnostics") or {}).get("option_gates") or []):
+        leaf = gate.get("leaf") or {}
+        gate_diag.append({
+            "quest": _int(gate.get("quest")), "quest_name": gate.get("quest_name") or "",
+            "dialogue": _int(gate.get("dialogue")), "sub": _int(gate.get("sub")),
+            "alias": gate.get("alias") or "", "text": gate.get("text") or "",
+            "option": gate.get("option") or "", "no_grey": bool(gate.get("no_grey")),
+            "grey": gate.get("grey") or "", "priority": gate.get("priority") or "",
+            "context": gate.get("context") or {},
+            "eval": _eval_check(leaf, ctx) if leaf else None,
+        })
 
     rows = []
     for quest in meta_obj.get("quests") or []:
@@ -104,52 +298,27 @@ def scan(obj, meta_obj, state=None):
         location = quest.get("location") or {}
         cond = quest.get("acq_cond") or None
         cond_ok, cond_fail = None, ""
+        cond_eval = None
         if cond:
-            checks = cond.get("checks") or []
-            mode = cond.get("mode") or "all"
-            known, failed = [], []
-            for check in checks:
-                kind = check.get("kind")
-                cur = None
-                if kind == "favor":
-                    cur = favor.get(_int(check.get("npc")), 0)
-                elif kind == "city_rep":
-                    cur = _int(city_rep.get(str(_int(check.get("city")))))
-                elif kind == "sect_rep":
-                    cur = max([_int(v) for v in sect_rep.values()] or [0])
-                elif kind in ("phase", "realm"):
-                    cur = player_realm
-                elif kind == "layer":
-                    cur = _int(layer)
-                elif kind in ("quest_done", "quest_hold", "quest_accepted"):
-                    quest_key = _int(check.get("quest"))
-                    state_code = _int((saved.get(quest_key) or {}).get("state"), -1)
-                    if kind == "quest_done":
-                        cur = 1 if state_code in DONE_STATES else 0
-                    elif kind == "quest_hold":
-                        cur = 1 if state_code in DOING_STATES else 0
-                    else:
-                        cur = 1 if quest_key in saved else 0
-                elif kind == "attr":
-                    attr_values = player.get("interact_attributes") or {}
-                    attr_id = _int(check.get("attr"))
-                    cur = _int(attr_values.get(str(attr_id), attr_values.get(attr_id)))
-                if cur is None:
-                    continue
-                known.append(cur >= _int(check.get("need")))
-                if cur < _int(check.get("need")):
-                    failed.append("%s（当前 %d）" % (check.get("text") or "", cur))
-            cond_fail = "、".join(failed)
-            if mode == "unknown":
+            cond_eval = _eval_tree(cond.get("tree"), ctx)
+            cond_ok = cond_eval["ok"]
+            cond_fail = "、".join(cond_eval["gaps"])
+            if cond.get("mode") == "unknown" and not (cond.get("tree") or {}).get("op"):
                 cond_ok = None
-            elif known:
-                unknown = len(checks) - len(known)
-                if mode == "any":
-                    cond_ok = True if any(known) else (None if unknown else False)
-                elif not all(known):
-                    cond_ok = False
-                else:
-                    cond_ok = None if unknown else True
+        gate_eval = []
+        for gate in (quest.get("option_gates") or []):
+            leaf = gate.get("leaf") or {}
+            ev = _eval_check(leaf, ctx) if leaf else None
+            gate_eval.append({
+                "dialogue": _int(gate.get("dialogue")),
+                "sub": _int(gate.get("sub")),
+                "option": gate.get("option") or "",
+                "text": gate.get("text") or "",
+                "no_grey": bool(gate.get("no_grey")),
+                "alias": gate.get("alias") or "",
+                "context": gate.get("context") or {},
+                "eval": ev,
+            })
         reasons = []
         if realm_ids and player_realm and player_realm not in realm_ids:
             reasons.append("境界已过（限%s）" % "/".join(realms.get(str(value), str(value))
@@ -199,6 +368,9 @@ def scan(obj, meta_obj, state=None):
             "cond_need": 0,
             "cond_cur": None,
             "cond_ok": cond_ok,
+            "cond_eval": cond_eval,
+            "gate_eval": gate_eval,
+            "egg_note": next((note for note in egg_notes if _egg_matches(note, quest_id, cond)), None),
             "gate": quest.get("gate"),
             "acq_dialogue": quest.get("acq_dialogue"),
             "acq_flows": quest.get("acq_flows") or [],
@@ -493,6 +665,9 @@ def scan(obj, meta_obj, state=None):
             "chains": meta_obj.get("chains") or [], "branches": meta_obj.get("branches") or [],
             "edges": meta_obj.get("edges") or [],
             "diagnostics": meta_obj.get("diagnostics") or {},
+            "egg_notes": egg_notes,
+            "gate_diag": gate_diag,
+            "attr_names": meta_obj.get("attr_names") or {},
             "realms": realms, "states": states}
 
 
