@@ -155,8 +155,16 @@ def _expr_gate(node, npcs):
             "text": str(text) + ((" " + "/".join(str(x) for x in nums)) if nums else "")}
 
 
-def _gate_from_condition(cond_row, npcs, grey_text=""):
-    """把 optionCondition 引用的条件行翻译成人话门槛 + 可判定结构。"""
+def _gate_from_condition(cond_row, npcs, grey_text="", quest_names=None, cond_option=None):
+    """把 optionCondition 引用的条件行翻译成人话门槛 + 可判定结构。
+
+    quest_names / cond_option 由配置表动态构建（见 build_hongchen）：
+      * quest_names: 任务 id -> 人话任务名，用于把 SIDE_ZHUJI_80144 翻成「丹房门影」；
+      * cond_option: 条件 id -> 引用它的选项文本，用于把 _O1 翻成「言辞支开」。
+    新增任务/选项只需重新导出快照即可，无需改代码。
+    """
+    quest_names = quest_names or {}
+    cond_option = cond_option or {}
     gate = {"alias": "", "text": "", "alias_text": "", "kind": "", "need": 0,
             "npc": 0, "attr_name": "", "source": ""}
     if not isinstance(cond_row, dict):
@@ -169,7 +177,12 @@ def _gate_from_condition(cond_row, npcs, grey_text=""):
 
     m = re.search(r"SIDE_ZHUJI_(\d+)_O(\d+)", upper)
     if m:
-        text, kind, need = "需完成「%s」相关剧情（选项 %s）" % (m.group(1), m.group(2)), "quest_option", int(m.group(1))
+        # 80144 / 选项 1 这类机器语言，翻成任务名 + 选项文本。
+        quest_id = _int(m.group(1))
+        quest_name = quest_names.get(quest_id) or str(quest_id)
+        option_text = cond_option.get(_int(cond_row.get("id"))) or ("选项 %s" % m.group(2))
+        text = "需完成「%s」并选择「%s」" % (quest_name, option_text)
+        kind, need = "quest_option", quest_id
     elif re.search(r"INTIMACY|FAVOR", upper) and (m := re.search(r"(\d+)\s*$", upper)):
         text, kind, need = "好感≥%s" % m.group(1), "favor", int(m.group(1))
     elif "COST" in upper and (m := re.search(r"(\d+)\s*$", upper)):
@@ -264,6 +277,21 @@ def build_hongchen(tables):
     for row in _rows(tables.get("tbconditionexpr")):
         if isinstance(row, dict) and row.get("id") is not None:
             conds[_int(row["id"])] = row
+    # 任务 id -> 人话名；条件 id -> 引用它的选项文本。均为数据驱动，供 SIDE_ZHUJI 别名翻译。
+    quest_names = {}
+    for row in all_rows:
+        quest_names[_int(row["id"])] = _plain(row.get("name")) or str(_int(row["id"]))
+    cond_option = {}
+    for row in _rows(tables.get("tbdialogue")):
+        if not isinstance(row, dict):
+            continue
+        for option in row.get("options") or []:
+            if not isinstance(option, dict):
+                continue
+            cid = _int(option.get("optionCondition"))
+            text = _text(option.get("optionText"))
+            if cid and text and cid not in cond_option:
+                cond_option[cid] = text
     attr_names = {}
     for row in _rows(tables.get("tbinteractattribute")):
         if isinstance(row, dict) and row.get("id") is not None:
@@ -283,7 +311,7 @@ def build_hongchen(tables):
             if option.get("optionCondition"):
                 gate = _gate_from_condition(
                     conds.get(_int(option["optionCondition"])), npcs,
-                    _text(option.get("optionGreyText")))
+                    _text(option.get("optionGreyText")), quest_names, cond_option)
                 gate["source"] = "optionCondition"
             if did in hc_ids:
                 options_by_dialogue.setdefault(did, []).append({
@@ -331,7 +359,8 @@ def build_hongchen(tables):
             giver_id = _int(row.get("acqNpcID")) or _int((row.get("experience") or {}).get("npcId"))
             gates = list(acq_gates.get(qid) or [])
             if row.get("acqCondition"):
-                gate = _gate_from_condition(conds.get(_int(row["acqCondition"])), npcs)
+                gate = _gate_from_condition(conds.get(_int(row["acqCondition"])), npcs,
+                                            "", quest_names, cond_option)
                 gate["source"] = "acqCondition"
                 if gate not in gates:
                     gates.append(gate)
