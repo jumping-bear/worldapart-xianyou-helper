@@ -6,13 +6,13 @@
 const KEY='hongchen';
 const STATUS={
   done:{label:'已完成',cls:'s-done'}, doing:{label:'进行中',cls:'s-doing'},
-  ready:{label:'可接取',cls:'s-ready'}, unpicked:{label:'未选此分支',cls:'s-unpicked'},
+  ready:{label:'可接取',cls:'s-ready'}, unpicked:{label:'另一条路',cls:'s-unpicked'},
   locked:{label:'未解锁',cls:'s-locked'}, notstarted:{label:'未开始',cls:'s-notstarted'}
 };
 // 过滤项 value 对应状态类；'cando' 合并“可接取 + 未开始(可开启分支)”。
 const FILTERS=[['all','全部'],['cando','可做'],['doing','进行中'],['done','已完成'],
-               ['unpicked','未选分支'],['locked','未解锁']];
-let LINES=[], OPEN='', FILTER='all', QUERY='', CUR=null, FOCUS=0;
+               ['unpicked','另一条路'],['locked','未解锁']];
+let LINES=[], OPEN='', FILTER='all', QUERY='', CUR=null, FOCUS=0, REMAIN=true;
 
 function statusOf(cls){return STATUS[cls]||STATUS.notstarted}
 function byId(line){const m={};(line.quests||[]).forEach(q=>m[q.id]=q);return m}
@@ -51,7 +51,7 @@ function nodeHtml(q,map){
   const dim=isDim(q)?' dim':'';
   const sel=(CUR===q.id)?' sel':'';
   const prev=(q.prev&&map[q.prev])?map[q.prev].name:'';
-  // 分支任务用“N 选 1”提示，未选分支给出友好说明，绝不写“已错过”。
+  // 分支任务用“N 选 1”提示，未选的那条写成“另一条路”，绝不写“已错过”。
   let foot=(q.branch?'分支 · ':'')+(prev?'前置「'+esc(prev)+'」':'起点');
   if(q.hidden)foot+=' · 隐藏';
   let note='';
@@ -92,19 +92,25 @@ function ringState(line,d){
 }
 
 // 顶部进度轴：一环一个可点击圆点；当前环、聚焦环、有分支环各有标记。
+// 每环右下角标出该环还剩几个（"还剩 2"），一眼看出卡在哪一环。
 function axisHtml(line,curD){
   const maxD=maxDepth(line), dots=[];
+  const rings={};
+  (line.rings||[]).forEach(r=>{rings[r.depth]=r});
   for(let d=1;d<=maxD;d++){
     const here=(line.quests||[]).filter(q=>ringOf(q)===d);
     const st=ringState(line,d);
     const hasBranch=here.some(q=>q.branch);
+    const left=(rings[d]&&rings[d].left)||0;
     const cls=['hongchen-axis-dot','rs-'+st];
     if(d===curD)cls.push('is-current');
     if(d===FOCUS)cls.push('is-focus');
+    if(left)cls.push('has-left');
     const mark=hasBranch?'<i class="hongchen-axis-branch" title="本环有分支选择">⑂</i>':'';
+    const leftBadge=left?'<i class="hongchen-axis-left" title="这一环还剩 '+left+' 个任务">'+left+'</i>':'';
     dots.push('<button type="button" class="'+cls.join(' ')+'" data-ring="'+d+'" '
-      +'title="第 '+d+' 环 · '+here.length+' 节点'+(d===curD?' · 当前进度环':'')+'">'
-      +'<span>'+d+'</span>'+mark+'</button>');
+      +'title="第 '+d+' 环 · '+here.length+' 节点'+(left?' · 还剩 '+left:'')+(d===curD?' · 当前进度环':'')+'">'
+      +'<span>'+d+'</span>'+mark+leftBadge+'</button>');
   }
   return '<div class="hongchen-axis" role="tablist" aria-label="环进度轴">'+dots.join('')+'</div>';
 }
@@ -145,18 +151,75 @@ function contextHtml(line){
   return '<div class="hongchen-context">'+wrap(FOCUS-1,'‹ 上一环')+wrap(FOCUS+1,'下一环 ›')+'</div>';
 }
 
+// 「还差什么」：展开面板最上方，直接回答"我还剩哪些、为什么没做"。
+// 可接取/未开始/差条件可点击跳到对应节点；分支另列"当时选了另一条路"，不算漏做。
+function remainHtml(line){
+  const r=line.remaining;
+  if(!r)return '';
+  const secs=[];
+  const section=(title,cls,items,extraClass,flag)=>{
+    if(!items||!items.length)return;
+    secs.push('<div class="hongchen-remain-sec'+(extraClass?' '+extraClass:'')+'">'
+      +'<div class="hongchen-remain-t"><i class="hongchen-dot '+cls+'"></i>'+title
+      +'<em>'+items.length+'</em>'
+      +(flag?'<span class="hongchen-remain-flag">'+flag+'</span>':'')+'</div>'
+      +'<div class="hongchen-remain-list">'
+      +items.map(it=>'<button type="button" class="hongchen-remain-chip '+cls+'" data-jump="'+it.id
+        +'" title="第 '+it.depth+' 环 · '+esc(it.name)+'">'
+        +'<span class="hongchen-remain-name">'+esc(it.name)+'</span>'
+        +'<span class="hongchen-remain-ring">第 '+it.depth+' 环</span>'
+        +(it.reason?'<span class="hongchen-remain-why">'+esc(it.reason)+'</span>':'')
+        +'</button>').join('')
+      +'</div></div>');
+  };
+  // 顺序固定：可接取永远排最前，并加"现在就能做"徽标，长清单里也能一眼找到。
+  section('可接取','s-ready',r.ready,'is-ready','现在就能做');
+  section('进行中','s-doing',r.doing);
+  section('未开始','s-notstarted',r.notstarted);
+  section('差条件','s-locked',r.locked);
+
+  let choices='';
+  const alts=(r.choices||[]);
+  if(alts.length){
+    choices='<div class="hongchen-remain-sec hongchen-remain-alts">'
+      +'<div class="hongchen-remain-t"><i class="hongchen-dot s-unpicked"></i>当时选了另一条路<em>'+alts.length+'</em></div>'
+      +'<div class="hongchen-remain-tip">'+esc(r.choice_note||'')+'</div>'
+      +'<div class="hongchen-remain-choice-list">'
+      +alts.map(c=>{
+        const fork=c.parent_id
+          ?'<button type="button" class="hongchen-remain-fork" data-jump="'+c.parent_id
+            +'" title="第 '+c.depth+' 环 · 跳到这个分叉点">'+esc(c.text)+'</button>'
+          :'<span class="hongchen-remain-fork is-plain">'+esc(c.text)+'</span>';
+        return '<div class="hongchen-remain-choice">'+fork+'</div>';
+      }).join('')
+      +'</div></div>';
+  }
+  const empty=secs.length?'':'<div class="hongchen-remain-all">✓ 这条线已走完'
+    +(alts.length?'；下面的分支是当时走的另一条路':'')+'</div>';
+  const sum=r.done?'这条线已走完':('还差 '+r.left+' 项');
+  return '<div class="hongchen-remain'+(REMAIN?'':' is-fold')+'">'
+    +'<div class="hongchen-remain-head"><span class="hongchen-remain-title">还差什么</span>'
+    +'<span class="hongchen-remain-sum'+(r.done?' is-done':'')+'">'+esc(sum)+'</span>'
+    +'<button type="button" class="hongchen-remain-toggle">'+(REMAIN?'收起':'展开')+'</button></div>'
+    +'<div class="hongchen-remain-body">'+empty+secs.join('')+choices+'</div>'
+    +'</div>';
+}
+
 function inspectHtml(q,line){
   const st=statusOf(q.status_cls), map=byId(line);
   const gates=[];
-  (q.gates||[]).forEach(g=>{if(g&&g.text)gates.push(g.text)});
+  (q.gate_checks||[]).forEach(c=>{if(c&&c.text)gates.push(c)});
+  if(!gates.length)(q.gates||[]).forEach(g=>{if(g&&g.text)gates.push({text:g.text,need:0})});
   (q.options||[]).forEach(o=>{
     if(!o)return;
     const to=(o.to||[]).map(id=>map[id]?map[id].name:('#'+id)).join(' / ');
-    gates.push((o.gate?o.gate.text+' → ':'')+o.text+(to?' · '+to:''));
+    const check=o.check||{};
+    gates.push({text:(o.gate?o.gate.text+' → ':'')+o.text+(to?' · '+to:''),
+                need:check.need||0,cur:check.cur,ok:check.ok});
   });
   const next=(q.next||[]).map(id=>map[id]?esc(map[id].name):('#'+id)).join('、');
   const notice=(q.status_cls==='unpicked')
-    ?'<div class="hongchen-inspect-note">这条支线因你选择了另一分支而不再可走，已从完成度中剔除，不算漏做。</div>'
+    ?'<div class="hongchen-inspect-note">这条支线当时没选，你走了另一条路；它不会再出现。</div>'
     :(q.status_cls==='notstarted'?'<div class="hongchen-inspect-note">前置剧情还没走到，先推进前面的任务吧。</div>':'');
   return '<div class="hongchen-inspect"><div class="hongchen-inspect-title">'
     +'<span class="hongchen-id">#'+q.id+'</span>'+esc(q.name)
@@ -170,7 +233,13 @@ function inspectHtml(q,line){
     +'<div class="hongchen-ir"><b>分支</b><span>'+(q.branch?(esc((q.branch_with||[]).join(' / '))||'互斥选项'):'否')+'</span></div>'
     +(q.fail_text?'<div class="hongchen-ir full"><b>进度提示</b><span>'+esc(q.fail_text)+'</span></div>':'')
     +'</div>'
-    +(gates.length?'<div class="hongchen-igates"><b>选项门槛</b>'+gates.map(g=>'<span class="hongchen-badge gate">'+esc(g)+'</span>').join('')+'</div>':'')
+    +(gates.length?'<div class="hongchen-igates"><b>选项门槛</b>'+gates.map(g=>{
+        const val=g.need?('当前 '+(g.cur===undefined?'?':g.cur)+' / 需 '+g.need):'';
+        const state=g.ok===true?'已满足':(g.ok===false?'未满足':'');
+        const cls=g.ok===true?' ok':(g.ok===false?' no':'');
+        return '<span class="hongchen-badge gate'+cls+'">'+esc(g.text)
+          +(val?'<em class="hongchen-gate-val">'+esc(val)+(state?' · '+state:'')+'</em>':'')+'</span>';
+      }).join('')+'</div>':'')
     +'</div>';
 }
 
@@ -179,11 +248,12 @@ function panelHtml(line){
   const p=line.progress||{}, curD=currentDepth(line);
   const here=(line.quests||[]).filter(q=>ringOf(q)===FOCUS);
   const doneHere=here.filter(q=>q.status_cls==='done').length;
-  const extra=(p.unpicked?'<span class="hongchen-unpicked-tip"> · 未选分支 '+p.unpicked+' 项不计完成度</span>':'');
+  const headline=p.headline||((p.done||0)+'/'+(p.base||0)+' 已完成');
   return '<div class="hongchen-panel" style="--hongchen-accent:'+esc(line.color||'#c9866b')+'">'
     +'<div class="hongchen-panel-head"><div><b>'+esc(line.name)+'</b> · 情缘任务树'
-    +'<span class="hongchen-panel-sum">'+esc(line.group)+' ｜ 已完成 '+(p.done||0)+'/'+p.base+' 环'
-    +extra+'</span></div><button type="button" class="hongchen-close" title="收起">×</button></div>'
+    +'<span class="hongchen-panel-sum">'+esc(line.group)+' ｜ '+esc(headline)+'</span></div>'
+    +'<button type="button" class="hongchen-close" title="收起">×</button></div>'
+    +remainHtml(line)
     +'<div class="hongchen-toolbar"><span class="hongchen-chipset">'
     +FILTERS.map(f=>'<button type="button" class="hongchen-chip'+(FILTER===f[0]?' active':'')+'" data-filter="'+f[0]+'">'+f[1]+'</button>').join('')
     +'</span><input class="hongchen-search" type="search" placeholder="搜索任务名 / 编号" value="'+esc(QUERY)+'"></div>'
@@ -213,20 +283,21 @@ function render(host,stats){
       +'<span class="hongchen-portrait">'+portrait+'</span>'
       +'<span class="hongchen-cinfo"><span class="hongchen-name">'+esc(line.name)+'</span>'
       +'<span class="hongchen-line">'+esc(line.group)+'</span>'
-      +'<span class="hongchen-cardmeta">'+(p.done||0)+'/'+(p.base||p.total||0)+' 已完成'
-      +(p.unpicked?' · 未选分支 '+p.unpicked:'')+'</span></span>'
+      +'<span class="hongchen-cardmeta">已完成 '+(p.done||0)+'/'+(p.base||p.total||0)+'</span>'
+      +'<span class="hongchen-cardmeta hongchen-cardleft'+((line.remaining&&line.remaining.done)?' is-done':'')+'">'
+      +esc((line.remaining&&line.remaining.brief)||'')+'</span></span>'
       +'<span class="hongchen-ring">'+ring(p.pct||0,line.color)+'</span>'
       +'<span class="hongchen-arrow">›</span></button>';
   }).join('');
   const line=LINES.filter(l=>l.group===OPEN)[0];
   host.innerHTML='<div class="hongchen-root">'
     +'<div class="hongchen-head"><div><div class="hongchen-title">红尘 · 六段情缘</div>'
-    +'<div class="hongchen-sub">'+stats.quests+' 段任务 · '+stats.lines+' 条角色线 · '
-    +'分支二选一放弃的任务不计入完成度，选项门槛已翻译成人话</div></div>'
+    +'<div class="hongchen-sub">'+stats.quests+' 段任务 · '+stats.lines+' 条角色线 · 展开某人可看「还差什么」'
+    +' ｜ 选项门槛已翻译成人话</div></div>'
     +'<div class="hongchen-legend">'
     +'<span><i class="hongchen-dot s-done"></i>已完成</span><span><i class="hongchen-dot s-doing"></i>进行中</span>'
     +'<span><i class="hongchen-dot s-ready"></i>可接取</span><span><i class="hongchen-dot s-notstarted"></i>未开始</span>'
-    +'<span><i class="hongchen-dot s-unpicked"></i>未选分支</span><span><i class="hongchen-dot s-locked"></i>未解锁</span></div></div>'
+    +'<span><i class="hongchen-dot s-unpicked"></i>另一条路</span><span><i class="hongchen-dot s-locked"></i>未解锁</span></div></div>'
     +'<div class="hongchen-cards">'+cards+'</div>'
     +(line?panelHtml(line):'<div class="hongchen-empty-hint">选择一位角色，展开她的情缘任务树</div>')
     +'</div>';
@@ -239,6 +310,17 @@ function setFocus(host,stats,d,line){
   render(host,stats);
   const axis=host.querySelector('.hongchen-axis-dot.is-focus');
   if(axis&&axis.scrollIntoView)axis.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+}
+
+// 跳到指定任务节点：切到它所在的环、选中并滚到它的详情。
+function jumpTo(host,stats,qid){
+  const line=LINES.filter(l=>l.group===OPEN)[0]; if(!line)return;
+  const q=(line.quests||[]).filter(x=>x.id===qid)[0]; if(!q)return;
+  FOCUS=ringOf(q); CUR=q.id; render(host,stats);
+  setTimeout(function(){
+    const el=host.querySelector('.hongchen-node.sel')||host.querySelector('.hongchen-inspect');
+    if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'center'});
+  },0);
 }
 
 function init(){
@@ -263,6 +345,11 @@ function init(){
       store.set('hongchen.open',OPEN);render(host,stats);return}
     const chip=e.target.closest('.hongchen-chip');
     if(chip){FILTER=chip.getAttribute('data-filter');store.set('hongchen.filter',FILTER);render(host,stats);return}
+    const toggle=e.target.closest('.hongchen-remain-toggle');
+    if(toggle){REMAIN=!REMAIN;const box=toggle.closest('.hongchen-remain');
+      if(box)box.classList.toggle('is-fold',!REMAIN);toggle.textContent=REMAIN?'收起':'展开';return}
+    const jump=e.target.closest('[data-jump]');
+    if(jump){jumpTo(host,stats,Number(jump.getAttribute('data-jump')));return}
     const dot=e.target.closest('.hongchen-axis-dot');
     if(dot){setFocus(host,stats,Number(dot.getAttribute('data-ring')));return}
     const ctx=e.target.closest('.hongchen-ctx-chip');

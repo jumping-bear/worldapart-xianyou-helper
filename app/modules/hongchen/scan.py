@@ -7,12 +7,15 @@
   done        已完成
   doing       进行中
   ready       可接取（前置完成且条件满足）
-  unpicked    未选此分支（已到分叉点且明确选了另一个互斥选项）—— 不计入完成度分母
+  unpicked    另一条路（已到分叉点且明确选了另一个互斥选项）—— 不计入完成度分母
   notstarted  未开始（前置未完成，还没走到这里）—— 中性灰，不算漏做
   locked      未解锁（前置已到但好感/属性/灵石等条件不足）
 
 完成度分母 = 全部任务 - 因分支选择放弃的任务(unpicked)。这样二选一选了另一个
 不会再被当成"未完成"，玩家能够 100%。
+
+每条线另外产出 remaining（"还差什么"清单）与 rings（每环剩余数），供前端
+直接回答"我还剩哪些任务、为什么没做"，而不是让玩家自己在任务树里找。
 """
 import json
 import os
@@ -97,27 +100,30 @@ def _context(obj, meta_obj, npc_id):
 
 
 def _eval_gate(gate, ctx):
-    """返回 (True/False/None, 说明)。None 表示无法判定，只当提示。"""
+    """返回 (True/False/None, 说明, 当前值, 需求值)。
+
+    None 表示无法判定，只当提示；cur 供前端展示"当前 712 / 需 3"。
+    """
     kind = gate.get("kind") or ""
     need = _int(gate.get("need"))
     if kind == "favor":
         npc = _int(gate.get("npc")) or ctx["npc_id"]
         cur = ctx["favor"].get(npc, 0)
-        return cur >= need, "%s %d/%d" % (gate.get("attr_name") or "好感", cur, need)
+        return cur >= need, "%s %d/%d" % (gate.get("attr_name") or "好感", cur, need), cur, need
     if kind == "attr":
         name = gate.get("attr_name") or ""
         attr_id = ctx["name2attr"].get(name)
         if attr_id:
             cur = ctx["attrs"].get(str(attr_id), 0)
-            return cur >= need, "%s %d/%d" % (name, cur, need)
-        return None, ""
+            return cur >= need, "%s %d/%d" % (name, cur, need), cur, need
+        return None, "", 0, need
     if kind == "money":
         cur = ctx["money"]
-        return cur >= need, "灵石 %d/%d" % (cur, need)
+        return cur >= need, "灵石 %d/%d" % (cur, need), cur, need
     if kind in ("realm", "phase", "layer"):
         cur = ctx["layer"]
-        return cur >= need, "修炼层数 %d/%d" % (cur, need)
-    return None, ""
+        return cur >= need, "修炼层数 %d/%d" % (cur, need), cur, need
+    return None, "", 0, need
 
 
 def _is_done(code):
@@ -152,7 +158,7 @@ def _status_of(quest, code, ctx):
     for gate in quest.get("gates") or []:
         if not gate:
             continue
-        ok, desc = _eval_gate(gate, ctx)
+        ok, desc, _cur, _need = _eval_gate(gate, ctx)
         if desc:
             hints.append(desc)
         if ok is False:
@@ -161,7 +167,7 @@ def _status_of(quest, code, ctx):
     for option in quest.get("options") or []:
         gate = option.get("gate")
         if gate:
-            ok, desc = _eval_gate(gate, ctx)
+            ok, desc, _cur, _need = _eval_gate(gate, ctx)
             if desc:
                 hints.append(desc)
             if ok is False:
@@ -191,7 +197,7 @@ def _status_of(quest, code, ctx):
                 or names.get(chosen[0], ("任务 %s" % chosen[0]))
             return "未选此分支", "unpicked", "已选择「%s」" % cname, hints
         if not fork_reached:
-            return "未开始", "notstarted", "还没走到这个分叉点", hints
+            return "未开始", "notstarted", "前置剧情还没走到", hints
         if gate_ok:
             return "可接取", "ready", "分叉点已到达，可选择此分支", hints
         return "未解锁", "locked", "；".join(fails) or "条件不足", hints
@@ -202,6 +208,119 @@ def _status_of(quest, code, ctx):
     if not prev_done:
         return "未开始", "notstarted", "；".join(fails), hints
     return "未解锁", "locked", "；".join(fails) or "条件不足", hints
+
+
+def _remaining(quests, ctx, base, done):
+    """把"还差什么"翻译成玩家能直接行动的清单。
+
+    四类剩余（可接取 / 进行中 / 未开始 / 差条件）+ 按分支组汇总的"当时选了另一条路"。
+    分支未选不算漏做，所以单独成组、不并入 left。
+    """
+    names = ctx.get("_names") or {}
+    active = ctx.get("_active") or set()
+
+    def qname(qid):
+        return names.get(qid) or ("任务 %s" % qid)
+
+    def entry(quest):
+        reason = ""
+        if quest["status_cls"] in ("notstarted", "locked"):
+            parts = []
+            prev = quest["prev"]
+            if prev and prev not in active:
+                parts.append("前置「%s」未完成" % qname(prev))
+            for check in quest.get("gate_checks") or []:
+                if check.get("ok") is False:
+                    text = check.get("text") or check.get("desc") or "附加条件"
+                    parts.append("条件：%s（当前 %s）" % (text, check.get("cur")))
+            reason = "；".join(parts) or quest.get("fail_text") or "继续推进前置剧情"
+        return {"id": quest["id"], "name": quest["name"], "depth": quest["depth"],
+                "status_cls": quest["status_cls"], "status": quest["status"], "reason": reason}
+
+    buckets = {"ready": [], "doing": [], "notstarted": [], "locked": []}
+    for quest in quests:
+        bucket = buckets.get(quest["status_cls"])
+        if bucket is not None:
+            bucket.append(entry(quest))
+    left = sum(len(items) for items in buckets.values())
+
+    by_id = {quest["id"]: quest for quest in quests}
+    order, grouped = [], {}
+    for quest in quests:
+        key = quest["branch_key"]
+        if quest["status_cls"] != "unpicked" or not key:
+            continue
+        if key not in grouped:
+            grouped[key] = []
+            order.append(key)
+        grouped[key].append(quest)
+
+    choices = []
+    for key in order:
+        members = [by_id[m] for m in (ctx.get("_branch_members") or {}).get(key, []) if m in by_id]
+        if not members:
+            members = grouped[key]
+        parent = _int((ctx.get("_branch_parent") or {}).get(key, 0)) \
+            or (members[0]["prev"] if members else 0)
+        chosen, skipped = [], []
+        for member in members:
+            label = (ctx.get("_option_by_target") or {}).get((parent, member["id"])) or member["name"]
+            item = {"id": member["id"], "name": member["name"], "label": label}
+            if member["status_cls"] in ("done", "doing"):
+                chosen.append(item)
+            elif member["status_cls"] == "unpicked":
+                skipped.append(item)
+        if not skipped:
+            continue
+        picked_txt = "".join("「%s」" % c["label"] for c in chosen) or "另一条"
+        skipped_txt = "".join("「%s」" % s["label"] for s in skipped)
+        parent_name = qname(parent) if parent else ""
+        rule = "二选一" if len(members) == 2 else ("%d 选 1" % len(members))
+        # 流水型分支（f:）没有可跳转的父任务，用"同一段剧情"表述，避免出现"分叉点"空话。
+        where = "在「%s」%s" % (parent_name, rule) if parent_name else ("同一段剧情%s" % rule)
+        choices.append({
+            "key": key, "parent_id": parent, "parent_name": parent_name or "同一段剧情",
+            "member_count": len(members), "chosen": chosen, "skipped": skipped,
+            "depth": by_id[parent]["depth"] if parent in by_id
+                     else (members[0]["depth"] if members else 1),
+            "text": "%s：你选了%s，未选%s" % (where, picked_txt, skipped_txt),
+            "note": "选了另一条路，这条不会再出现，也不算漏做",
+        })
+
+    if left:
+        brief = "还差 " + "、".join(
+            "%d 个%s" % (len(buckets[cls]), label)
+            for cls, label in (("ready", "可接取"), ("doing", "进行中"),
+                               ("notstarted", "未开始"), ("locked", "差条件"))
+            if buckets[cls])
+    else:
+        brief = "已走完"
+    return {
+        "left": left, "done": left == 0, "brief": brief,
+        "headline": "已完成 %d/%d · %s" % (done, base, brief),
+        "ready": buckets["ready"], "doing": buckets["doing"],
+        "notstarted": buckets["notstarted"], "locked": buckets["locked"],
+        "choices": choices,
+        "choice_note": "这些是当时选了另一条路的分支，不会再出现，也不算漏做。",
+    }
+
+
+def _rings(quests):
+    """每环的剩余数：给环进度轴标"这一环还剩几个"。"""
+    if not quests:
+        return []
+    rings = []
+    for depth in range(1, max(q["depth"] for q in quests) + 1):
+        here = [q for q in quests if q["depth"] == depth]
+        rings.append({
+            "depth": depth, "total": len(here),
+            "done": sum(1 for q in here if q["done"]),
+            "left": sum(1 for q in here if q["status_cls"] in ("ready", "doing", "notstarted", "locked")),
+            "ready": sum(1 for q in here if q["status_cls"] == "ready"),
+            "unpicked": sum(1 for q in here if q["status_cls"] == "unpicked"),
+            "branch": any(q["branch"] for q in here),
+        })
+    return rings
 
 
 def scan(obj, meta_obj, state=None):
@@ -250,6 +369,25 @@ def scan(obj, meta_obj, state=None):
             item = saved.get(qid) or {}
             code = _int(item.get("state"), 0)
             label, cls, fail_text, hints = _status_of(quest, code, ctx)
+            # 门槛对比（当前值 / 需求值），供节点详情直接告诉玩家"差多少"。
+            gate_checks = []
+            for gate in quest.get("gates") or []:
+                if not gate:
+                    continue
+                ok, desc, cur, need = _eval_gate(gate, ctx)
+                gate_checks.append({"text": gate.get("text") or "", "kind": gate.get("kind") or "",
+                                    "need": need, "cur": cur, "desc": desc, "ok": ok})
+            options = []
+            for option in quest.get("options") or []:
+                if not option:
+                    continue
+                check = None
+                gate = option.get("gate")
+                if gate:
+                    ok, desc, cur, need = _eval_gate(gate, ctx)
+                    check = {"need": need, "cur": cur, "desc": desc, "ok": ok}
+                options.append({"text": option.get("text") or "选择",
+                                "to": option.get("to") or [], "gate": gate, "check": check})
             quests.append({
                 "id": qid,
                 "name": quest.get("name") or ("红尘 %s" % qid),
@@ -263,7 +401,8 @@ def scan(obj, meta_obj, state=None):
                 "hidden": bool(quest.get("hidden")),
                 "giver": quest.get("giver"),
                 "gates": quest.get("gates") or [],
-                "options": quest.get("options") or [],
+                "gate_checks": gate_checks,
+                "options": options,
                 "state": code,
                 "accepted": bool(item),
                 "accept_time": _int(item.get("acceptTime")),
@@ -285,6 +424,7 @@ def scan(obj, meta_obj, state=None):
         # 完成度分母剔除因分支选择放弃的任务，二选一不再算漏做。
         base = total - unpicked
         pct = int(round(done * 100 / base)) if base else 0
+        remaining = _remaining(quests, ctx, base, done)
         lines.append({
             "group": line.get("group") or "",
             "name": line.get("name") or "",
@@ -295,9 +435,12 @@ def scan(obj, meta_obj, state=None):
             "roots": line.get("roots") or [],
             "edges": line.get("edges") or [],
             "branches": line.get("branches") or [],
+            "rings": _rings(quests),
+            "remaining": remaining,
             "progress": {"total": total, "base": base, "done": done, "doing": doing,
                          "ready": ready, "notstarted": notstarted, "locked": locked,
-                         "unpicked": unpicked, "missed": unpicked, "pct": pct},
+                         "unpicked": unpicked, "missed": unpicked, "pct": pct,
+                         "left": remaining["left"], "headline": remaining["headline"]},
         })
 
     stats = {"lines": len(lines),
@@ -332,7 +475,7 @@ def summary(module):
     rows = (module.get("rows") or {}) if isinstance(module, dict) else {}
     stats = rows.get("stats") or {}
     return ("红尘：%d 条角色线 / %d 个任务，已完成 %d，进行中 %d，可接取 %d，"
-            "未开始 %d，未解锁 %d，未选分支 %d（不计完成度）" % (
+            "未开始 %d，未解锁 %d，分支选了另一条路 %d（不算漏做）" % (
                 stats.get("lines", 0), stats.get("quests", 0), stats.get("done", 0),
                 stats.get("doing", 0), stats.get("ready", 0), stats.get("notstarted", 0),
                 stats.get("locked", 0), stats.get("unpicked", 0)))
