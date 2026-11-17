@@ -118,6 +118,26 @@ def _persona_desc(value):
     return text.strip()
 
 
+def _sect_regions(tables, sects):
+    """门派 → 常驻地区：行为空间映射里门派广场所在空间的 region。
+
+    配置只给到"门派驻地"这一级，没有逐人住处，所以只作为不在存档里的 NPC 的兜底提示。
+    """
+    spaces = build_spaces(tables)
+    out = {}
+    for row in _rows(tables.get("tbnpcbehaviorspacemapping")):
+        if not isinstance(row, dict):
+            continue
+        sect_id = _int(row.get("sect_id"))
+        if not sect_id:
+            continue
+        region = (spaces.get(str(row.get("space_id"))) or {}).get("region") or ""
+        name = sects.get(str(sect_id)) or ""
+        if region and name and name not in out:
+            out[name] = region
+    return out
+
+
 def _first_text(value, limit=160):
     text = _plain(value)
     return text if len(text) <= limit else text[:limit] + "…"
@@ -215,6 +235,7 @@ def build(tables):
         "realms": realms, "sects": sects, "races": races,
         "elements": elements, "talents": talents,
         "spaces": space_index,
+        "sect_regions": _sect_regions(tables, sects),
     }
 
     # tier_pack 用 enumerate 编号，匹配时也需按 enumerate 找 id
@@ -235,10 +256,8 @@ def build(tables):
         if not isinstance(row, dict) or row.get("id") is None:
             continue
         npc_id = _int(row.get("id"))
-        name = _text(row.get("npcName"))
-        # id<0 或"匿名 NPC"是配置占位，玩家永远遇不到，不进图鉴
-        if npc_id <= 0 or not name or name.startswith("匿名"):
-            continue
+        name = _text(row.get("npcName")) or ("匿名 NPC %s" % npc_id)
+        # 占位 NPC 留在快照里参与统计（图鉴 1686），页面加载时过滤掉不展示
         evil = _int(row.get("propEvil"))
         repute = _int(row.get("propRepute"))
         charm = _int(row.get("propCharm"))

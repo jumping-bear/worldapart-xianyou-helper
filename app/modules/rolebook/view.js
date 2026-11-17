@@ -1,10 +1,10 @@
 /* 人物图鉴：以"现在在哪、他和我什么关系、能对他做什么"为主线的 NPC 档案墙。 */
 (function () {
   'use strict';
-  var STORE_KEY = 'worldapart.rolebook.filters.v3';
+  var STORE_KEY = 'worldapart.rolebook.filters.v4';
   var DEFAULTS = {
     q: '', rel: '', evil: '', realm: '', sect: '', personality: '',
-    met: 0, dao: 0, friend: 0, housed: 0, evilneg: 0,
+    present: 0, met: 0, dao: 0, friend: 0, housed: 0, evilneg: 0,
     spar: 0, steal: 0, merchant: 0, attackable: 0, memoria: 0, talent: 0,
     sort: 'relevance'
   };
@@ -30,10 +30,10 @@
     return '<span class="rolebook-avatar ' + (cls || '') + '"><span>' + esc(ch) + '</span></span>';
   }
 
-  // 卡片只保留玩家在做决策时会用到的标记，不再挂"可击杀/安全目标"
+  // 卡片只保留玩家做决策会用到的能力标记
   function abilityIcons(c) {
     var out = [];
-    if (c.met) out.push('<span class="rolebook-ico rolebook-ico-met" title="已结识">识</span>');
+    if (c.met) out.push('<span class="rolebook-ico rolebook-ico-met" title="有交情">识</span>');
     if (c.housed) out.push('<span class="rolebook-ico rolebook-ico-house" title="已入住仙居">宅</span>');
     if (c.dao) out.push('<span class="rolebook-ico rolebook-ico-dao" title="道侣">道</span>');
     if (c.spar) out.push('<span class="rolebook-ico rolebook-ico-spar" title="可切磋">切</span>');
@@ -75,11 +75,21 @@
     return t ? (t.desc || '') : '';
   }
 
-  function placeText(c) {
-    if (c.gone) return '已退隐 · 不在当前世界';
-    if (c.loc) return c.loc;
-    return c.met ? '行踪不明' : '尚未结识';
+  // 位置两层：主=空间名，副=完整路径/地区。不在存档里的只给配置常驻地区。
+  function placeLines(c) {
+    if (c.present && !c.gone) {
+      return { main: c.loc_name || c.loc, sub: c.loc, off: false };
+    }
+    if (c.present && c.gone) {
+      return { main: '已退隐', sub: '不在当前世界', off: true };
+    }
+    return {
+      main: '尚未在当前世界出现',
+      sub: c.config_region ? ('常驻地区（配置）：' + c.config_region) : '暂无实时位置',
+      off: true
+    };
   }
+  function placeText(c) { return placeLines(c).main; }
 
   // 相关性权重：与我有关的人排在最前
   function relevance(c) {
@@ -95,7 +105,8 @@
   function match(c) {
     if (filters.q) {
       var hay = (c.name + ' ' + c.title + ' ' + c.sect + ' ' + c.personality + ' ' + c.realm +
-        ' ' + c.loc + ' ' + c.region + ' ' + (c.roles || []).join(' ') + ' ' + c.id).toLowerCase();
+        ' ' + c.loc + ' ' + c.region + ' ' + c.config_region + ' ' +
+        (c.roles || []).join(' ') + ' ' + c.id).toLowerCase();
       if (hay.indexOf(filters.q.toLowerCase()) < 0) return false;
     }
     if (filters.evil === 'bad' && !(c.evil < 0)) return false;
@@ -104,6 +115,7 @@
     if (filters.realm && c.realm_short !== filters.realm && c.realm !== filters.realm) return false;
     if (filters.sect && c.sect !== filters.sect) return false;
     if (filters.personality && c.personality !== filters.personality) return false;
+    if (filters.present && !c.present) return false;
     if (filters.met && !c.met) return false;
     if (filters.dao && !c.dao) return false;
     if (filters.friend && (c.roles || []).indexOf('朋友') < 0) return false;
@@ -116,8 +128,8 @@
     if (filters.memoria && !c.memoria) return false;
     if (filters.talent && !(c.talents || []).length) return false;
     if (filters.rel) {
-      if (filters.rel === 'met') { if (!c.met) return false; }
-      else if (filters.rel === 'related') { if (!c.met && !c.housed) return false; }
+      if (filters.rel === 'present') { if (!c.present) return false; }
+      else if (filters.rel === 'met') { if (!c.met) return false; }
       else if ((c.roles || []).indexOf(filters.rel) < 0) return false;
     }
     return true;
@@ -140,9 +152,10 @@
 
   function cardHtml(c, meta, map) {
     var cls = evilClass(c.evil);
-    var badges = roleTags(c) || (c.met ? '<span class="rolebook-role-none">已结识 · 暂无关系</span>'
-                                     : '<span class="rolebook-role-none">路人 · 尚未结识</span>');
-    var locCls = c.loc && c.met && !c.gone ? '' : ' rolebook-card-place-off';
+    var badges = roleTags(c) || (c.met ? '<span class="rolebook-role-none">有交情 · 暂无关系</span>'
+                                     : (c.present ? '<span class="rolebook-role-none">在世 · 尚未结识</span>'
+                                                  : '<span class="rolebook-role-none">未在当前世界</span>'));
+    var place = placeLines(c);
     return '<article class="rolebook-card rolebook-card-' + cls + '" data-npc="' + c.id + '" tabindex="0">' +
       '<div class="rolebook-card-top">' + avatarHtml(c, '', map) +
         '<div class="rolebook-card-id">' +
@@ -150,8 +163,10 @@
           '<div class="rolebook-card-title">' + esc(c.title || c.sect) + '</div>' +
           '<div class="rolebook-card-realm">' + esc(c.realm) + '</div>' +
         '</div></div>' +
-      '<div class="rolebook-card-place' + locCls + '" title="当前所在">' +
-        '<span class="rolebook-pin">⌖</span><span class="rolebook-place-text">' + esc(placeText(c)) + '</span></div>' +
+      '<div class="rolebook-card-place' + (place.off ? ' rolebook-card-place-off' : '') + '" title="' + esc(place.sub) + '">' +
+        '<span class="rolebook-pin">⌖</span>' +
+        '<span class="rolebook-place-box"><span class="rolebook-place-main">' + esc(place.main) + '</span>' +
+        '<span class="rolebook-place-sub">' + esc(place.sub) + '</span></span></div>' +
       '<div class="rolebook-card-badges">' + badges + '</div>' +
       evilBand(c) +
       '<div class="rolebook-card-meta">' +
@@ -165,7 +180,7 @@
   }
 
   var CHIPS = [
-    ['met', '已结识'], ['dao', '道侣'], ['friend', '朋友'], ['housed', '已入住'],
+    ['present', '在世'], ['met', '有交情'], ['dao', '道侣'], ['friend', '朋友'], ['housed', '已入住'],
     ['evilneg', '负善恶'], ['spar', '可切磋'], ['steal', '可偷窃'],
     ['merchant', '商人'], ['attackable', '可攻击'], ['memoria', '有留影'], ['talent', '固定天赋']
   ];
@@ -173,8 +188,10 @@
   function updateCount(rows, total) {
     var info = $('rolebook-count');
     if (!info) return;
+    var present = rows.filter(function (c) { return c.present; }).length;
     var met = rows.filter(function (c) { return c.met; }).length;
-    info.innerHTML = '命中 <b>' + rows.length + '</b> / ' + total + ' 位 · 其中已结识 <b>' + met + '</b> 位';
+    info.innerHTML = '命中 <b>' + rows.length + '</b> / ' + total + ' 位 · 在世 <b>' + present +
+      '</b> 位 · 有交情 <b>' + met + '</b> 位';
   }
 
   function renderCards(m, reset) {
@@ -232,28 +249,25 @@
   }
 
   function locationHtml(c) {
-    var main;
-    if (c.loc && c.met && !c.gone) {
-      main = '<div class="rolebook-place-path">' + esc(c.loc) + '</div>' +
-        '<small>按存档实时空间定位，可直接去这里找 ' + esc(c.name) + '</small>';
-    } else if (c.gone) {
-      main = '<div class="rolebook-place-path rolebook-place-unknown">已退隐</div>' +
-        '<small>寿元已尽或已退隐，当前世界找不到这个人</small>';
-    } else if (c.met) {
-      main = '<div class="rolebook-place-path rolebook-place-unknown">行踪不明</div>' +
-        '<small>存档里没有这个人的空间记录</small>';
+    var place = placeLines(c);
+    var mainCls = place.off ? ' rolebook-place-unknown' : '';
+    var note;
+    if (c.present && !c.gone) {
+      note = '当前所在（存档实时）· 地区 ' + (c.region || '—') + ' · 可直接去这里找 ' + c.name;
+    } else if (c.present && c.gone) {
+      note = '寿元已尽或已退隐，当前世界找不到这个人';
     } else {
-      main = '<div class="rolebook-place-path rolebook-place-unknown">尚未结识</div>' +
-        '<small>还没在游戏里遇到，先记住名字，见到再回头看</small>';
+      note = '不在当前存档里，可能尚未生成或已退隐；配置只给到门派驻地这一级，仅供参考';
     }
+    var live = c.present && !c.gone
+      ? '<div class="rolebook-place-name">' + esc(c.loc_name || c.loc) + '</div>' +
+        '<div class="rolebook-place-path">' + esc(c.loc) + '</div>'
+      : '<div class="rolebook-place-name' + mainCls + '">' + esc(place.main) + '</div>' +
+        '<div class="rolebook-place-path rolebook-place-unknown">' + esc(place.sub) + '</div>';
     return '<div class="rolebook-place-card">' +
-      '<div class="rolebook-place-main"><span class="rolebook-place-ico">⌖</span>' +
-        '<div><b>当前所在</b>' + main + '</div></div>' +
-      '<div class="rolebook-place-flags">' +
-        (c.housed ? '<span class="rolebook-place-on">已入住仙居</span>'
-                  : (c.housing_open ? '<span class="rolebook-place-off">可邀请入住仙居</span>' : '')) +
-        (c.sect && c.sect !== '无门无派' ? '<span class="rolebook-place-sect">' + esc(c.sect) + '</span>' : '') +
-      '</div></div>';
+      '<div class="rolebook-place-head"><span class="rolebook-place-ico">⌖</span>' +
+        '<div class="rolebook-place-body"><b>当前所在</b>' + live +
+        '<small>' + esc(note) + '</small></div></div></div>';
   }
 
   function attackHtml(c, meta) {
@@ -299,6 +313,13 @@
       '<div class="rolebook-stages">' + bars + '</div>';
   }
 
+  function housingHtml(c) {
+    var text = c.housed ? '已入住你的仙居'
+      : (c.housing_open ? '未入住 · 仙居已开，可邀请' : '未入住');
+    return '<div class="rolebook-inline"><span>住处</span>' +
+      '<span class="rolebook-tag' + (c.housed ? ' rolebook-tag-gold' : '') + '">' + esc(text) + '</span></div>';
+  }
+
   function actsHtml(c) {
     var items = [
       ['可结道侣', c.dao_capable], ['可切磋', c.spar],
@@ -308,8 +329,6 @@
       return '<span class="rolebook-act' + (p[1] ? ' on' : ' off') + '">' +
         p[0] + ' ' + (p[1] ? '✓' : '×') + '</span>';
     }).join('') + '</div>' +
-      (c.housed ? '<p class="rolebook-note">已入住你的仙居。</p>'
-                : (c.housing_open ? '<p class="rolebook-note">仙居已开，可邀请入住。</p>' : '')) +
       (!c.killable ? '<p class="rolebook-note">配置上不可攻击（剧情或寿元保护角色）。</p>' : '');
   }
 
@@ -340,7 +359,7 @@
       ((c.talents || []).length ? '<div class="rolebook-inline"><span>固定天赋</span>' +
         c.talents.map(function (t) { return '<span class="rolebook-tag rolebook-tag-gold">' + esc(t) + '</span>'; }).join('') +
         '</div>' : ''));
-    html += section('我和他', relationHtml(c, meta) + favorHtml(c, meta));
+    html += section('我和他', relationHtml(c, meta) + favorHtml(c, meta) + housingHtml(c));
     html += section('能做什么', actsHtml(c));
     html += section('善恶与后果',
       '<div class="rolebook-duo">' +
@@ -378,8 +397,8 @@
   function statsHtml(m) {
     var live = m.live_stats || {}, counts = (m.player || {}).counts || {}, stats = m.stats || {};
     var items = [
-      ['已结识', live.met || 0], ['道侣', counts.dao || 0], ['朋友', counts.friend || 0],
-      ['敌仇', counts.enemy || 0], ['已入住', counts.housed || 0], ['负善恶', live.evil_met || 0]
+      ['道侣', counts.dao || 0], ['朋友', counts.friend || 0], ['敌仇', counts.enemy || 0],
+      ['已入住', counts.housed || 0], ['负善恶', live.evil_met || 0]
     ];
     return '<div class="rolebook-player"><div class="rolebook-player-stats">' +
       items.map(function (x) {
@@ -453,11 +472,12 @@
     view.innerHTML = sourceHtml(m) +
       '<div class="rolebook-hero">' +
         '<div class="rolebook-hero-text"><h2>人物图鉴 · NPC 档案</h2>' +
-        '<p>先看他在哪，再看他是谁、和你什么关系、能对他做什么。' +
-        '位置来自存档里的实时空间，不是配置推断的常驻地。</p></div>' +
+        '<p><b>在世</b>是存档里真实存在、能定位的人；<b>有交情</b>才是打过交道的那一小撮。' +
+        '位置来自存档实时空间，不在当前世界的只给配置常驻地区。</p></div>' +
         '<div class="rolebook-hero-figures">' +
-          '<div><b>' + esc(stats.total || 0) + '</b><span>可遇 NPC</span></div>' +
-          '<div><b>' + esc((m.live_stats || {}).met || 0) + '</b><span>已结识</span></div>' +
+          '<div><b>' + esc(stats.total || 0) + '</b><span>图鉴</span></div>' +
+          '<div><b>' + esc((m.live_stats || {}).present || 0) + '</b><span>在世</span></div>' +
+          '<div><b>' + esc((m.live_stats || {}).met || 0) + '</b><span>有交情</span></div>' +
         '</div>' +
       '</div>' +
       statsHtml(m) +
@@ -466,7 +486,7 @@
           '<label class="rolebook-search"><span>查找 NPC</span>' +
             '<input id="rolebook-q" placeholder="名字 / 称号 / 门派 / 境界 / 地点 / 关系" value="' + esc(filters.q) + '"></label>' +
           '<label class="rolebook-field"><span>范围</span><select id="rolebook-rel">' +
-            [['', '全部 NPC'], ['met', '已结识'], ['related', '与我相关'], ['师尊', '师尊'], ['弟子', '弟子'],
+            [['', '全部 NPC'], ['present', '在世（可定位）'], ['met', '有交情'], ['师尊', '师尊'], ['弟子', '弟子'],
              ['道侣', '道侣'], ['朋友', '朋友'], ['仇敌', '仇敌'], ['已故', '已故']]
               .map(function (p) {
                 return '<option value="' + p[0] + '"' + (filters.rel === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';

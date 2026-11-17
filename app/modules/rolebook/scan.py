@@ -103,7 +103,7 @@ def scan(obj, meta_obj, state=None):
         if isinstance(card, dict) and card.get("id") is not None:
             name_of[_int(card["id"])] = card.get("name") or str(card["id"])
 
-    # 好感/亲密 + 实时位置：只取存档里的 NPC 实例（未结识的也在，位置仅对已结识开放）
+    # 好感/亲密 + 实时位置：位置按"在存档里"记录，是否展示不看交情
     favor = {}
     locs = {}
     records = (obj or {}).get("npcs")
@@ -183,7 +183,7 @@ def scan(obj, meta_obj, state=None):
     for nid in deceased:
         put(nid, "deceased", deceased - {nid})
 
-    # 已结识：有过好感、或存档关系表/仙居里出现过。存档里 1007 个 NPC 实例全有位置，
+    # 有交情：有过好感、或存档关系表/仙居里出现过。存档里 1007 个 NPC 实例全有位置，
     # 但没打过交道的人不该在图鉴里被当成"认识"，所以不能拿 npcs 表本身当结识依据。
     met_ids = {nid for nid, value in favor.items() if value > 0}
     met_ids |= dao_ids | set(rel_map) | residents
@@ -252,6 +252,9 @@ def scan(obj, meta_obj, state=None):
     stats = {
         "met": len(met_ids), "dao": len(dao_ids), "tracked": len(states),
         "housed": len(residents), "friend": len(friends), "enemy": len(enemies),
+        # 在世：存档里有实例、能查到实时空间的人（不等于有交情）
+        "present": len(set(locs) & set(name_of)),
+        "absent": len(set(name_of) - set(locs)),
     }
     return {"states": states, "locs": locs, "stats": stats, "player": player_state}
 
@@ -270,8 +273,10 @@ def enrich(module, meta_obj, state=None):
     tiers = meta.get("intimacy_tiers") or []
     scanned = module.get("rows") if isinstance(module.get("rows"), dict) else {}
     states = scanned.get("states") or {}
+    locs = scanned.get("locs") or {}
     live_stats = scanned.get("stats") or {}
     player = scanned.get("player") or {}
+    sect_regions = meta.get("sect_regions") or {}
 
     npcs = []
     avatar_map = {}
@@ -283,19 +288,22 @@ def enrich(module, meta_obj, state=None):
         if npc_id <= 0 or str(npc.get("name") or "").startswith("匿名"):
             continue
         live = states.get(str(npc_id)) or {}
+        place = locs.get(npc_id) or {}
         favor = _int(live.get("favor"), 0)
         npc["favor"] = favor
-        npc["met"] = bool(live.get("met"))
+        npc["met"] = bool(live.get("met"))          # 有交情（不是"在世"）
         npc["dao"] = bool(live.get("dao"))
         npc["roles"] = live.get("roles") or []
         npc["rel_detail"] = live.get("rel_detail") or {}
         npc["housed"] = bool(live.get("housed"))
         npc["housing_open"] = bool(live.get("housing_open"))
-        # 当前所在只对已结识的人开放；未结识显示"尚未结识"
-        npc["loc"] = live.get("loc") or ""
-        npc["loc_name"] = live.get("loc_name") or ""
-        npc["region"] = live.get("region") or ""
-        npc["gone"] = bool(live.get("gone"))
+        # 位置按"存档里有实例"判定；没交情但有实时位置的也能定位
+        npc["present"] = bool(place)
+        npc["loc"] = place.get("path") or ""
+        npc["loc_name"] = place.get("name") or ""
+        npc["region"] = place.get("region") or ""
+        npc["gone"] = bool(place.get("gone"))
+        npc["config_region"] = sect_regions.get(npc.get("sect") or "") or ""
         tier = _intimacy_tier(tiers, favor) or {}
         npc["intimacy_name"] = live.get("tier") or tier.get("name") or ""
         idx = live.get("tier_index", -1)
@@ -325,9 +333,10 @@ def enrich(module, meta_obj, state=None):
 
 def summary(module):
     stats = module.get("stats") or {}
+    live = module.get("live_stats") or {}
     player = module.get("player") or {}
     counts = player.get("counts") or {}
-    return ("人物图鉴：%d 位 NPC，%d 位已结识，师尊/弟子 %s/%s、道侣 %s、朋友 %s、入住 %s 位" % (
-        stats.get("total", 0), (module.get("live_stats") or {}).get("met", 0),
+    return ("人物图鉴：图鉴 %d 位，在世 %d 位，有交情 %d 位；师尊/弟子 %s/%s、道侣 %s、朋友 %s、入住 %s 位" % (
+        stats.get("total", 0), live.get("present", 0), live.get("met", 0),
         counts.get("master", 0), counts.get("disciple", 0), counts.get("dao", 0),
         counts.get("friend", 0), counts.get("housed", 0)))
