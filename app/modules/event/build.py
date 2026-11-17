@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """奇遇：配置表 → 模块快照（自 meta_update.py 原样搬入）。"""
 import difflib
+import json
+import os
 import re
 
 from meta_update import (
@@ -89,16 +91,47 @@ def _polish_path_step(step):
     return step.strip()
 
 
-_PATH_OVERRIDES = {
-    5120901: ["首次滴血献祭，且本次未引出祭坛里的血魔"],
-    5120906: ["祭坛已被使用过，再次滴血也不会再有回应"],
-    5160903: ["逐幅看完展览中的所有画卷"],
-}
+# 达成路径的人工注解放在数据文件里（notes.json），游戏更新只改 JSON、不改代码：
+# 每条按结局标题（首选）或结局 id 关联，都对不上就跳过、回退到策划备注里的「路径：」标注。
+NOTES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notes.json")
 
 
-def _ending_path(ending_id, note):
-    override = _PATH_OVERRIDES.get(_int(ending_id))
-    return list(override) if override else _designer_path(note)
+def _load_path_notes():
+    try:
+        with open(NOTES_FILE, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return []
+    notes = data.get("notes") if isinstance(data, dict) else data
+    out = []
+    for note in notes or []:
+        if not isinstance(note, dict):
+            continue
+        title = _text(note.get("ending_title") or note.get("title")).strip()
+        ending_id = _int(note.get("ending_id") or note.get("id"))
+        path = note.get("path") or []
+        if isinstance(path, str):
+            path = [path]
+        path = [str(step).strip() for step in path if str(step).strip()]
+        if not title and not ending_id:
+            continue
+        out.append({"id": ending_id, "title": title, "path": path})
+    return out
+
+
+PATH_NOTES = _load_path_notes()
+
+
+def _ending_path(ending_id, title, note):
+    """结局达成路径：优先 notes.json 人工注解（标题优先、id 兜底），对不上回退策划备注。"""
+    matched = next((item for item in PATH_NOTES
+                    if item["title"] and _text(title).strip() == item["title"]), None)
+    if matched is None:
+        matched = next((item for item in PATH_NOTES
+                        if item["id"] and _int(ending_id) == item["id"]), None)
+    if matched:
+        return list(matched["path"])
+    return _designer_path(note)
 
 
 def _designer_path(note):
@@ -753,12 +786,12 @@ def build_event(tables):
     parents = {}
     for quest_id, name in names.items():
         parent = 0
+        # 父子奇遇按 tbquest 名称的「母名·分支名」前缀归并；tbrandomeventending 没有显式
+        # 父事件字段（stage_quest_id 多为空），不依赖 id 步长这类魔法数。
         if "·" in name:
             head = name.split("·", 1)[0].strip()
             parent = next((other for other, other_name in names.items()
                            if other != quest_id and other_name == head), 0)
-        if not parent and quest_id - 5800 in events:
-            parent = quest_id - 5800
         parents[quest_id] = parent
 
     prefixes = {quest_id // 100 for quest_id in events}
@@ -824,7 +857,7 @@ def build_event(tables):
             drop_id = _int(row.get("reward_drop_id"))
             rewards = ending_rewards(drop_id) if drop_id else []
             grade = _int(row.get("grade"))
-            path = _ending_path(row.get("id"), row.get("designer_note"))
+            path = _ending_path(row.get("id"), row.get("title"), row.get("designer_note"))
             path = _align_path(path, tree, attrs, items, currency)
             endings.append({
                 "id": _int(row.get("id")), "title": _plain(row.get("title"))
