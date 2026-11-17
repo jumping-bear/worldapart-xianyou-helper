@@ -1,4 +1,4 @@
-/* 炼器：页面渲染（自 output.py 原样搬入）。 */
+/* 炼器：页面渲染。分区锚点导航 + 主次分明的卡片分区，器胚目录按境界/部位两级折叠。 */
 (function(){
 const FORGE_ELEM_COLORS=['#8b93a1','#e6dcae','#8ccf92','#7fc0ee','#ee9a86','#d8b273'];
 const FORGE_FILTER_KEY='worldapart.forge.filters.v1';
@@ -30,10 +30,18 @@ function initForge(){
   ['最高器契',st.best_score,st.best_tier_name||'—'],
   ['器胚库存',(st.embryo_total||0)+' 件',(st.embryos||[]).length+' 种'],
  ].map(([k,v,s])=>'<div class="card"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'<span> '+esc(s)+'</span></div></div>').join('');
- const embryoRows=(st.embryos||[]).map(e=>{
+ // 分区标题：卡片包裹，区块之间视觉分层
+ function fzone(id,title,sub,body){
+  return '<section class="fzone" id="'+id+'"><h2 class="fzone-head">'+esc(title)+'<span>'+esc(sub)+'</span></h2>'+body+'</section>';
+ }
+ // 我的器胚：有五行缺口的排最前并标「缺料」
+ const embryoMissing=e=>(e.need||[]).some(r=>r.gap>0);
+ const embryosSorted=(st.embryos||[]).slice().sort((a,b)=>(embryoMissing(b)?1:0)-(embryoMissing(a)?1:0)||Number(b.realm)-Number(a.realm)||Number(a.slot)-Number(b.slot)||Number(a.id)-Number(b.id));
+ const embryoRows=embryosSorted.map(e=>{
+  const missing=embryoMissing(e);
   const need=(e.need||[]).map(r=>esc(elem(r.e))+'×'+r.need+(r.gap?' <span class="fgap">缺 '+r.gap+'</span>':' <span class="fok">足</span>')).join(' · ');
   const wash=(e.effects||[]).map(x=>esc(elem(x.e))+' '+x.energy+' · '+esc(x.mat_name)+'×'+x.count).join('；')||'—';
-  return '<tr class="row"><td><div class="who">'+esc(e.name)+'</div><div class="bed">'+esc(e.realm_name)+' · '+esc(e.slot_name)+' · '+e.board+'×'+e.board+'</div></td>'+
+  return '<tr class="row'+(missing?' fmiss-row':'')+'"><td><div class="who">'+esc(e.name)+(missing?'<span class="badge fmiss">缺料</span>':'')+'</div><div class="bed">'+esc(e.realm_name)+' · '+esc(e.slot_name)+' · '+e.board+'×'+e.board+'</div></td>'+
    '<td style="width:56px">×'+e.count+'</td><td>'+need+'</td><td class="muted">'+wash+'</td><td style="width:84px">'+e.rec_total+' 灵性</td></tr>';
  }).join('');
  const pityRows=(st.pity||[]).map(p=>{
@@ -83,13 +91,29 @@ function initForge(){
    '<div class="fcol"><div class="fcol-t">四阶门槛</div>'+tierHtml+'</div>'+
    '</div></div></details>';
  }
+ function groupCatalog(list){
+  const byRealm={};
+  list.forEach(p=>{(byRealm[String(p.realm)]=byRealm[String(p.realm)]||[]).push(p)});
+  // 有筛选/搜索时自动展开命中分组；默认全部收起，避免几百件器胚一次性铺开
+  const activeFilter=state.realm!==''||state.slot!==''||state.q.trim()!=='';
+  return Object.keys(byRealm).sort((a,b)=>Number(b)-Number(a)).map(r=>{
+   const items=byRealm[r];
+   const bySlot={};
+   items.forEach(p=>{(bySlot[String(p.slot)]=bySlot[String(p.slot)]||[]).push(p)});
+   const slotHtml=Object.keys(bySlot).sort((a,b)=>Number(a)-Number(b)).map(s=>{
+    const protos=bySlot[s];
+    return '<div class="fgrp-slot"><div class="fgrp-slot-h">'+esc(slotName(s))+'<i>'+protos.length+'</i></div>'+protos.map(protoCard).join('')+'</div>';
+   }).join('');
+   return '<details class="fgrp"'+(activeFilter?' open':'')+'><summary>'+esc(realmName(r))+'<span class="fgrp-n">'+items.length+' 件</span></summary><div class="fgrp-body">'+slotHtml+'</div></details>';
+  }).join('');
+ }
  function renderList(){
   const q=state.q.trim();
   const list=(m.catalog||[]).filter(p=>(state.realm===''||String(p.realm)===state.realm)&&
    (state.slot===''||String(p.slot)===state.slot)&&
    (!q||p.name.includes(q)||(p.tiers||[]).some(t=>String(t.out_name||'').includes(q))));
   $('fgcount').textContent='筛选结果：'+list.length+' / '+(m.catalog||[]).length+' 件器胚';
-  $('fglist').innerHTML=list.map(protoCard).join('')||'<div class="empty">没有符合条件的器胚</div>';
+  $('fglist').innerHTML=groupCatalog(list)||'<div class="empty">没有符合条件的器胚</div>';
  }
  function renderRealmChips(){realmBox.innerHTML='<span class="chip-label">境界</span>'+[['','全部']].concat(realms.map(r=>[r,realmName(r)])).map(
    ([value,label])=>'<button class="chip'+(state.realm===value?' on':'')+'" data-realm="'+esc(value)+'">'+esc(label)+'</button>').join('');
@@ -97,18 +121,26 @@ function initForge(){
  function renderSlotChips(){slotBox.innerHTML='<span class="chip-label">部位</span>'+[['','全部']].concat(slots.map(s=>[s,slotName(s)])).map(
    ([value,label])=>'<button class="chip'+(state.slot===value?' on':'')+'" data-slot="'+esc(value)+'">'+esc(label)+'</button>').join('');
  }
- host.innerHTML=sourceHtml(m)+'<div class="cards">'+cards+'</div>'+
-  '<div class="forge-sec">我的器胚<span>按持有件数与五行缺口</span></div>'+
-  ((st.embryos||[]).length?'<table><thead><tr><th>器胚</th><th>数量</th><th>五行需求 / 缺口</th><th>洗练材料</th><th>推荐灵性</th></tr></thead><tbody>'+embryoRows+'</tbody></table>':'<div class="empty">背包里没有器胚</div>')+
-  '<div class="forge-sec">洗练保底<span>同境界、同品质法宝共享计数</span></div>'+
-  ((st.pity||[]).length?'<table><tbody>'+pityRows+'</tbody></table>':'<div class="empty">暂无洗练保底数据</div>')+
-  '<div class="forge-sec">全部器胚<span>门槛为该阶所需器契分数</span></div>'+
-  '<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找器胚 / 法宝</span><input id="fgq" placeholder="输入器胚或法宝名称"></label></div></div>'+
-  '<div class="chips" id="fgrealm"></div><div class="chips" id="fgslot"></div><div id="fgcount" class="result-info"></div><div id="fglist"></div>'+
-  '<div class="forge-sec">材料盘点<span>按五行统计件数与灵性</span></div>'+
-  '<div class="cards">'+elemCards+'</div>'+
-  ((st.materials||[]).length?'<table><thead><tr><th>材料</th><th>数量</th><th>灵性</th><th></th></tr></thead><tbody>'+matRows+'</tbody></table>':'<div class="empty">背包里没有炼器材料</div>')+
-  '<div class="forge-sec">我的法宝<span>器契即炼器分数，“未激活”为待洗练词条</span></div>'+artRows+
+ const navItems=[
+  ['fg-my-embryo','我的器胚',(st.embryos||[]).length],
+  ['fg-my-artifact','我的法宝',(st.artifacts||[]).length],
+  ['fg-catalog','全部器胚',(m.catalog||[]).length],
+  ['fg-materials','材料盘点',(st.materials||[]).length],
+  ['fg-pity','洗练保底',(st.pity||[]).length],
+ ];
+ const nav='<nav class="fnav">'+navItems.map(([id,label,n])=>'<a class="fnav-item" href="#'+id+'">'+esc(label)+'<i>'+n+'</i></a>').join('')+'</nav>';
+ const myEmbryoBody=(st.embryos||[]).length?'<table><thead><tr><th>器胚</th><th>数量</th><th>五行需求 / 缺口</th><th>洗练材料</th><th>推荐灵性</th></tr></thead><tbody>'+embryoRows+'</tbody></table>':'<div class="empty">背包里没有器胚</div>';
+ const myArtifactBody=artRows;
+ const catalogBody='<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找器胚 / 法宝</span><input id="fgq" placeholder="输入器胚或法宝名称"></label></div></div>'+
+  '<div class="chips" id="fgrealm"></div><div class="chips" id="fgslot"></div><div id="fgcount" class="result-info"></div><div id="fglist"></div>';
+ const materialsBody='<div class="cards">'+elemCards+'</div>'+((st.materials||[]).length?'<table><thead><tr><th>材料</th><th>数量</th><th>灵性</th><th></th></tr></thead><tbody>'+matRows+'</tbody></table>':'<div class="empty">背包里没有炼器材料</div>');
+ const pityBody=(st.pity||[]).length?'<table><tbody>'+pityRows+'</tbody></table>':'<div class="empty">暂无洗练保底数据</div>';
+ host.innerHTML=sourceHtml(m)+nav+'<div class="cards">'+cards+'</div>'+
+  fzone('fg-my-embryo','我的器胚','按五行缺口排序 · 缺料置顶',myEmbryoBody)+
+  fzone('fg-my-artifact','我的法宝','已炼成 · 器契分数 / 词条 / 洗练',myArtifactBody)+
+  fzone('fg-catalog','全部器胚','按境界 + 部位折叠 · 高境界在前',catalogBody)+
+  fzone('fg-materials','材料盘点','按五行统计件数与灵性',materialsBody)+
+  fzone('fg-pity','洗练保底','同境界、同品质法宝共享计数',pityBody)+
   '<div class="tip">五行需求按“该五行精粹需占几格”计算；缺口＝背包该五行材料总件数－需求格数，只作库存参考，实际摆盘还受封炉格与聚灵格影响。器契达到凡/玄/地/天四档门槛即对应阶，天阶最高。</div>';
  const realmBox=$('fgrealm'),slotBox=$('fgslot');
  $('fgq').value=state.q;
