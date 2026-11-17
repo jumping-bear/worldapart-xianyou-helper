@@ -32,6 +32,10 @@ def build_talent(tables):
             slots.append({
                 "slot_id": slot.get("slot_id"),
                 "required_npc_realm_id": slot.get("required_npc_realm_id", 0),
+                # fixed_talent_id 固定天赋；random_pool_group_id 随机池。两者用于
+                # 在 NPC 尚未出现在当前存档时，仍能从配置推断其固定天赋。
+                "fixed_talent_id": slot.get("fixed_talent_id", 0),
+                "random_pool_group_id": slot.get("random_pool_group_id", 0),
                 "unlock_conditions": conditions,
             })
         npcs[str(row["id"])] = {
