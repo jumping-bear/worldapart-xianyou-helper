@@ -70,6 +70,13 @@
 .hongchen-remain.is-fold .hongchen-remain-body{display:none}
 .hongchen-remain-body{margin-top:9px;display:flex;flex-direction:column;gap:8px}
 .hongchen-remain-sec{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+/* 可接取：永远排第一，用底色 + 金色徽标高亮，长清单里也能一眼看到 */
+.hongchen-remain-sec.is-ready{background:rgba(213,173,99,.09);border:1px solid rgba(213,173,99,.28);
+  border-radius:9px;padding:7px 9px}
+.hongchen-remain-sec.is-ready .hongchen-remain-t{color:#f0dcae;font-weight:600}
+.hongchen-remain-sec.is-ready .hongchen-remain-t .hongchen-dot{box-shadow:0 0 0 3px rgba(213,173,99,.18)}
+.hongchen-remain-flag{font-size:9.5px;font-weight:600;color:#1a1512;background:#d5ad63;
+  border-radius:20px;padding:1px 7px;white-space:nowrap}
 .hongchen-remain-t{flex:0 0 auto;display:flex;align-items:center;gap:6px;font-size:11px;color:#9aa3b2;
   white-space:nowrap;padding-top:3px}
 .hongchen-remain-t em{font-style:normal;color:#6f7787;font-variant-numeric:tabular-nums;margin-left:1px}
@@ -80,7 +87,8 @@
 .hongchen-remain-chip:hover{border-color:var(--hongchen-accent,#c9866b);background:#1d222b;transform:translateY(-1px)}
 .hongchen-remain-chip .hongchen-remain-ring{font-size:9.5px;color:#6f7787;border:1px solid #2a303b;
   border-radius:5px;padding:0 4px;white-space:nowrap}
-.hongchen-remain-chip.s-ready{border-left:3px solid #d5ad63}
+.hongchen-remain-chip.s-ready{border-left:3px solid #d5ad63;background:#241f16;border-color:#4a3c22;color:#f3e7c9}
+.hongchen-remain-chip.s-ready:hover{border-color:#d5ad63;background:#2c2619}
 .hongchen-remain-chip.s-doing{border-left:3px solid #6fa8d6}
 .hongchen-remain-chip.s-locked{border-left:3px solid #c0854f}
 .hongchen-remain-chip.s-notstarted{border-left:3px solid #6d7787}

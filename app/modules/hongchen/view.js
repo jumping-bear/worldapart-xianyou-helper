@@ -157,11 +157,13 @@ function remainHtml(line){
   const r=line.remaining;
   if(!r)return '';
   const secs=[];
-  const section=(title,cls,items)=>{
+  const section=(title,cls,items,extraClass,flag)=>{
     if(!items||!items.length)return;
-    secs.push('<div class="hongchen-remain-sec">'
+    secs.push('<div class="hongchen-remain-sec'+(extraClass?' '+extraClass:'')+'">'
       +'<div class="hongchen-remain-t"><i class="hongchen-dot '+cls+'"></i>'+title
-      +'<em>'+items.length+'</em></div><div class="hongchen-remain-list">'
+      +'<em>'+items.length+'</em>'
+      +(flag?'<span class="hongchen-remain-flag">'+flag+'</span>':'')+'</div>'
+      +'<div class="hongchen-remain-list">'
       +items.map(it=>'<button type="button" class="hongchen-remain-chip '+cls+'" data-jump="'+it.id
         +'" title="第 '+it.depth+' 环 · '+esc(it.name)+'">'
         +'<span class="hongchen-remain-name">'+esc(it.name)+'</span>'
@@ -170,7 +172,8 @@ function remainHtml(line){
         +'</button>').join('')
       +'</div></div>');
   };
-  section('可接取','s-ready',r.ready);
+  // 顺序固定：可接取永远排最前，并加"现在就能做"徽标，长清单里也能一眼找到。
+  section('可接取','s-ready',r.ready,'is-ready','现在就能做');
   section('进行中','s-doing',r.doing);
   section('未开始','s-notstarted',r.notstarted);
   section('差条件','s-locked',r.locked);
