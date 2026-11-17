@@ -4,14 +4,26 @@ const KEY='worldapart.quest.story.v4';
 const STATUS={done:'已完成',doing:'进行中',ready:'可接取',cond:'条件不足',wait:'未触发（需满足条件）',unpicked:'未选分支'};
 const FILTERS=[['all','全部'],['ready','可接取'],['doing','进行中'],['wait','未触发'],
   ['cond','条件不足'],['unpicked','未选分支'],['done','已完成']];
-const CHAPTER_ORDER={'炼气':1,'筑基':2,'结丹':3,'元婴':4,'化神':5,'隐藏':6,'支线':7};
-const chapCls=c=>({'炼气':'qi','筑基':'zhu','结丹':'jie','元婴':'yuan','化神':'hua','隐藏':'hid'}[c]||'other');
+// 章节顺序与配色来自配置表（境界表），新增境界不用改代码
+const CHAP_TONE=(()=>{ try{ return DATA.modules.quest.rows.chapter_tones||{}; }catch(e){ return {}; } })();
+const CHAP_ORDER=(()=>{ try{ return DATA.modules.quest.rows.chapter_order||{}; }catch(e){ return {}; } })();
+const chapCls=c=>'c'+((CHAP_TONE&&CHAP_TONE[c]!==undefined)?CHAP_TONE[c]:0);
 
 function initQuest(){
  const m=DATA.modules&&DATA.modules.quest;if(!m)return;
  const host=$('quest'),st=m.rows||{},rows=st.rows||[],stats=st.stats||{},lines=st.storylines||[];
  if(!rows.length){host.innerHTML=sourceHtml(m)+'<div class="empty">暂无支线配置</div>';return}
  const byId={};rows.forEach(r=>byId[r.id]=r);
+ // 任务名 → id：让条件里的「任务名」可以点进去看它是什么、在哪
+ const questIndex=st.quest_index||{};
+ const nameToId={};
+ rows.forEach(r=>{if(r.name&&nameToId[r.name]===undefined)nameToId[r.name]=r.id});
+ Object.keys(questIndex).forEach(id=>{const nm=(questIndex[id]||{}).name;if(nm&&nameToId[nm]===undefined)nameToId[nm]=+id});
+ const linkify=text=>esc(text||'').replace(/「([^」]{1,40})」/g,(m0,nm)=>{
+   const id=nameToId[nm];
+   return (id===undefined)?m0:('「<a class="sq-ref" data-jump="'+id+'">'+nm+'</a>」');
+ });
+
  let state=Object.assign({q:'',status:'all',view:'story',open:{}},store.get(KEY,{}));
  if(!state.open||typeof state.open!=='object')state.open={};
 
@@ -39,7 +51,7 @@ function initQuest(){
  function checkRow(c){
    const ok=c.ok===true,bad=c.ok===false;
    return `<div class="sq-chk ${ok?'ok':bad?'bad':''}"><span class="sq-mark">${ok?'✓':bad?'✗':'?'}</span>`+
-     `<span class="sq-ctext">${esc(c.text||'条件')}</span><span class="sq-cval">${esc(c.cur_text||'')}</span></div>`;
+     `<span class="sq-ctext">${linkify(c.text||'条件')}</span><span class="sq-cval">${esc(c.cur_text||'')}</span></div>`;
  }
  function sceneHtml(g){
    const c=g.context||{},sibs=c.siblings||[],lns=(c.lines||[]).slice(0,4);
@@ -72,18 +84,36 @@ function initQuest(){
      (note.item_name?`<p><b>关键道具</b>${esc(note.item_name)}${desc?'：'+esc(desc):''}</p>`:'')+
      (note.egg?`<p class="bad"><b>隐藏结局</b>${esc(note.egg)}</p>`:'')+`</div></details>`;
  }
+ function howHtml(r){
+   const h=r.how||{},pre=r.prereq||[];
+   if(!h.text&&!pre.length)return '';
+   const where=[];
+   if(h.giver)where.push(`委托人「${esc(h.giver)}」${h.giver_home?' · 常驻地 '+esc(h.giver_home):''}`);
+   if(h.place)where.push(`地点 ${esc(h.place)}`);
+   return `<div class="sq-sec">怎么触发</div><div class="sq-how">`+
+     `<span class="sq-howtag ${h.auto?'auto':'npc'}">${esc(h.text||'条件满足时出现')}</span>`+
+     (where.length?`<span class="sq-howmeta">${where.join(' ｜ ')}</span>`:'')+
+     `</div>`+
+     (pre.length?`<div class="sq-prereq"><b>要做的前置${r.prereq_any&&pre.length>1?'（满足其一即可）':''}</b><div class="sq-pres">`+pre.map(p=>
+       p.side
+         ? `<button class="sq-pre" data-jump="${p.id}" title="点这里跳到「${esc(p.name)}」">
+              <span>${esc(p.name)}</span><em>${esc(p.status_label||'未完成')}</em>${(p.line&&p.line!==p.name)?`<i>${esc(p.line)}</i>`:''}</button>`
+         : `<span class="sq-pre out" title="该任务不在支线页">
+              <span>${esc(p.name)}</span><em>${esc(p.type_name||'其他任务')} · 不在支线页</em></span>`
+     ).join('')+`</div></div>`:'');
+ }
  function bodyHtml(r){
    const ce=r.cond_eval||{},checks=ce.checks||[],gaps=ce.gaps||[];
    const logic=ce.logic==='满足其一'?'满足其一即可':ce.logic==='全部满足'?'需要全部满足':(ce.logic?'部分条件满足其一即可':'');
    const cond=checks.length
      ? `<div class="sq-checks">${logic?`<div class="sq-logic">${esc(logic)}</div>`:''}${checks.map(checkRow).join('')}</div>`+
        (gaps.length?`<div class="sq-gap"><b>还差</b>${gaps.map(g=>`<span>${esc(g)}</span>`).join('')}</div>`:'')
-     : `<div class="sq-muted">${esc(r.cond_text||r.trigger_text||'无额外触发条件，剧情到这里自动出现')}</div>`;
+     : `<div class="sq-muted">${esc(r.cond_text||r.trigger_text||((r.prereq||[]).length?'完成上面的前置后自动出现':'剧情到这里自动出现，不需要额外条件'))}</div>`;
    const rewards=(r.rewards||[]).length
      ? `<div class="sq-rwlist">${r.rewards.map(x=>`<span class="sq-rw f${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}<i>${esc((x.sources||[]).join('/'))}</i></span>`).join('')}</div>`
      : `<div class="sq-muted">剧情向，无固定奖励</div>`;
-   return `<div class="sq-sec">触发条件</div>${cond}`+
-     (r.desc?`<div class="sq-sec">这一段剧情</div><div class="sq-desc">${esc(r.desc)}</div>`:'')+
+   return howHtml(r)+`<div class="sq-sec">触发条件</div>${cond}`+
+     (r.desc?`<div class="sq-sec">这一段剧情</div><div class="sq-desc">${linkify(r.desc)}</div>`:'')+
      gatesHtml(r)+
      ((r.objectives||[]).length?`<div class="sq-sec">要做的事</div><ul class="sq-objs">${r.objectives.map(o=>`<li>${esc(o.text)}${o.npc?'<em>'+esc(o.npc)+'</em>':''}</li>`).join('')}</ul>`:'')+
      `<div class="sq-sec">奖励</div>${rewards}`+
@@ -106,7 +136,8 @@ function initQuest(){
      (r.hidden?'<span class="sq-tag hid">不显示在任务面板</span>':'')+
      (r.egg_note?'<span class="sq-tag egg">含隐藏结局</span>':'')+branchTag+
      `<span class="sq-rwline">${rewardChips(r,2)||'<span class="sq-rw more">剧情向</span>'}</span><span class="sq-loc">${esc(locText(r))}</span>`+
-     `<span class="sq-one">${esc(one||'')}</span></summary>`+
+     (!r.done&&r.how?`<span class="sq-mode ${r.how.auto?'auto':'npc'}">${r.how.auto?'自动触发':'找人接取'}</span>`:'')+
+     `<span class="sq-one">${linkify(one||'')}</span></summary>`+
      `<div class="sq-body">${bodyHtml(r)}</div></details>`;
  }
  function groupBranches(items){
@@ -164,7 +195,7 @@ function initQuest(){
    const open=(state.q?true:(stored!==undefined?stored:(line.doing>0||(nextRow&&(nextRow.doing||sk(nextRow)==='ready')))));
    const npcs=(line.npc||[]).filter(n=>n&&line.name.indexOf(n)<0);
    return `<details class="sq-line" data-line="${esc(line.id)}"${open?' open':''}>`+
-     `<summary class="sq-line-h"><span class="sq-chap c-${chapCls(line.chapter)}">${esc(line.chapter)}</span>`+
+     `<summary class="sq-line-h"><span class="sq-chap ${chapCls(line.chapter)}">${esc(line.chapter)}</span>`+
      (line.region?`<span class="sq-region">${esc(line.region)}</span>`:'')+
      `<span class="sq-lname">${esc(line.name)}</span>`+
      (npcs.length?`<span class="sq-npc">${esc(npcs.slice(0,3).join('、'))}</span>`:'')+
@@ -212,7 +243,7 @@ function initQuest(){
    }
    const visible=lines.filter(lineVisible).sort((a,b)=>lineRank(a)-lineRank(b)
      ||b.size-a.size
-     ||(CHAPTER_ORDER[a.chapter]||9)-(CHAPTER_ORDER[b.chapter]||9)
+     ||(CHAP_ORDER[a.chapter]||99)-(CHAP_ORDER[b.chapter]||99)
      ||(b.done/Math.max(1,b.total))-(a.done/Math.max(1,a.total))
      ||a.name.localeCompare(b.name,'zh-CN'));
    const questCount=visible.reduce((sum,line)=>sum+lineNodes(line).filter(r=>passStatus(r)&&match(r)).length,0);
@@ -231,7 +262,7 @@ function initQuest(){
    `</div>`;
  const legend=`<div class="legend"><span>奖励颜色：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span></div>`;
  host.innerHTML=sourceHtml(m)+cards+
-   `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找任务 / 剧情线 / 委托人 / 地点 / 奖励</span><input id="qs" placeholder="例如：未竟之约、纪小蝶、神识、洗髓灵液"></label></div></div>`+
+   `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找任务 / 剧情线 / 委托人 / 地点 / 奖励</span><input id="qs" placeholder="输入任务名、剧情线、委托人、地点或奖励"></label></div></div>`+
    `<div class="chips" id="qview"><span class="chip-label">视图</span>`+
    `<button class="chip" data-view="story">剧情线</button><button class="chip" data-view="flat">逐条</button></div>`+
    `<div class="chips" id="qstatus"><span class="chip-label">状态</span>`+
@@ -250,6 +281,40 @@ function initQuest(){
    if(el.classList&&el.classList.contains('sq-line')){state.open[el.dataset.line]=el.open;store.set(KEY,state)}
  },true);
  render();
+ // 任务名可点：跳到对应剧情线的节点；不在支线页的任务给出归属提示
+ function notice(text){
+   const box=$('qcount');if(!box)return;
+   const old=document.getElementById('qnotice');
+   if(old)old.remove();
+   const tip=document.createElement('div');
+   tip.id='qnotice';tip.className='sq-notice';tip.textContent=text;
+   box.parentNode.insertBefore(tip,box);
+   setTimeout(()=>{if(tip.parentNode)tip.remove()},3200);
+ }
+ function jumpTo(qid){
+   qid=Number(qid);
+   const line=lines.filter(l=>(l.quests||[]).indexOf(qid)>=0)[0];
+   if(!line){
+     const info=questIndex[String(qid)]||{};
+     notice(info.name?('「'+info.name+'」属于'+(info.type_name||'其他任务')+'，不在支线页。'):'这个任务不在支线页。');
+     return;
+   }
+   state.open[line.id]=true;store.set(KEY,state);render();
+   requestAnimationFrame(()=>{
+     const el=document.querySelector('[data-q="'+qid+'"]');
+     if(!el)return;
+     if(el.tagName==='DETAILS')el.open=true;
+     if(el.scrollIntoView)el.scrollIntoView({block:'center'});
+     el.classList.add('sq-flash');
+     setTimeout(()=>el.classList.remove('sq-flash'),1800);
+   });
+ }
+ $('qlist').addEventListener('click',e=>{
+   const ref=e.target.closest('[data-jump]');
+   if(!ref)return;
+   e.preventDefault();e.stopPropagation();
+   jumpTo(ref.getAttribute('data-jump'));
+ });
 }
 window.PROGRESS_VIEWS=window.PROGRESS_VIEWS||{};
 window.PROGRESS_VIEWS['quest']=initQuest;

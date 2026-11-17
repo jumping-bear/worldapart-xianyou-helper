@@ -6,7 +6,7 @@ from .build import QUEST_STATE_NAMES, build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "quest", "支线"
-ORDER, SELECT, SCHEMA = 70, "latest", 25  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 70, "latest", 26  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "quest_meta.json"
 TABLES = frozenset({
     "tbquest", "tbquesttype", "tbrewarddrop", "tbitem", "tbitemtype",

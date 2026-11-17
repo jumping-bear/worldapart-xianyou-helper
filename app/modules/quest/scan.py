@@ -663,6 +663,79 @@ def scan(obj, meta_obj, state=None):
             trigger_line = "剧情推进到这里时自动出现"
         row["trigger_line"] = trigger_line
 
+    # 怎么触发 + 前置任务：让玩家不只知道“要完成 XXX”，还知道 XXX 是什么、在哪、能不能点过去。
+    quest_index = meta_obj.get("quest_index") or {}
+    npc_homes = meta_obj.get("npc_homes") or {}
+    line_of = {}
+    for line in (meta_obj.get("storylines") or []):
+        for qid in line.get("quests") or []:
+            line_of[_int(qid)] = line.get("name") or ""
+
+    def _ref(qid):
+        qid = _int(qid)
+        if not qid:
+            return None
+        local = by_id.get(qid) or {}
+        info = quest_index.get(str(qid)) or {}
+        side = bool(local) or bool(info.get("side"))
+        return {
+            "id": qid,
+            "name": local.get("name") or info.get("name") or ("任务 %s" % qid),
+            "type_name": ("支线" if local else (info.get("type_name") or "其他任务")),
+            "side": side,
+            "line": line_of.get(qid) or "",
+            "status_label": local.get("status_label") or ("不在本页" if not side else ""),
+            "status_key": local.get("status_key") or ("out" if not side else ""),
+            "done": bool(local.get("done")),
+        }
+
+    for row in rows:
+        # 接取方式：1 = 找 NPC，2 = 自动触发（QuestAcqSource）
+        giver = row.get("giver") or {}
+        auto = _int(row.get("acq_source")) == 2
+        how = {"auto": auto,
+               "text": "自动触发（条件满足时出现）" if auto else "找「%s」接取" % (giver.get("name") or "委托人")}
+        if giver.get("name"):
+            how["giver"] = giver["name"]
+            home = npc_homes.get(str(_int(giver.get("id")))) or ""
+            if home:
+                how["giver_home"] = home
+        place = row.get("location") or {}
+        if place.get("path"):
+            how["place"] = " / ".join(place["path"])
+        elif row.get("place_text"):
+            how["place"] = row["place_text"]
+        row["how"] = how
+
+        refs, seen = [], set()
+        # cond_eval 里的 checks 只带文案与结果，任务 id 在 acq_cond 的原始条件里，按下标对齐取。
+        acq_checks = (row.get("acq_cond") or {}).get("checks") or []
+        eval_checks = (row.get("cond_eval") or {}).get("checks") or []
+        for index, check in enumerate(acq_checks):
+            if check.get("kind") not in ("quest_done", "quest_hold", "quest_accepted", "quest_active"):
+                continue
+            ref = _ref(check.get("quest"))
+            if not ref or ref["id"] in seen:
+                continue
+            result = eval_checks[index] if index < len(eval_checks) else {}
+            ref["need_text"] = check.get("text") or ""
+            ref["ok"] = result.get("ok")
+            seen.add(ref["id"])
+            refs.append(ref)
+        # “满足其一”的条件：已经满足的那条才是真正放行的前置，别把没走的另一条当成要求。
+        if (row.get("acq_cond") or {}).get("mode") == "any" and refs:
+            row["prereq_any"] = True
+            satisfied = [ref for ref in refs if ref.get("ok") is True]
+            refs = satisfied or refs
+        refs = [ref for ref in refs if not ref["done"]]
+        if row.get("prev") and row["prev"] not in seen and not row.get("prev_done"):
+            ref = _ref(row["prev"])
+            if ref:
+                ref["need_text"] = "先完成「%s」" % ref["name"]
+                ref["ok"] = False
+                refs.append(ref)
+        row["prereq"] = refs
+
     storylines = []
     for line in (meta_obj.get("storylines") or _fallback_storylines(rows)):
         ids = [_int(value) for value in line.get("quests") or [] if _int(value) in by_id]
@@ -728,6 +801,9 @@ def scan(obj, meta_obj, state=None):
             "diagnostics": meta_obj.get("diagnostics") or {},
             "egg_notes": egg_notes,
             "attr_names": meta_obj.get("attr_names") or {},
+            "quest_index": meta_obj.get("quest_index") or {},
+            "chapter_order": meta_obj.get("chapter_order") or {},
+            "chapter_tones": meta_obj.get("chapter_tones") or {},
             "realms": realms, "states": states}
 
 

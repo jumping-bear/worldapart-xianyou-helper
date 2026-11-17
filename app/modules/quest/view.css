@@ -6,11 +6,13 @@
 .sq-line>summary.sq-line-h::-webkit-details-marker{display:none}
 .sq-line[open]>summary.sq-line-h{border-bottom-color:#2c3644;background:#19202a}
 .sq-chap{flex:none;font-size:10px;line-height:1.6;padding:1px 7px;border-radius:5px;border:1px solid #33465c;background:#141d29;color:#a6cff0;white-space:nowrap}
-.sq-chap.c-qi{border-color:#3a5c3f;background:#152119;color:#a8dfb4}
-.sq-chap.c-zhu{border-color:#2e455c;background:#141d29;color:#a6cff0}
-.sq-chap.c-jie{border-color:#4a3c5c;background:#1c1622;color:#cbb2ee}
-.sq-chap.c-hid{border-color:#6b5a2e;background:#231d12;color:#f0d38a}
-.sq-chap.c-other,.sq-chap.c-yuan,.sq-chap.c-hua{border-color:#39424f;background:#161b22;color:#9aa8b8}
+/* 章节配色位由境界表顺序决定（c0…c5），新增境界自动套用，无需改样式 */
+.sq-chap.c0{border-color:#3a5c3f;background:#152119;color:#a8dfb4}
+.sq-chap.c1{border-color:#2e455c;background:#141d29;color:#a6cff0}
+.sq-chap.c2{border-color:#4a3c5c;background:#1c1622;color:#cbb2ee}
+.sq-chap.c3{border-color:#6b5a2e;background:#231d12;color:#f0d38a}
+.sq-chap.c4{border-color:#5c3a3a;background:#211616;color:#f0b4b4}
+.sq-chap.c5{border-color:#39424f;background:#161b22;color:#9aa8b8}
 .sq-region{flex:none;font-size:10px;line-height:1.6;padding:1px 7px;border-radius:5px;border:1px solid #39424f;background:#161b22;color:#9aa8b8;white-space:nowrap}
 .sq-lname{font-size:15px;font-weight:650;color:#eef3f9;min-width:0;overflow-wrap:anywhere}
 .sq-npc{font-size:11px;color:#8fa2b8}
@@ -156,3 +158,31 @@
  .sq-chap,.sq-npc{display:none}
  .sq-one{font-size:11px}
 }
+
+/* 怎么触发 / 前置任务 / 可点击引用（2.1 返工第三轮） */
+.sq-how{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:2px 0 8px}
+.sq-howtag{font-size:11px;line-height:1.7;padding:2px 8px;border-radius:5px;border:1px solid #33465c;background:#141d29;color:#a6cff0;white-space:nowrap}
+.sq-howtag.auto{border-color:#3a5c3f;background:#152119;color:#a8dfb4}
+.sq-howtag.npc{border-color:#4a3c5c;background:#1c1622;color:#cbb2ee}
+.sq-howmeta{font-size:12px;color:#9fb0c4;overflow-wrap:anywhere}
+.sq-prereq{margin:6px 0 10px}
+.sq-prereq>b{display:block;font-size:12px;color:#c9d6e5;margin-bottom:5px}
+.sq-pres{display:flex;flex-wrap:wrap;gap:6px}
+.sq-pre{display:inline-flex;align-items:center;gap:7px;font:inherit;font-size:12px;line-height:1.6;
+  padding:3px 9px;border-radius:7px;border:1px solid #33465c;background:#141d29;color:#dfe8f3;
+  cursor:pointer;text-align:left;transition:.15s}
+.sq-pre:hover{border-color:#4c7fb5;background:#182433}
+.sq-pre em{font-style:normal;font-size:11px;color:#8fa2b8}
+.sq-pre i{font-style:normal;font-size:10px;color:#6f9fd0;opacity:.85}
+.sq-pre.out{cursor:default;opacity:.72;border-style:dashed}
+.sq-pre.out:hover{border-color:#33465c;background:#141d29}
+.sq-ref{color:#8ec5f0;text-decoration:none;border-bottom:1px dashed #4c7fb5;cursor:pointer}
+.sq-ref:hover{color:#b8dcff;border-bottom-color:#8ec5f0}
+.sq-mode{flex:none;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:5px;white-space:nowrap;
+  border:1px solid #33465c;background:#141d29;color:#9fb0c4}
+.sq-mode.auto{border-color:#3a5c3f;background:#152119;color:#a8dfb4}
+.sq-mode.npc{border-color:#4a3c5c;background:#1c1622;color:#cbb2ee}
+.sq-flash{animation:sqFlash 1.8s ease-out}
+@keyframes sqFlash{0%{box-shadow:0 0 0 2px rgba(140,197,240,.85)}100%{box-shadow:0 0 0 2px rgba(140,197,240,0)}}
+.sq-notice{margin:0 0 10px;padding:8px 12px;border-radius:8px;font-size:12px;line-height:1.7;
+  border:1px solid #4a4458;background:#211d2c;color:#d8cff0}
