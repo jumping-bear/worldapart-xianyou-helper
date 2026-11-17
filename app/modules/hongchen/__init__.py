@@ -6,7 +6,7 @@ from .build import build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "hongchen", "红尘"
-ORDER, SELECT, SCHEMA = 90, "latest", 1
+ORDER, SELECT, SCHEMA = 90, "latest", 2  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "hongchen_meta.json"
 TABLES = frozenset({
     "tbquest", "tbquesttype", "tbdialogue", "tbconditionexpr", "tbnpcbasecfg",
