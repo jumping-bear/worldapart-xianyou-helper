@@ -17,7 +17,7 @@ function initQuest(){
 
  const sk=r=>r.status_key||'wait';
  const statusText=r=>STATUS[sk(r)]||r.status_label||'';
- const locText=r=>{const l=r.location;if(!l)return r.place_text||r.spot||'位置未定';
+ const locText=r=>{const l=r.location;if(!l)return r.place_text||r.spot||(r.hidden?'剧情中触发':'位置未定');
    const path=(l.path&&l.path.length)?l.path.join(' / '):l.name;return (r.spot?r.spot+' · ':'')+path};
  const rewardTip=x=>[(x.sources||[]).join('/'),x.type?('类型：'+x.type):'',x.price?('参考价 '+x.price):''].filter(Boolean).join(' · ');
  const rewardChips=(r,limit)=>{
@@ -28,8 +28,8 @@ function initQuest(){
    if(stone)out.push(`<span class="sq-stone">灵石 ${stone}</span>`);
    return out.join('');
  };
- const hay=(r)=>[r.name,r.desc,r.group,r.chain_name,(r.giver||{}).name,locText(r),r.status_hint,
-   r.cond_text,r.trigger_text,(r.objectives||[]).map(o=>o.text).join(' '),
+ const hay=(r)=>[r.name,r.desc,r.group,(r.giver||{}).name,locText(r),
+   (r.objectives||[]).map(o=>o.text).join(' '),
    (r.rewards||[]).map(x=>x.name).join(' '),
    (r.option_gates||[]).map(g=>(g.option||'')+' '+(g.text||'')).join(' ')].join(' ').toLowerCase();
  const query=()=>(state.q||'').trim().toLowerCase();
@@ -92,7 +92,7 @@ function initQuest(){
      (r.unreachable?`<div class="sq-warn">${esc(r.unreachable_text)}</div>`:'');
  }
  function nodeHtml(r,index){
-   const key=sk(r),one=r.hidden?(r.trigger_text||r.cond_text||r.status_hint):(r.status_hint||r.trigger_text||r.cond_text);
+   const key=sk(r),one=r.hidden?(r.trigger_text||r.trigger_line||r.cond_text||r.status_hint):(r.trigger_line||r.status_hint||r.trigger_text||r.cond_text);
    const peers=r.branch_key?rows.filter(x=>x.id!==r.id&&x.branch_key===r.branch_key):[];
    const peerPicked=peers.some(x=>x.done||x.doing);
    const branchTag=r.branch_key&&(r.branch_with||[]).length
@@ -105,7 +105,7 @@ function initQuest(){
      `<span class="sq-badge b-${key}">${esc(statusText(r))}</span>`+
      (r.hidden?'<span class="sq-tag hid">不显示在任务面板</span>':'')+
      (r.egg_note?'<span class="sq-tag egg">含隐藏结局</span>':'')+branchTag+
-     `<span class="sq-rwline">${rewardChips(r,2)}</span><span class="sq-loc">${esc(locText(r))}</span>`+
+     `<span class="sq-rwline">${rewardChips(r,2)||'<span class="sq-rw more">剧情向</span>'}</span><span class="sq-loc">${esc(locText(r))}</span>`+
      `<span class="sq-one">${esc(one||'')}</span></summary>`+
      `<div class="sq-body">${bodyHtml(r)}</div></details>`;
  }
@@ -123,9 +123,10 @@ function initQuest(){
    return out;
  }
  function lineNodes(line){return (line.quests||[]).map(id=>byId[id]).filter(Boolean)}
+ const lineText=line=>`${line.name||''} ${line.chapter||''} ${line.region||''}`.toLowerCase();
  function lineVisible(line){
    const nodes=lineNodes(line);
-   if(state.q&&!nodes.some(match))return false;
+   if(query()&&!nodes.some(match)&&!lineText(line).includes(query()))return false;
    if(state.status!=='all'&&!nodes.some(r=>sk(r)===state.status))return false;
    return true;
  }
@@ -142,7 +143,7 @@ function initQuest(){
  function lineHtml(line){
    const nodes=lineNodes(line),visible=nodes.filter(passStatus);
    if(!nodes.length||(!visible.length&&state.status!=='all'))return '';
-   if(state.q&&!nodes.some(match))return '';
+   if(query()&&!nodes.some(match)&&!lineText(line).includes(query()))return '';
    const depths=line.depths||{},rings={};
    nodes.forEach(r=>{const d=Number(depths[String(r.id)]||r.chain_index||1);(rings[d]=rings[d]||[]).push(r)});
    const body=Object.keys(rings).map(Number).sort((a,b)=>a-b).map((d,idx,arr)=>{
@@ -164,6 +165,7 @@ function initQuest(){
    const npcs=(line.npc||[]).filter(n=>n&&line.name.indexOf(n)<0);
    return `<details class="sq-line" data-line="${esc(line.id)}"${open?' open':''}>`+
      `<summary class="sq-line-h"><span class="sq-chap c-${chapCls(line.chapter)}">${esc(line.chapter)}</span>`+
+     (line.region?`<span class="sq-region">${esc(line.region)}</span>`:'')+
      `<span class="sq-lname">${esc(line.name)}</span>`+
      (npcs.length?`<span class="sq-npc">${esc(npcs.slice(0,3).join('、'))}</span>`:'')+
      `<span class="sq-prog" title="已走环数 / 可走环数（不含未选分支）">${line.total?('已走 '+line.done+'/'+line.total):'已选另一条路'}</span>`+

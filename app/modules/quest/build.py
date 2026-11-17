@@ -717,8 +717,8 @@ GROUP_CHAPTERS = (("炼气支线-", "炼气"), ("筑基支线-", "筑基"), ("�
 CHAPTER_ORDER = {"炼气": 1, "筑基": 2, "结丹": 3, "元婴": 4, "化神": 5, "隐藏": 6, "支线": 7}
 
 
-def _clean_group_name(group):
-    """group 名清洗：拆出章节、去掉省略号，括号补充改成间隔点。"""
+def _split_group_name(group, region_names=None):
+    """group 名拆成（标题、章节、地区）：`炼气支线-临州-宝鉴不如一见` →（宝鉴不如一见, 炼气, 临州）。"""
     chapter, rest = "支线", group
     for prefix, label in GROUP_CHAPTERS:
         if group.startswith(prefix):
@@ -726,9 +726,13 @@ def _clean_group_name(group):
             break
     rest = rest.replace("—", "-").replace("－", "-")
     rest = re.sub(r"（([^）]+)）", r" · \1", rest)
-    rest = re.sub(r"\s*-\s*", " · ", rest)
-    rest = re.sub(r"\s*·\s*", " · ", rest).strip(" ·")
-    return rest or group, chapter
+    parts = [part.strip() for part in re.split(r"-", rest) if part.strip()]
+    region = ""
+    if len(parts) > 1 and parts[0] in (region_names or set()):
+        region = parts[0]
+        parts = parts[1:]
+    title = " · ".join(parts) or rest or group
+    return title, chapter, region
 
 
 def _clean_chain_name(name):
@@ -751,7 +755,7 @@ def _chapter_from_realms(ids, quests, realms):
     return "支线"
 
 
-def _build_storylines(quests, edges, realms):
+def _build_storylines(quests, edges, realms, region_names=None):
     """把 254 个支线聚成玩家可顺着走的剧情线；同 group 的多条 chain 必须合成一条。"""
     clusters = {}
     for quest_id, quest in quests.items():
@@ -801,23 +805,28 @@ def _build_storylines(quests, edges, realms):
 
         order = sorted(ids, key=lambda qid: (depth[qid], quests[qid]["chain_index"], qid))
         group = quests[order[0]]["group"]
+        region = ""
         if group:
-            name, chapter = _clean_group_name(group)
+            name, chapter, region = _split_group_name(group, region_names)
         else:
             name = _clean_chain_name(quests[order[0]]["chain_name"])
             chapter = _chapter_from_realms(order, quests, realms)
+            location = quests[order[0]].get("location") or {}
+            region = location.get("region") or ""
             if all(quests[quest_id]["hidden"] for quest_id in order):
                 chapter = "隐藏"
+        if region and region in name:
+            region = ""
         npc_names = []
         for quest_id in order:
             giver = quests[quest_id].get("giver") or {}
             name_value = giver.get("name") or ""
             if name_value and name_value not in npc_names:
                 npc_names.append(name_value)
-        out.append({"id": key, "name": name, "chapter": chapter, "group": group,
-                    "quests": order, "depths": {str(qid): depth[qid] for qid in order},
-                    "npc": npc_names, "size": len(order),
-                    "first": order[0]})
+        out.append({"id": key, "name": name, "chapter": chapter, "region": region,
+                    "group": group, "quests": order,
+                    "depths": {str(qid): depth[qid] for qid in order},
+                    "npc": npc_names, "size": len(order), "first": order[0]})
     out.sort(key=lambda line: (CHAPTER_ORDER.get(line["chapter"], 9),
                                -line["size"], line["first"]))
     return out
@@ -1476,7 +1485,12 @@ def build_quests(tables):
             flow_accepts[str(flow_id)] = picked
 
     # 剧情线：优先按 taskGroup 合并（同一组的任务是一条线），无 group 的按 quest_chain 独立成线。
-    storylines = _build_storylines(quests, edges, realms)
+    region_names = {"临州", "白獠部", "河望镇"}
+    for quest in quests.values():
+        region = (quest.get("location") or {}).get("region") or ""
+        if region:
+            region_names.add(region)
+    storylines = _build_storylines(quests, edges, realms, region_names)
 
     stats = {
         "quests": len(result),

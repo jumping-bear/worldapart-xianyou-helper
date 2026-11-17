@@ -644,6 +644,24 @@ def scan(obj, meta_obj, state=None):
         else:
             hint = "与委托人对话后出现"
         row["status_hint"] = hint
+        # 折叠行也要有一句“怎么触发”，已完成的任务同样能回看。
+        if row["trigger_text"]:
+            trigger_line = row["trigger_text"]
+        elif row["cond_text"]:
+            trigger_line = "条件：%s" % row["cond_text"]
+        elif row["gate_hint"]:
+            trigger_line = row["gate_hint"]
+        elif row["prev_name"] and row["prev_done"]:
+            trigger_line = "完成「%s」后自动出现" % row["prev_name"]
+        elif row["prev_name"]:
+            trigger_line = "完成「%s」后出现" % row["prev_name"]
+        elif row["acq_source"] == 1:
+            trigger_line = "与%s对话接取" % ((row.get("giver") or {}).get("name") or "委托人")
+        elif row.get("acq_dialogue"):
+            trigger_line = "在剧情对话中接取"
+        else:
+            trigger_line = "剧情推进到这里时自动出现"
+        row["trigger_line"] = trigger_line
 
     storylines = []
     for line in (meta_obj.get("storylines") or _fallback_storylines(rows)):
@@ -661,6 +679,7 @@ def scan(obj, meta_obj, state=None):
             "id": line.get("id") or ("s%d" % ids[0]),
             "name": line.get("name") or nodes[0]["name"],
             "chapter": line.get("chapter") or "支线",
+            "region": line.get("region") or "",
             "group": line.get("group") or "",
             "quests": ids,
             "depths": line.get("depths") or {},
