@@ -1,13 +1,31 @@
 # -*- coding: utf-8 -*-
-"""人物志扫描：按 npcId 标注玩家与该 NPC 的实际状态（好感/亲密/道侣/已结识）。
+"""人物志扫描：按 npcId 标注玩家与该 NPC 的实际关系与状态。
 
-只读存档，不改任何数据。好感取法与 quest/scan.py 一致（npcs[].intimacy），
-道侣取 playerModel.npc_dao_ally.npc_ids（与留影石一致）。
+只读存档，不改任何数据。数据来源：
+- 好感：npcs[].intimacy（与 quest 一致）；
+- 关系网：playerModel.npc_relation（师承/道侣/朋友/敌人/冰封/已故/弟子）；
+- 道侣：npc_dao_ally.npc_ids + npc_relation.dao_companion_npc_ids；
+- 住处：npc_housing.residents / unlocked（已入住/可邀请）；
+- 履历：npc_cultivation_history / demonic_cultivator / player_prop_evil / visited_spaces；
+- 头像：复用留影石已导出的 memoria_avatars_meta.json（dataURI），缺失退回首字。
 """
+import json
 import os
+from functools import lru_cache
+
+# 头像快照由留影石 avatars.py 导出，人物志只读复用；缺失时页面退回首字头像
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_AVATARS_FILE = os.path.join(_ROOT, "memoria_avatars_meta.json")
+
+# 关系类型 -> 展示标签（关系网可视化用）
+REL_LABELS = (
+    ("master", "师尊"), ("disciple", "弟子"), ("dao", "道侣"),
+    ("friend", "朋友"), ("enemy", "仇敌"), ("frozen", "冰封"),
+    ("deceased", "已故"),
+)
 
 
-def _int(value, default=0):
+def _int(value, default=None):
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -20,6 +38,8 @@ def _id_set(value):
         value = value.values()
     for item in value or ():
         nid = _int(item)
+        if isinstance(item, dict):
+            nid = _int(item.get("npc_id") or item.get("npcCfgId") or item.get("id"))
         if nid:
             out.add(nid)
     return out
@@ -36,16 +56,48 @@ def prepare(game_dir):
 def _intimacy_tier(tiers, favor):
     hit = None
     for tier in tiers or []:
-        minimum = _int(tier.get("min"))
-        if minimum <= favor and (hit is None or minimum > _int(hit.get("min"))):
+        minimum = _int(tier.get("min"), 0)
+        if minimum <= favor and (hit is None or minimum > _int(hit.get("min"), 0)):
             hit = tier
     return hit
 
 
+@lru_cache(maxsize=1)
+def _load_avatars():
+    """读导出阶段生成的头像快照；文件缺失或损坏时静默退回首字头像。"""
+    try:
+        with open(_AVATARS_FILE, encoding="utf-8-sig") as handle:
+            raw = json.load(handle)
+    except (OSError, ValueError):
+        return {}, {}
+    if not isinstance(raw, dict):
+        return {}, {}
+    images = raw.get("avatars") if isinstance(raw.get("avatars"), dict) else {}
+    icons = raw.get("icons") if isinstance(raw.get("icons"), dict) else {}
+    clean_images = {str(key): value for key, value in images.items()
+                    if isinstance(value, str) and value.startswith("data:image/")}
+    clean_icons = {str(key): str(value) for key, value in icons.items()}
+    return clean_images, clean_icons
+
+
+def _avatar_for(npc_id):
+    images, icons = _load_avatars()
+    key = icons.get(str(npc_id))
+    if key:
+        return images.get(key, "")
+    return images.get(str(npc_id), "")
+
+
 def scan(obj, meta_obj, state=None):
-    """产出 {states: {npcId: {...}}, stats: {...}}，玩家实际状态按 npcId 索引。"""
+    """产出 {states, stats, player}，玩家实际状态按 npcId 索引。"""
     player = (obj or {}).get("playerModel") or {}
     tiers = ((meta_obj or {}).get("meta") or {}).get("intimacy_tiers") or []
+
+    # NPC id -> 名字（来自构建期全息卡，用于关系网展示）
+    name_of = {}
+    for card in (meta_obj or {}).get("npcs") or []:
+        if isinstance(card, dict) and card.get("id") is not None:
+            name_of[_int(card["id"])] = card.get("name") or str(card["id"])
 
     # 好感/亲密：与 quest 一致，从 npcs 记录取 npcCfgId + intimacy
     favor = {}
@@ -57,44 +109,129 @@ def scan(obj, meta_obj, state=None):
         if not npc_id:
             continue
         met.add(npc_id)
-        favor[npc_id] = _int(record.get("intimacy"))
+        favor[npc_id] = _int(record.get("intimacy"), 0)
 
-    # 道侣：playerModel.npc_dao_ally.npc_ids
-    dao = _id_set((player.get("npc_dao_ally") or {}).get("npc_ids"))
+    rel = player.get("npc_relation") or {}
+    master = _int(rel.get("master_npc_id"))
+    disciples = _id_set(rel.get("disciple_npc_ids"))
+    friends = _id_set(rel.get("friend_npc_ids"))
+    enemies = _id_set(rel.get("enemy_npc_ids"))
+    frozen = _id_set(rel.get("frozen_effect_npc_ids"))
+    deceased = _id_set(rel.get("deceased_relations"))
+    dao_ids = _id_set(rel.get("dao_companion_npc_ids"))
+    dao_ids |= _id_set((player.get("npc_dao_ally") or {}).get("npc_ids"))
+    single = _int(rel.get("dao_companion_npc_id"))
+    if single:
+        dao_ids.add(single)
 
     # 兼容：部分存档把好感放在交互属性里，键为 npcId
-    interact = (player.get("npcComponent") or {}).get("interactAttributes") \
-        or player.get("interactAttributes") or {}
+    interact = player.get("interact_attributes") or player.get("interactAttributes") \
+        or (player.get("npcComponent") or {}).get("interactAttributes") or {}
     if isinstance(interact, dict):
         for key, value in interact.items():
             npc_id = _int(key)
-            if not npc_id:
-                if isinstance(value, dict):
-                    npc_id = _int(value.get("npcId") or value.get("npcCfgId"))
+            if not npc_id and isinstance(value, dict):
+                npc_id = _int(value.get("npcId") or value.get("npcCfgId"))
             if not npc_id or not isinstance(value, dict):
                 continue
             if npc_id not in favor and ("intimacy" in value or "favor" in value):
-                favor[npc_id] = _int(value.get("intimacy", value.get("favor")))
+                favor[npc_id] = _int(value.get("intimacy", value.get("favor")), 0)
                 met.add(npc_id)
 
+    # 住处：residents 为槽位 -> npcId
+    housing = player.get("npc_housing") or {}
+    residents = set()
+    for value in (housing.get("residents") or {}).values() if isinstance(housing.get("residents"), dict) else ():
+        nid = _int(value)
+        if nid:
+            residents.add(nid)
+    housing_open = bool(housing.get("unlocked"))
+
+    # 关系表：npcId -> {role_key: [关联 NPC 的 id]}
+    rel_map = {}
+
+    def put(nid, role, peers):
+        if not nid:
+            return
+        rel_map.setdefault(nid, {}).setdefault(role, set()).update(peers)
+
+    if master:
+        put(master, "master", {0})        # 0 代表"你"
+    for nid in disciples:
+        put(nid, "disciple", {0})
+    for nid in dao_ids:
+        put(nid, "dao", dao_ids - {nid} or {0})
+    for nid in friends:
+        put(nid, "friend", friends - {nid})
+    for nid in enemies:
+        put(nid, "enemy", enemies - {nid})
+    for nid in frozen:
+        put(nid, "frozen", {0})
+    for nid in deceased:
+        put(nid, "deceased", deceased - {nid})
+
     states = {}
-    for npc_id in set(favor) | met | dao:
-        value = _int(favor.get(npc_id))
-        is_dao = npc_id in dao
+    all_ids = set(favor) | met | dao_ids | set(rel_map) | residents
+    for npc_id in all_ids:
+        value = _int(favor.get(npc_id), 0)
+        is_dao = npc_id in dao_ids
         tier = _intimacy_tier(tiers, value) or {}
+        raw_roles = rel_map.get(npc_id) or {}
+        roles = [label for key, label in REL_LABELS if key in raw_roles]
+        detail = {}
+        for key, label in REL_LABELS:
+            peers = raw_roles.get(key)
+            if not peers:
+                continue
+            names = []
+            for pid in peers:
+                if pid == 0:
+                    names.append("你")
+                elif pid in name_of:
+                    names.append(name_of[pid])
+            detail[label] = names or [str(pid) for pid in peers]
         states[str(npc_id)] = {
             "favor": value,
-            "met": npc_id in met or is_dao,
+            "met": npc_id in met or is_dao or bool(raw_roles),
             "dao": is_dao,
             "tier": tier.get("name") or "",
             "tier_index": tiers.index(tier) if tier in tiers else -1,
+            "roles": roles,
+            "rel_detail": detail,
+            "housed": npc_id in residents,
+            "housing_open": housing_open,
         }
 
-    stats = {
-        "met": len(met), "dao": len(dao),
-        "tracked": len(states),
+    cult = player.get("npc_cultivation_history") or {}
+    demo = player.get("demonic_cultivator") or {}
+    player_state = {
+        "evil": _int(player.get("player_prop_evil"), 0),
+        "demon_qi": _int(demo.get("current_demonic_qi"), 0),
+        "demonic": _int(demo.get("current_demonic_qi"), 0) > 0,
+        "visited": len(player.get("visited_spaces") or []),
+        "cult_hist": {
+            "talent": bool(cult.get("ever_manually_unlocked_talent")),
+            "pill": bool(cult.get("ever_used_breakthrough_pill")),
+            "fruit": bool(cult.get("ever_used_wisdom_fruit")),
+        },
+        "counts": {
+            "master": 1 if master else 0, "disciple": len(disciples),
+            "dao": len(dao_ids), "friend": len(friends), "enemy": len(enemies),
+            "frozen": len(frozen), "deceased": len(deceased), "housed": len(residents),
+        },
+        "names": {
+            "master": name_of.get(master, str(master)) if master else "",
+            "dao": [name_of.get(i, str(i)) for i in sorted(dao_ids)],
+            "friend": [name_of.get(i, str(i)) for i in sorted(friends)],
+            "enemy": [name_of.get(i, str(i)) for i in sorted(enemies)],
+        },
     }
-    return {"states": states, "stats": stats}
+
+    stats = {
+        "met": len(met), "dao": len(dao_ids), "tracked": len(states),
+        "housed": len(residents), "friend": len(friends), "enemy": len(enemies),
+    }
+    return {"states": states, "stats": stats, "player": player_state}
 
 
 def post(rows, state, original, path):
@@ -112,35 +249,46 @@ def enrich(module, meta_obj, state=None):
     scanned = module.get("rows") if isinstance(module.get("rows"), dict) else {}
     states = scanned.get("states") or {}
     live_stats = scanned.get("stats") or {}
+    player = scanned.get("player") or {}
 
     npcs = []
+    avatar_map = {}
     for card in built.get("npcs") or []:
         npc = dict(card)
         live = states.get(str(npc.get("id"))) or {}
-        favor = _int(live.get("favor"))
+        favor = _int(live.get("favor"), 0)
         npc["favor"] = favor
         npc["met"] = bool(live.get("met"))
         npc["dao"] = bool(live.get("dao")) or bool(npc.get("dao"))
+        npc["roles"] = live.get("roles") or []
+        npc["rel_detail"] = live.get("rel_detail") or {}
+        npc["housed"] = bool(live.get("housed"))
+        npc["housing_open"] = bool(live.get("housing_open"))
         tier = _intimacy_tier(tiers, favor) or {}
         npc["intimacy_name"] = live.get("tier") or tier.get("name") or ""
         idx = live.get("tier_index", -1)
         if (idx is None or idx < 0) and tier in tiers:
             idx = tiers.index(tier)
         npc["intimacy_index"] = idx
+        uri = _avatar_for(npc.get("id"))
+        if uri:
+            avatar_map[str(npc["id"])] = uri
         npcs.append(npc)
 
     module["npcs"] = npcs
     module["meta"] = meta
     module["stats"] = built.get("stats") or {}
     module["live_stats"] = live_stats
+    module["player"] = player
+    module["avatar_map"] = avatar_map
     return module
 
 
 def summary(module):
     stats = module.get("stats") or {}
-    npcs = module.get("npcs") or []
-    return ("人物志：%d 位 NPC，%d 位有头像，%d 位可结道侣，%d 位可击杀（%d 位恶名安全目标），"
-            "%d 位有留影关联" % (
-                stats.get("total", 0), stats.get("with_avatar", 0), stats.get("dao", 0),
-                stats.get("killable", 0), stats.get("safe_target", 0),
-                stats.get("with_memoria", 0)))
+    player = module.get("player") or {}
+    counts = player.get("counts") or {}
+    return ("人物图鉴：%d 位 NPC，%d 位已结识，师尊/弟子 %s/%s、道侣 %s、朋友 %s、入住 %s 位" % (
+        stats.get("total", 0), (module.get("live_stats") or {}).get("met", 0),
+        counts.get("master", 0), counts.get("disciple", 0), counts.get("dao", 0),
+        counts.get("friend", 0), counts.get("housed", 0)))
