@@ -1,16 +1,22 @@
-/* 红尘：六条情缘角色卡 + 任务树（IIFE，导出 window.PROGRESS_VIEWS.hongchen） */
+/* 红尘：角色卡 + 环进度轴导航 + 聚焦当前环的任务树（IIFE，导出 window.PROGRESS_VIEWS.hongchen）
+ * 交互：顶部进度轴可点击跳转到任意环；主体只展开“聚焦环”，通过上一环/下一环与
+ *       相邻环快捷芯片步进，避免几十环横向铺开需要一路拖拽。
+ */
 (function(){
 const KEY='hongchen';
 const STATUS={
   done:{label:'已完成',cls:'s-done'}, doing:{label:'进行中',cls:'s-doing'},
-  ready:{label:'可接取',cls:'s-ready'}, missed:{label:'已错过',cls:'s-missed'},
-  locked:{label:'条件不足',cls:'s-locked'}, todo:{label:'待解锁',cls:'s-todo'}
+  ready:{label:'可接取',cls:'s-ready'}, unpicked:{label:'未选此分支',cls:'s-unpicked'},
+  locked:{label:'未解锁',cls:'s-locked'}, notstarted:{label:'未开始',cls:'s-notstarted'}
 };
-const FILTERS=[['all','全部'],['ready','可接取'],['doing','进行中'],['done','已完成'],['missed','已错过']];
-let LINES=[], OPEN='', FILTER='all', QUERY='', CUR=null;
+// 过滤项 value 对应状态类；'cando' 合并“可接取 + 未开始(可开启分支)”。
+const FILTERS=[['all','全部'],['cando','可做'],['doing','进行中'],['done','已完成'],
+               ['unpicked','未选分支'],['locked','未解锁']];
+let LINES=[], OPEN='', FILTER='all', QUERY='', CUR=null, FOCUS=0;
 
-function statusOf(cls){return STATUS[cls]||STATUS.ready}
+function statusOf(cls){return STATUS[cls]||STATUS.notstarted}
 function byId(line){const m={};(line.quests||[]).forEach(q=>m[q.id]=q);return m}
+function ringOf(q){return Number(q.depth)||1}
 
 function ring(pct,color){
   const c=2*Math.PI*16, p=Math.max(0,Math.min(100,Number(pct)||0));
@@ -21,6 +27,17 @@ function ring(pct,color){
     +'<span class="hongchen-ring-pct">'+p+'%</span>';
 }
 
+function matchFilter(q){
+  if(FILTER==='all')return true;
+  if(FILTER==='cando')return q.status_cls==='ready'||q.status_cls==='notstarted';
+  return q.status_cls===FILTER;
+}
+function matchQuery(q){
+  if(!QUERY)return true;
+  return String(q.name).toLowerCase().indexOf(QUERY)>=0||String(q.id).indexOf(QUERY)>=0;
+}
+function isDim(q){return !matchFilter(q)||!matchQuery(q)}
+
 function gateBadges(q){
   const out=[];
   (q.gates||[]).forEach(g=>{if(g&&g.text)out.push('<span class="hongchen-badge gate" title="'+esc(g.alias||'玩家门槛')+'">'+esc(g.text)+'</span>')});
@@ -29,40 +46,103 @@ function gateBadges(q){
   return out.length?'<div class="hongchen-badges">'+out.join('')+'</div>':'';
 }
 
-function nodeHtml(q,map,filter){
+function nodeHtml(q,map){
   const st=statusOf(q.status_cls);
-  const dim=(FILTER!=='all'&&q.status_cls!==FILTER)?' dim':'';
+  const dim=isDim(q)?' dim':'';
   const sel=(CUR===q.id)?' sel':'';
   const prev=(q.prev&&map[q.prev])?map[q.prev].name:'';
-  return '<div class="hongchen-node '+st.cls+dim+sel+'" data-qid="'+q.id+'" title="'+esc(q.desc||'')+'">'
+  // 分支任务用“N 选 1”提示，未选分支给出友好说明，绝不写“已错过”。
+  let foot=(q.branch?'分支 · ':'')+(prev?'前置「'+esc(prev)+'」':'起点');
+  if(q.hidden)foot+=' · 隐藏';
+  let note='';
+  if(q.status_cls==='unpicked'&&q.fail_text)note='<div class="hongchen-node-note">'+esc(q.fail_text)+'</div>';
+  return '<div class="hongchen-node '+st.cls+dim+sel+'" data-qid="'+q.id+'" title="'+esc(q.desc||q.name)+'">'
     +'<div class="hongchen-node-top"><span class="hongchen-id">#'+q.id+'</span>'
     +'<span class="hongchen-status">'+st.label+'</span></div>'
     +'<div class="hongchen-nname">'+esc(q.name)+'</div>'
     +(q.desc?'<div class="hongchen-desc">'+esc(q.desc)+'</div>':'')
-    +gateBadges(q)
-    +'<div class="hongchen-node-foot">'+(prev?'前置 '+esc(prev):'起点')
-    +(q.branch?' · 分支':'')+(q.hidden?' · 隐藏':'')+'</div></div>';
+    +note+gateBadges(q)
+    +'<div class="hongchen-node-foot">'+foot+'</div></div>';
 }
 
-function treeHtml(line){
-  const map=byId(line), qs=line.quests||[];
-  const maxDepth=qs.reduce((m,q)=>Math.max(m,q.depth||1),1);
-  const cols=[];
-  for(let d=1;d<=maxDepth;d++){
-    const here=qs.filter(q=>(q.depth||1)===d);
-    if(!here.length){cols.push('<div class="hongchen-col gap"><div class="hongchen-col-head">第 '+d+' 环</div><div class="hongchen-col-body">· · ·</div></div>');continue}
-    const groups={}, singles=[];
-    here.forEach(q=>{if(q.branch&&q.branch_key){(groups[q.branch_key]=groups[q.branch_key]||[]).push(q)}else singles.push(q)});
-    let body=singles.map(q=>nodeHtml(q,map,FILTER)).join('');
-    Object.keys(groups).forEach(key=>{
-      const members=groups[key];
-      body+='<div class="hongchen-branch"><div class="hongchen-branch-label">分支选择 · '+members.length+' 选 1</div>'
-        +'<div class="hongchen-branch-grid">'+members.map(q=>nodeHtml(q,map,FILTER)).join('')+'</div></div>';
-    });
-    cols.push('<div class="hongchen-col"><div class="hongchen-col-head"><b>第 '+d+' 环</b><span>'+here.length+' 节点</span></div>'
-      +'<div class="hongchen-col-body">'+body+'</div></div>');
+// 当前进度环：优先最近可接取环；否则最近完成/放弃环的下一环；否则第 1 环。
+function currentDepth(line){
+  const qs=line.quests||[];
+  if(!qs.length)return 1;
+  const ready=qs.filter(q=>q.status_cls==='ready').map(ringOf);
+  if(ready.length)return Math.min.apply(null,ready);
+  let frontier=0;
+  qs.forEach(q=>{if(['done','doing','unpicked'].indexOf(q.status_cls)>=0)frontier=Math.max(frontier,ringOf(q))});
+  const maxD=Math.max.apply(null,qs.map(ringOf));
+  return Math.min(frontier+1,maxD)||1;
+}
+function maxDepth(line){
+  const qs=line.quests||[];
+  return qs.length?Math.max.apply(null,qs.map(ringOf)):1;
+}
+function ringState(line,d){
+  const here=(line.quests||[]).filter(q=>ringOf(q)===d);
+  if(!here.length)return 'empty';
+  const c=here.map(q=>q.status_cls);
+  if(c.indexOf('doing')>=0)return 'doing';
+  if(c.indexOf('done')>=0)return 'done';
+  if(c.indexOf('ready')>=0)return 'ready';
+  if(c.indexOf('unpicked')>=0)return 'unpicked';
+  return 'notstarted';
+}
+
+// 顶部进度轴：一环一个可点击圆点；当前环、聚焦环、有分支环各有标记。
+function axisHtml(line,curD){
+  const maxD=maxDepth(line), dots=[];
+  for(let d=1;d<=maxD;d++){
+    const here=(line.quests||[]).filter(q=>ringOf(q)===d);
+    const st=ringState(line,d);
+    const hasBranch=here.some(q=>q.branch);
+    const cls=['hongchen-axis-dot','rs-'+st];
+    if(d===curD)cls.push('is-current');
+    if(d===FOCUS)cls.push('is-focus');
+    const mark=hasBranch?'<i class="hongchen-axis-branch" title="本环有分支选择">⑂</i>':'';
+    dots.push('<button type="button" class="'+cls.join(' ')+'" data-ring="'+d+'" '
+      +'title="第 '+d+' 环 · '+here.length+' 节点'+(d===curD?' · 当前进度环':'')+'">'
+      +'<span>'+d+'</span>'+mark+'</button>');
   }
-  return '<div class="hongchen-tree">'+cols.map((c,i)=>c+(i<cols.length-1?'<div class="hongchen-link">›</div>':'')).join('')+'</div>';
+  return '<div class="hongchen-axis" role="tablist" aria-label="环进度轴">'+dots.join('')+'</div>';
+}
+
+// 聚焦环主体：只渲染这一环的节点，按分支分组；响应式网格，不再横向长列。
+function focusBodyHtml(line){
+  const map=byId(line);
+  const here=(line.quests||[]).filter(q=>ringOf(q)===FOCUS);
+  if(!here.length)return '<div class="hongchen-focus-empty">本环暂无任务节点</div>';
+  const singles=[], groups={};
+  here.forEach(q=>{if(q.branch&&q.branch_key){(groups[q.branch_key]=groups[q.branch_key]||[]).push(q)}else singles.push(q)});
+  let html='';
+  if(singles.length)html+='<div class="hongchen-node-grid">'+singles.map(q=>nodeHtml(q,map)).join('')+'</div>';
+  Object.keys(groups).forEach(key=>{
+    const members=groups[key];
+    const chosen=members.filter(q=>q.status_cls==='done'||q.status_cls==='doing'||q.status_cls==='unpicked');
+    const label=chosen.length?('分支选择 · '+members.length+' 选 1 · 已选'+(chosen.length>1?' '+chosen.length:' 1')):('分支选择 · '+members.length+' 选 1');
+    html+='<div class="hongchen-branch"><div class="hongchen-branch-label">'+label+'</div>'
+      +'<div class="hongchen-node-grid">'+members.map(q=>nodeHtml(q,map)).join('')+'</div></div>';
+  });
+  return html;
+}
+
+// 相邻环快捷芯片：给出上一环/下一环任务名，点击即跳过去。
+function contextHtml(line){
+  const wrap=(d,dir)=>{
+    if(d<1||d>maxDepth(line))return '';
+    const here=(line.quests||[]).filter(q=>ringOf(q)===d);
+    if(!here.length)return '';
+    const chips=here.slice(0,6).map(q=>{
+      const st=statusOf(q.status_cls);
+      return '<button type="button" class="hongchen-ctx-chip '+st.cls+'" data-ring="'+d+'" title="'+esc(q.name)+'">'+esc(q.name)+'</button>';
+    }).join('');
+    const more=here.length>6?'<span class="hongchen-ctx-more">+'+(here.length-6)+'</span>':'';
+    return '<div class="hongchen-ctx-side"><span class="hongchen-ctx-dir">'+dir+'</span>'
+      +'<div class="hongchen-ctx-chips">'+chips+more+'</div></div>';
+  };
+  return '<div class="hongchen-context">'+wrap(FOCUS-1,'‹ 上一环')+wrap(FOCUS+1,'下一环 ›')+'</div>';
 }
 
 function inspectHtml(q,line){
@@ -75,12 +155,16 @@ function inspectHtml(q,line){
     gates.push((o.gate?o.gate.text+' → ':'')+o.text+(to?' · '+to:''));
   });
   const next=(q.next||[]).map(id=>map[id]?esc(map[id].name):('#'+id)).join('、');
+  const notice=(q.status_cls==='unpicked')
+    ?'<div class="hongchen-inspect-note">这条支线因你选择了另一分支而不再可走，已从完成度中剔除，不算漏做。</div>'
+    :(q.status_cls==='notstarted'?'<div class="hongchen-inspect-note">前置剧情还没走到，先推进前面的任务吧。</div>':'');
   return '<div class="hongchen-inspect"><div class="hongchen-inspect-title">'
     +'<span class="hongchen-id">#'+q.id+'</span>'+esc(q.name)
     +'<span class="hongchen-status '+st.cls+'">'+st.label+'</span></div>'
     +(q.desc?'<p class="hongchen-inspect-desc">'+esc(q.desc)+'</p>':'')
+    +notice
     +'<div class="hongchen-inspect-grid">'
-    +'<div class="hongchen-ir"><b>所在环</b><span>第 '+(q.depth||1)+' 环</span></div>'
+    +'<div class="hongchen-ir"><b>所在环</b><span>第 '+ringOf(q)+' 环</span></div>'
     +'<div class="hongchen-ir"><b>前置</b><span>'+(q.prev&&map[q.prev]?esc(map[q.prev].name):'无（起点）')+'</span></div>'
     +'<div class="hongchen-ir"><b>后续</b><span>'+(next||'无')+'</span></div>'
     +'<div class="hongchen-ir"><b>分支</b><span>'+(q.branch?(esc((q.branch_with||[]).join(' / '))||'互斥选项'):'否')+'</span></div>'
@@ -92,14 +176,29 @@ function inspectHtml(q,line){
 
 function panelHtml(line){
   const selected=(line.quests||[]).filter(q=>CUR===q.id)[0];
+  const p=line.progress||{}, curD=currentDepth(line);
+  const here=(line.quests||[]).filter(q=>ringOf(q)===FOCUS);
+  const doneHere=here.filter(q=>q.status_cls==='done').length;
+  const extra=(p.unpicked?'<span class="hongchen-unpicked-tip"> · 未选分支 '+p.unpicked+' 项不计完成度</span>':'');
   return '<div class="hongchen-panel" style="--hongchen-accent:'+esc(line.color||'#c9866b')+'">'
-    +'<div class="hongchen-panel-head"><div><b>'+esc(line.name)+'</b> · 任务树'
-    +'<span class="hongchen-panel-sum">'+esc(line.group)+' ｜ 共 '+(line.progress?line.progress.total:0)+' 环'
-    +'，已走 '+(line.progress?line.progress.done:0)+'</span></div><button type="button" class="hongchen-close" title="收起">×</button></div>'
+    +'<div class="hongchen-panel-head"><div><b>'+esc(line.name)+'</b> · 情缘任务树'
+    +'<span class="hongchen-panel-sum">'+esc(line.group)+' ｜ 已完成 '+(p.done||0)+'/'+p.base+' 环'
+    +extra+'</span></div><button type="button" class="hongchen-close" title="收起">×</button></div>'
     +'<div class="hongchen-toolbar"><span class="hongchen-chipset">'
     +FILTERS.map(f=>'<button type="button" class="hongchen-chip'+(FILTER===f[0]?' active':'')+'" data-filter="'+f[0]+'">'+f[1]+'</button>').join('')
     +'</span><input class="hongchen-search" type="search" placeholder="搜索任务名 / 编号" value="'+esc(QUERY)+'"></div>'
-    +'<div class="hongchen-tree-wrap"'+(QUERY?' data-searching="1"':'')+'>'+treeHtml(line)+'</div>'
+    +'<div class="hongchen-guide">点击顶部圆环可跳转到任意环；下方只展开当前聚焦环，不必横向拖动几十环。'
+    +'<span class="hongchen-guide-key"><i class="is-current"></i>当前进度环</span>'
+    +'<span class="hongchen-guide-key"><i class="is-focus"></i>正在查看</span>'
+    +'<span class="hongchen-guide-key"><i class="rs-branch">⑂</i>有分支</span></div>'
+    +axisHtml(line,curD)
+    +'<div class="hongchen-focus-nav">'
+    +'<button type="button" class="hongchen-step" data-step="-1"'+(FOCUS<=1?' disabled':'')+'>‹ 上一环</button>'
+    +'<div class="hongchen-focus-title">第 '+FOCUS+' 环<span>'+here.length+' 节点 · 已走 '+doneHere
+    +(FOCUS===curD?' · 当前进度环':'')+'</span></div>'
+    +'<button type="button" class="hongchen-step" data-step="1"'+(FOCUS>=maxDepth(line)?' disabled':'')+'>下一环 ›</button></div>'
+    +contextHtml(line)
+    +'<div class="hongchen-focus-body">'+focusBodyHtml(line)+'</div>'
     +(selected?inspectHtml(selected,line):'<div class="hongchen-hint">点击任一节点查看前置、分支与门槛；暖色标记为带条件的选项。</div>')
     +'</div>';
 }
@@ -114,22 +213,32 @@ function render(host,stats){
       +'<span class="hongchen-portrait">'+portrait+'</span>'
       +'<span class="hongchen-cinfo"><span class="hongchen-name">'+esc(line.name)+'</span>'
       +'<span class="hongchen-line">'+esc(line.group)+'</span>'
-      +'<span class="hongchen-cardmeta">'+(p.done||0)+'/'+(p.total||0)+' 已完成 · '+(p.ready||0)+' 可接取'
-      +(p.missed?' · '+p.missed+' 错过':'')+'</span></span>'
+      +'<span class="hongchen-cardmeta">'+(p.done||0)+'/'+(p.base||p.total||0)+' 已完成'
+      +(p.unpicked?' · 未选分支 '+p.unpicked:'')+'</span></span>'
       +'<span class="hongchen-ring">'+ring(p.pct||0,line.color)+'</span>'
       +'<span class="hongchen-arrow">›</span></button>';
   }).join('');
   const line=LINES.filter(l=>l.group===OPEN)[0];
   host.innerHTML='<div class="hongchen-root">'
     +'<div class="hongchen-head"><div><div class="hongchen-title">红尘 · 六段情缘</div>'
-    +'<div class="hongchen-sub">'+stats.quests+' 段任务 · '+stats.lines+' 条角色线 · 选项门槛已标注，hover 查看详情</div></div>'
+    +'<div class="hongchen-sub">'+stats.quests+' 段任务 · '+stats.lines+' 条角色线 · '
+    +'分支二选一放弃的任务不计入完成度，选项门槛已翻译成人话</div></div>'
     +'<div class="hongchen-legend">'
     +'<span><i class="hongchen-dot s-done"></i>已完成</span><span><i class="hongchen-dot s-doing"></i>进行中</span>'
-    +'<span><i class="hongchen-dot s-ready"></i>可接取</span><span><i class="hongchen-dot s-missed"></i>已错过</span>'
-    +'<span><i class="hongchen-dot s-locked"></i>条件不足</span></div></div>'
+    +'<span><i class="hongchen-dot s-ready"></i>可接取</span><span><i class="hongchen-dot s-notstarted"></i>未开始</span>'
+    +'<span><i class="hongchen-dot s-unpicked"></i>未选分支</span><span><i class="hongchen-dot s-locked"></i>未解锁</span></div></div>'
     +'<div class="hongchen-cards">'+cards+'</div>'
     +(line?panelHtml(line):'<div class="hongchen-empty-hint">选择一位角色，展开她的情缘任务树</div>')
     +'</div>';
+}
+
+function setFocus(host,stats,d,line){
+  const maxD=maxDepth(line||LINES.filter(l=>l.group===OPEN)[0]);
+  FOCUS=Math.max(1,Math.min(maxD,d));
+  CUR=null;
+  render(host,stats);
+  const axis=host.querySelector('.hongchen-axis-dot.is-focus');
+  if(axis&&axis.scrollIntoView)axis.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
 }
 
 function init(){
@@ -143,14 +252,23 @@ function init(){
   }
   OPEN=store.get('hongchen.open',''); FILTER=store.get('hongchen.filter','all');
   if(!LINES.some(l=>l.group===OPEN))OPEN='';
+  const line0=LINES.filter(l=>l.group===OPEN)[0];
+  if(line0)FOCUS=currentDepth(line0);
   render(host,stats);
 
   host.addEventListener('click',function(e){
     const card=e.target.closest('.hongchen-card');
     if(card){const g=card.getAttribute('data-group');OPEN=(OPEN===g?'':g);CUR=null;
+      const ln=LINES.filter(l=>l.group===OPEN)[0];if(ln)FOCUS=currentDepth(ln);
       store.set('hongchen.open',OPEN);render(host,stats);return}
     const chip=e.target.closest('.hongchen-chip');
     if(chip){FILTER=chip.getAttribute('data-filter');store.set('hongchen.filter',FILTER);render(host,stats);return}
+    const dot=e.target.closest('.hongchen-axis-dot');
+    if(dot){setFocus(host,stats,Number(dot.getAttribute('data-ring')));return}
+    const ctx=e.target.closest('.hongchen-ctx-chip');
+    if(ctx){setFocus(host,stats,Number(ctx.getAttribute('data-ring')));return}
+    const step=e.target.closest('.hongchen-step');
+    if(step&&!step.disabled){setFocus(host,stats,FOCUS+Number(step.getAttribute('data-step')));return}
     const node=e.target.closest('.hongchen-node');
     if(node){const id=Number(node.getAttribute('data-qid'));CUR=(CUR===id?null:id);render(host,stats);
       setTimeout(function(){const t=host.querySelector('.hongchen-inspect');if(t&&t.scrollIntoView)t.scrollIntoView({behavior:'smooth',block:'nearest'})},0);return}
@@ -163,8 +281,7 @@ function init(){
     const map=byId(line);
     host.querySelectorAll('.hongchen-node').forEach(function(el){
       const q=map[Number(el.getAttribute('data-qid'))];
-      const match=!QUERY||String(q.name).toLowerCase().indexOf(QUERY)>=0||String(q.id).indexOf(QUERY)>=0;
-      el.classList.toggle('dim',!match||(FILTER!=='all'&&q.status_cls!==FILTER));
+      el.classList.toggle('dim',q?isDim(q):false);
     });
   });
 }
