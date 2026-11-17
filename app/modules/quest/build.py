@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """支线：配置表 → 模块快照（自 meta_update.py 原样搬入）。"""
+import json
+import os
 import re
 
 from meta_update import (
@@ -13,18 +15,23 @@ QUEST_STATE_NAMES = {
     4: "已失败", 5: "已放弃", 6: "待提交",
 }
 
-# 彩蛋注解表：只对已确认的隐藏结局做人工解读，按需维护；其余内容仍全部来自配置派生。
-# 用任务 id 关联，避免把内部条件名带给玩家；item 会在 build 阶段从物品表补上真实道具名/说明。
-EGG_NOTES = {
-    "JIXIAODIE_CULTIVATION_WAIT": {
-        "quest": 70266,
-        "title": "未竟之约 · 小蝶的隐藏结局",
-        "trigger": "完成「一番劝言」或「暂歇片刻」后自动触发。这是隐藏任务，不会出现在任务列表里。",
-        "complete": "接取「未竟之约」后，要让纪小蝶的境界达到炼气（≥1），才会触发后续「小蝶近况」。对仍是凡人的小蝶使用「洗髓灵液」，可为她开启修炼资质、踏入炼气一层。",
-        "egg": "如果不用洗髓灵液、直接突破结丹，小蝶会死——这是藏起来的坏结局。",
-        "item": 100100,
-    },
-}
+# 人工注解放在数据文件里（notes.json），游戏更新只改 JSON、不改代码：
+# 每条按任务名（首选）或任务 id 关联，名称对不上就自动跳过，不会因为版本更新而报错。
+NOTES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notes.json")
+
+
+def _load_notes():
+    try:
+        with open(NOTES_FILE, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return []
+    if isinstance(data, dict):
+        data = data.get("notes") or []
+    return [note for note in data if isinstance(note, dict)]
+
+
+EGG_NOTES = _load_notes()
 
 
 def _dialogue_context(dialogue_id, sub_id, dialogue_index, npcs):
@@ -64,19 +71,26 @@ def _dialogue_context(dialogue_id, sub_id, dialogue_index, npcs):
 
 
 def _build_egg_notes(items, quests=None, edges=None):
+    """把 notes.json 的注解挂到任务上：先按名字匹配，再按 id 匹配，都对不上就跳过。"""
     out = []
-    for _key, note in EGG_NOTES.items():
-        entry = dict(note)
-        item = items.get(_int(note.get("item"))) or {}
-        entry["item_name"] = item.get("name") or ("物品 %s" % note.get("item"))
+    pool = list((quests or {}).values())
+    for note in EGG_NOTES:
+        name = str(note.get("quest_name") or "").strip()
+        quest_id = _int(note.get("quest_id") or note.get("quest"))
+        owner = next((q for q in pool if name and q.get("name") == name), None)
+        if owner is None and quest_id:
+            owner = next((q for q in pool if _int(q.get("id")) == quest_id), None)
+        if owner is None:
+            continue
+        entry = {key: value for key, value in note.items()
+                 if key not in ("quest_name", "quest_id", "item_id")}
+        item_id = _int(note.get("item_id") or note.get("item"))
+        item = items.get(item_id) or {}
+        entry["item_name"] = item.get("name") or (("物品 %s" % item_id) if item_id else "")
         entry["item_desc"] = item.get("desc") or ""
-        owner = next((q for q in (quests or []).values()
-                      if _int(note.get("quest")) == _int(q.get("id"))
-                      or (q.get("acq_cond") or {}).get("id") == _int(note.get("cond"))), None)
-        if owner:
-            entry["quest"] = owner["id"]
-            entry["quest_name"] = owner["name"]
-            entry["hidden"] = bool(owner.get("hidden"))
+        entry["quest"] = owner["id"]
+        entry["quest_name"] = owner["name"]
+        entry["hidden"] = bool(owner.get("hidden"))
         entry["from"] = sorted({e["from"] for e in (edges or [])
                                 if e.get("to") == entry.get("quest")})
         entry["to"] = sorted({e["to"] for e in (edges or [])
@@ -268,11 +282,11 @@ def _left_subject(node, npcs, attr_names=None):
             return {"label": (attr_names or {}).get(attr_id) or "属性",
                     "kind": "attr", "attr": attr_id}
         if index == "境界":
-            return {"label": "境界", "kind": "realm"}
+            return {"label": "你的境界", "kind": "realm"}
         if index == "修炼阶段":
-            return {"label": "修炼阶段", "kind": "phase"}
+            return {"label": "你的修炼阶段", "kind": "phase"}
         if index in ("达到修炼层数", "修炼层数"):
-            return {"label": "修炼层数", "kind": "layer"}
+            return {"label": "你的修炼层数", "kind": "layer"}
         if index == "灵石":
             return {"label": "灵石", "kind": "money"}
         if index == "宗门声望":
@@ -463,10 +477,9 @@ def _cond_leaf(node, npcs, quest_names=None, attr_names=None, realms=None,
                     "pos_text": text, "neg_text": "不满足：%s" % text}
         if index in ("修炼阶段", "境界"):
             kind = "phase" if index == "修炼阶段" else "realm"
-            text = "%s ≥ %d" % (index, need)
             realm_name = (realms or {}).get(str(need))
-            if realm_name:
-                text += "（%s）" % realm_name
+            subject = "你的修炼阶段" if kind == "phase" else "你的境界"
+            text = ("%s ≥ %s" % (subject, realm_name)) if realm_name else ("%s ≥ %d" % (subject, need))
             return {"kind": kind, "need": need, "text": text,
                     "pos_text": text, "neg_text": "不满足：%s" % text}
         if index == "灵石":
@@ -486,7 +499,12 @@ def _cond_leaf(node, npcs, quest_names=None, attr_names=None, realms=None,
         if subject.get("kind") in ("realm", "phase", "npc_realm"):
             realm_name = (realms or {}).get(str(need))
             if realm_name:
-                text += "（%s）" % realm_name
+                if subject.get("kind") == "npc_realm" and need == 0:
+                    text = "%s仍是凡人（尚未开始修炼）" % subject["label"].replace("的境界", "")
+                else:
+                    text = "%s %s %s" % (subject["label"], op, realm_name)
+        elif subject.get("kind") == "layer" and need == 0:
+            text = "%s尚未开始修炼" % subject["label"].replace("的修炼层数", "")
         leaf = {"kind": subject.get("kind") or "", "need": need,
                 "text": text, "pos_text": text, "neg_text": "不满足：%s" % text}
         for key in ("attr", "npc"):
@@ -712,18 +730,16 @@ def _flow_accept_entries(node, require=0, out=None):
     return out
 
 
-GROUP_CHAPTERS = (("炼气支线-", "炼气"), ("筑基支线-", "筑基"), ("结丹支线-", "结丹"),
-                  ("元婴支线-", "元婴"), ("化神支线-", "化神"), ("隐藏支线-", "隐藏"))
-CHAPTER_ORDER = {"炼气": 1, "筑基": 2, "结丹": 3, "元婴": 4, "化神": 5, "隐藏": 6, "支线": 7}
+# 章节不写死：group 形如 `XX支线-地区-标题`，`支线` 前面的词就是章节（炼气/筑基/隐藏/以及未来新增的）。
+_GROUP_CHAPTER_RE = re.compile(r"^(.{1,8}?)支线\s*[-－—]\s*(.+)$")
 
 
 def _split_group_name(group, region_names=None):
     """group 名拆成（标题、章节、地区）：`炼气支线-临州-宝鉴不如一见` →（宝鉴不如一见, 炼气, 临州）。"""
     chapter, rest = "支线", group
-    for prefix, label in GROUP_CHAPTERS:
-        if group.startswith(prefix):
-            chapter, rest = label, group[len(prefix):]
-            break
+    matched = _GROUP_CHAPTER_RE.match(group or "")
+    if matched:
+        chapter, rest = matched.group(1).strip(), matched.group(2)
     rest = rest.replace("—", "-").replace("－", "-")
     rest = re.sub(r"（([^）]+)）", r" · \1", rest)
     parts = [part.strip() for part in re.split(r"-", rest) if part.strip()]
@@ -748,14 +764,27 @@ def _chapter_from_realms(ids, quests, realms):
         values.extend(value for value in quests[quest_id].get("realm_ids") or [] if value > 0)
     if not values:
         return "支线"
-    realm_name = realms.get(str(min(values))) or ""
-    for key in ("炼气", "筑基", "结丹", "元婴", "化神"):
-        if key in realm_name:
-            return key
-    return "支线"
+    realm_name = str(realms.get(str(min(values))) or "").replace("期", "").strip()
+    return realm_name or "支线"
 
 
-def _build_storylines(quests, edges, realms, region_names=None):
+def _chapter_layout(realms):
+    """按境界表顺序给章节排序与配色位，新增境界（如化神之后的版本）无需改代码。"""
+    order, names = {}, []
+    for key in sorted((realms or {}), key=_int):
+        name = str(realms.get(key) or "").replace("期", "").strip()
+        if name and name not in names:
+            names.append(name)
+    for index, name in enumerate(names, 1):
+        order[name] = index
+    for extra in ("隐藏", "支线"):
+        if extra not in order:
+            order[extra] = len(order) + 1
+    tones = {name: index % 6 for index, name in enumerate(list(order), 0)}
+    return order, tones
+
+
+def _build_storylines(quests, edges, realms, region_names=None, chapter_order=None):
     """把 254 个支线聚成玩家可顺着走的剧情线；同 group 的多条 chain 必须合成一条。"""
     clusters = {}
     for quest_id, quest in quests.items():
@@ -827,7 +856,8 @@ def _build_storylines(quests, edges, realms, region_names=None):
                     "group": group, "quests": order,
                     "depths": {str(qid): depth[qid] for qid in order},
                     "npc": npc_names, "size": len(order), "first": order[0]})
-    out.sort(key=lambda line: (CHAPTER_ORDER.get(line["chapter"], 9),
+    rank = chapter_order or {}
+    out.sort(key=lambda line: (rank.get(line["chapter"], 99),
                                -line["size"], line["first"]))
     return out
 
@@ -1490,7 +1520,8 @@ def build_quests(tables):
         region = (quest.get("location") or {}).get("region") or ""
         if region:
             region_names.add(region)
-    storylines = _build_storylines(quests, edges, realms, region_names)
+    chapter_order, chapter_tones = _chapter_layout(realms)
+    storylines = _build_storylines(quests, edges, realms, region_names, chapter_order)
 
     stats = {
         "quests": len(result),
@@ -1505,9 +1536,24 @@ def build_quests(tables):
         "storylines": len(storylines),
         "option_gates": sum(len(quest["option_gates"]) for quest in result),
     }
+    # 全表任务索引：条件里会引用主线/红尘/委托/奇遇任务，前端要能显示“它叫什么、属于哪类、在哪个模块”。
+    quest_index = {}
+    for row in all_rows:
+        qid = _int(row.get("id"))
+        if not qid:
+            continue
+        qtype = _int(row.get("type"))
+        quest_index[str(qid)] = {
+            "name": _plain(row.get("name")) or "",
+            "type": qtype,
+            "type_name": (type_names.get(qtype) or "").strip("[]"),
+            "side": qtype in side_types,
+        }
     return {"schema": SCHEMA, "quests": result, "groups": sorted(groups.values(), key=lambda g: g["name"]),
             "chains": sorted(chains, key=lambda item: chain_order.get(item["id"], 0)),
             "storylines": storylines,
+            "chapter_order": chapter_order, "chapter_tones": chapter_tones,
+            "quest_index": quest_index,
             "branches": sorted(branches.values(), key=lambda item: item["key"]),
             "flow_accepts": flow_accepts,
             "space_names": {str(space_id): (info.get("name") or "")
