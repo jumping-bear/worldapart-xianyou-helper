@@ -455,8 +455,26 @@ def scan(obj, meta_obj, state=None):
     for row in rows:
         place_of(row)
 
+    layer_phases = meta_obj.get("layer_phases") or {}
+    phase_names = meta_obj.get("phase_names") or {}
+
+    def _realm_text(layer_value):
+        realm_name = str(realms.get(str(_realm_for_layer(phases, _int(layer_value)))) or "").strip()
+        return realm_name.replace("期", "") or realm_name or ("第 %d 层" % _int(layer_value))
+
+    def _current_phase(layer_value):
+        """玩家当前层（propLayerId）→ 阶段全称：29 → 筑基后期。"""
+        return layer_phases.get(str(_int(layer_value))) or _realm_text(layer_value)
+
+    def _gate_phase(value):
+        """触发条件里的「修炼阶段」是阶段 id（33 → 结丹后期），不是 propLayerId。"""
+        return (phase_names.get(str(_int(value)))
+                or layer_phases.get(str(_int(value)))
+                or _realm_text(value))
+
     for row in rows:
         gate = row.get("gate") or {}
+        detail = gate.get("trigger_detail") or {}
         ids = [_int(value) for value in gate.get("quests") or []]
         names, done = [], True
         for gate_id in ids:
@@ -473,25 +491,44 @@ def scan(obj, meta_obj, state=None):
         row["gate_layer"] = _int(gate.get("layer"))
         row["gate_npc"] = _int(gate.get("npc"))
         row["gate_favor"] = _int(gate.get("favor"))
-        ready, hint = False, ""
+        ready, hint, check = True, "", None
         if ids:
+            ready = done
             hint = "完成「%s」后自动触发" % row["gate_names"]
-        elif row["gate_space"]:
-            hint = "进入「%s」后触发" % (row["gate_space_name"] or "指定地点")
         elif row["gate_layer"]:
+            need_name = _gate_phase(row["gate_layer"])
+            cur_name = _current_phase(layer)
             ready = _int(layer) >= row["gate_layer"]
-            hint = "修炼层数达到 %d 后触发（当前 %d）" % (row["gate_layer"], _int(layer))
+            text = "修炼到「%s」后自动出现" % need_name
+            hint = text if ready else "%s（当前 %s）" % (text, cur_name)
+            check = {"kind": "realm", "text": text, "cur_text": cur_name, "ok": ready}
+        elif row["gate_space"]:
+            place = row["gate_space_name"] or "指定地点"
+            hint = "进入「%s」后出现" % place
+            ready = False
+            check = {"kind": "scene_enter", "text": hint, "cur_text": "尚未进入", "ok": False}
         elif row["gate_npc"]:
-            cur_favor = favor.get(row["gate_npc"], 0)
+            npc_name = npc_names.get(str(row["gate_npc"])) or "对方"
+            cur_favor = _int(favor.get(row["gate_npc"], 0))
             ready = cur_favor >= row["gate_favor"]
-            hint = "%s好感度达到 %d 后触发（当前 %d）" % (
-                npc_names.get(str(row["gate_npc"])) or "对方",
-                row["gate_favor"], cur_favor)
+            text = "与「%s」好感达到 %d 后出现" % (npc_name, row["gate_favor"])
+            hint = text if ready else "%s（当前 %d）" % (text, cur_favor)
+            check = {"kind": "npc_favor", "text": text, "cur_text": "当前 %d" % cur_favor,
+                     "ok": ready}
         elif row["gate_event"] == "接取条件满足":
-            ready = row["cond_ok"] is True
             hint = "满足条件后自动触发"
+        elif row["gate_event"]:
+            hint = detail.get("label") or ("%s后自动触发" % row["gate_event"])
         row["gate_ready"] = ready
         row["gate_hint"] = hint
+        if check:
+            cond_eval = row.get("cond_eval")
+            if not isinstance(cond_eval, dict):
+                cond_eval = {"checks": [], "gaps": [], "logic": ""}
+                row["cond_eval"] = cond_eval
+            cond_eval.setdefault("checks", []).insert(0, check)
+            if not check["ok"]:
+                cond_eval.setdefault("gaps", []).append(check["text"])
 
     siblings = {}
     for ids in (meta_obj.get("flow_accepts") or {}).values():
@@ -610,6 +647,8 @@ def scan(obj, meta_obj, state=None):
             label = STATUS_WAIT
         elif row["gate_pending"]:
             label = STATUS_WAIT
+        elif not row["gate_ready"]:
+            label = STATUS_WAIT
         elif row["cond_text"] and row["cond_ok"] is not True:
             label = STATUS_WAIT
         elif row["accepted"] and row["state"] in (4, 5):
@@ -648,6 +687,8 @@ def scan(obj, meta_obj, state=None):
             hint = "先完成%s" % _ref_label(row["prev_name"], row.get("prev"))
         elif row["gate_pending"]:
             hint = row["gate_hint"]
+        elif not row["gate_ready"]:
+            hint = row["gate_hint"]
         elif row["trigger_text"]:
             hint = row["trigger_text"]
         elif row["accepted"] and row["state"] in (4, 5):
@@ -669,6 +710,8 @@ def scan(obj, meta_obj, state=None):
         # 折叠行也要有一句“怎么触发”，已完成的任务同样能回看。
         if row["trigger_text"]:
             trigger_line = row["trigger_text"]
+        elif row["gate_hint"] and not row["gate_ready"]:
+            trigger_line = row["gate_hint"]
         elif row["cond_text"]:
             trigger_line = "条件：%s" % row["cond_text"]
         elif row["gate_hint"]:

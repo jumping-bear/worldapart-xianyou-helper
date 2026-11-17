@@ -758,6 +758,37 @@ def _clean_chain_name(name):
     return name.strip() or "支线"
 
 
+def _build_phase_names(tables):
+    """阶段 id → 阶段名（33 → 结丹后期）。触发条件里的「修炼阶段达到」直接给的就是阶段 id。"""
+    out = {}
+    for row in _rows(tables.get("tbcultivatephase")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            name = _text(row.get("phase_name")) or ""
+            if name:
+                out[str(_int(row["id"]))] = name
+    return out
+
+
+def _build_layer_phases(tables):
+    """层数 → 阶段全称（33 → 结丹后期），供触发条件里把 layer 说成人话。"""
+    realms = build_realms(tables)
+    phase_names, phase_realms = {}, {}
+    for row in _rows(tables.get("tbcultivatephase")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            phase_id = str(_int(row["id"]))
+            phase_names[phase_id] = _text(row.get("phase_name")) or ""
+            phase_realms[phase_id] = _int(row.get("realm"))
+    out = {}
+    for row in _rows(tables.get("tbcultivatelayer")):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        phase_id = str(_int(row.get("phase")))
+        name = phase_names.get(phase_id) or realms.get(str(phase_realms.get(phase_id, 0))) or ""
+        if name:
+            out[str(_int(row["id"]))] = name
+    return out
+
+
 def _chapter_from_realms(ids, quests, realms):
     values = []
     for quest_id in ids:
@@ -932,6 +963,8 @@ def build_quests(tables):
 
     spaces = build_spaces(tables)
     realms = build_realms(tables)
+    layer_phases = _build_layer_phases(tables)
+    phase_names = _build_phase_names(tables)
     place_names = sorted(((info.get("name") or "", space_id) for space_id, info in spaces.items()
                           if len(info.get("name") or "") >= 2), key=lambda pair: -len(pair[0]))
     # 剧情型委托人不在存档场景列表里，用人物小传里的地名推断常驻地。
@@ -1600,7 +1633,8 @@ def build_quests(tables):
                             for space_id, info in spaces.items()},
             "npc_homes": npc_homes,
             "npc_names": {str(key): value for key, value in npcs.items()},
-            "realms": realms, "phases": phases,
+            "realms": realms, "phases": phases, "layer_phases": layer_phases,
+            "phase_names": phase_names,
             "edges": edges, "diagnostics": diagnostics,
             "egg_notes": _build_egg_notes(items, quests, edges),
             "attr_names": {str(key): value for key, value in attr_names.items()},
