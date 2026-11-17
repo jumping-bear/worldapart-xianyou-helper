@@ -42,6 +42,12 @@
 .mem-segname{color:#c9d2df;font-size:12px;font-weight:600;min-width:74px}
 .mem-seg.on .mem-segname{color:#8ee6b3}
 .mem-date{color:#8b93a1;font-size:11px;font-variant-numeric:tabular-nums}
+.mem-unlock{display:inline-flex;gap:5px;flex-wrap:wrap;align-items:center}
+.mem-chip{display:inline-flex;align-items:center;border:1px solid #2d3a49;background:#182029;color:#9fb3c8;border-radius:6px;padding:2px 7px;font-size:11px;line-height:1.5;white-space:nowrap}
+.mem-chip.route{border-color:#2c4a3a;background:#16261d;color:#93d6b0}
+.mem-chip.need{border-color:#4a3d27;background:#241f16;color:#e0c37a}
+.mem-chip.quest{border-color:#3c3550;background:#1e1a29;color:#c4b5f0}
+.mem-chip.block{border-color:#4a2b2b;background:#251818;color:#e08a8a}
 .mem-hint{color:#778292;font-size:11px;line-height:1.6;margin-left:auto;text-align:right}
 .mem-group{display:flex;align-items:center;gap:8px;margin:18px 2px 8px;color:#cfd8e3;font-size:13px;font-weight:600}
 .mem-group span{margin-left:auto;color:#778292;font-size:11px;font-weight:400}

@@ -205,6 +205,7 @@ def scan_memoria(obj, meta_obj):
             "id": entry_id, "cat": entry.get("cat"), "npc": npc_id,
             "title": entry.get("title") or "", "hint": entry.get("hint") or "",
             "sort": entry.get("sort") or 0,
+            "unlock": entry.get("unlock") or {},
             "got": got, "viewed": seen, "date": _date(unlocked.get(entry_id)) if got else "",
         }
         category = entry.get("cat")
@@ -222,6 +223,7 @@ def scan_memoria(obj, meta_obj):
                     "pet": bool(profile.get("pet")),
                     "layer": profile.get("layer", ""),
                     "segs": [], "total": 0, "got": 0, "viewed": 0, "last": "",
+                    "reachable": 0, "blocked": 0,
                 }
             card["segs"].append(row)
         elif category == 2:
@@ -249,6 +251,9 @@ def scan_memoria(obj, meta_obj):
         card["total"] = len(card["segs"])
         card["got"] = sum(1 for seg in card["segs"] if seg["got"])
         card["viewed"] = sum(1 for seg in card["segs"] if seg["viewed"])
+        card["reachable"] = sum(1 for seg in card["segs"]
+                                if (seg.get("unlock") or {}).get("reachable"))
+        card["blocked"] = card["total"] - card["reachable"]
         dates = [seg["date"] for seg in card["segs"] if seg["date"]]
         card["last"] = max(dates) if dates else ""
     shooting_rows = sorted(shooting.values(),
@@ -261,7 +266,9 @@ def scan_memoria(obj, meta_obj):
     totals = {
         "shooting": {"got": sum(card["got"] for card in shooting_rows),
                      "total": sum(card["total"] for card in shooting_rows),
-                     "viewed": sum(card["viewed"] for card in shooting_rows)},
+                     "viewed": sum(card["viewed"] for card in shooting_rows),
+                     "reachable": sum(card["reachable"] for card in shooting_rows),
+                     "blocked": sum(card["blocked"] for card in shooting_rows)},
         "bond": {"got": sum(1 for row in bonds if row["got"]),
                  "total": len(bonds),
                  "viewed": sum(1 for row in bonds if row["viewed"])},
@@ -314,8 +321,8 @@ def summary(module):
     bond = stats.get("bond") or {}
     adventure = stats.get("adventure") or {}
     friends = stats.get("friends") or {}
-    return ("留影石：留影 %d/%d 段，结缘 %d/%d 位，奇遇留影 %d/%d 桩，故交 %d 人；未看 %d 条" % (
-        shooting.get("got", 0), shooting.get("total", 0),
+    return ("留影石：留影 %d/%d 段（当前可达 %d），结缘 %d/%d 位，奇遇留影 %d/%d 桩，故交 %d 人；未看 %d 条" % (
+        shooting.get("got", 0), shooting.get("total", 0), shooting.get("reachable", 0),
         bond.get("got", 0), bond.get("total", 0),
         adventure.get("got", 0), adventure.get("total", 0),
         friends.get("count", 0), stats.get("unseen", 0)))

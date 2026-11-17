@@ -35,6 +35,20 @@ function stateMatch(got,viewed){
  if(ui.state==='unseen')return !!got&&!viewed;
  return true;
 }
+function unlockChips(seg){
+ const u=seg.unlock||{},chips=[];
+ if(seg.got){
+  if(u.quality)chips.push(`<span class="mem-chip">${esc(u.quality)}</span>`);
+  return chips.length?`<span class="mem-unlock">${chips.join('')}</span>`:'';
+ }
+ if(u.entry)chips.push(`<span class="mem-chip route">${esc(u.tag||'灵影')}·留影石</span>`);
+ if(u.after)chips.push(`<span class="mem-chip need">前置 ${esc(u.after)}</span>`);
+ if(n(u.intimacy)>0)chips.push(`<span class="mem-chip need">好感 ≥${n(u.intimacy)}</span>`);
+ if(n(u.stamina)>0)chips.push(`<span class="mem-chip">精力 ${n(u.stamina)}</span>`);
+ if(u.quest)chips.push(`<span class="mem-chip quest">支线·${esc(u.quest_name||('#'+u.quest))}</span>`);
+ if(u.reachable===false)chips.push(`<span class="mem-chip block">当前版本无入口</span>`);
+ return chips.length?`<span class="mem-unlock">${chips.join('')}</span>`:'';
+}
 
 function initMemoria(){
  const m=DATA.modules.memoria;if(!m)return;
@@ -42,9 +56,10 @@ function initMemoria(){
  if(!VIEWS.some(v=>v[0]===ui.view))ui.view='shooting';
  if(!ui.sort)ui.sort=defaultSort(ui.view);
  const st=data.stats||{},sc=st.shooting||{},bc=st.bond||{},ac=st.adventure||{},fc=st.friends||{};
+ const reach=typeof sc.reachable==='number'?sc.reachable:sc.total;
  $('memoria').innerHTML=sourceHtml(m)+`
   <div class="mem-cards">
-   <div class="card"><div class="k">留影</div><div class="v">${n(sc.got)}<small>共 ${n(sc.total)} 段</small></div></div>
+   <div class="card"><div class="k">留影</div><div class="v">${n(sc.got)}<small>共 ${n(sc.total)} 段${reach<n(sc.total)?` · 可达 ${reach}`:''}</small></div></div>
    <div class="card"><div class="k">结缘</div><div class="v">${n(bc.got)}<small>共 ${n(bc.total)} 位</small></div></div>
    <div class="card"><div class="k">奇遇留影</div><div class="v">${n(ac.got)}<small>共 ${n(ac.total)} 桩</small></div></div>
    <div class="card"><div class="k">故交</div><div class="v">${n(fc.count)}<small>${n(fc.records)} 条往事</small></div></div>
@@ -140,12 +155,13 @@ function renderShooting(q){
   const segs=(card.segs||[]).map(seg=>`<div class="mem-seg${seg.got?' on':''}">
    <span class="mem-segname">留影 ${esc(seg.title||'')}</span>${stateBadge(seg.got,seg.viewed)}
    ${seg.date?`<span class="mem-date">收录 ${esc(seg.date)}</span>`:''}
+   ${unlockChips(seg)}
    ${seg.got?'':`<span class="mem-hint">${esc(seg.hint||'尚无记忆')}</span>`}
   </div>`).join('');
   return `<details class="mem-npc"${open?' open':''}><summary>
    ${avatarHtml(card.name,card.avatar)}
-   <span class="mem-id"><span class="mem-name">${hi(card.name,q)}${card.pet?badge('灵宠','dao'):''}${card.layer?badge(card.layer):''}${unseen>0?badge(`未看 ${unseen}`,'warn'):''}</span>
-    <span class="mem-sub">${esc(card.title||'暂无称号')}${card.last?` · 最近收录 ${esc(card.last)}`:''}</span>
+   <span class="mem-id"><span class="mem-name">${hi(card.name,q)}${card.pet?badge('灵宠','dao'):''}${card.layer?badge(card.layer):''}${unseen>0?badge(`未看 ${unseen}`,'warn'):''}${card.blocked>0?badge(`未开放 ${card.blocked} 段`,'off'):''}</span>
+    <span class="mem-sub">${esc(card.title||'暂无称号')}${card.last?` · 最近收录 ${esc(card.last)}`:''}${card.reachable<card.total?` · 当前可达 ${card.reachable}/${card.total}`:''}</span>
     <span class="mem-bar"><i style="width:${pct(card.got,card.total)}%"></i></span></span>
    <span class="mem-pct">${card.got}/${card.total}<small>${card.got===card.total?'已集齐':(card.got?'收录中':'尚未收录')}</small></span>
   </summary><div class="mem-segs">${segs}</div></details>`;
@@ -193,6 +209,7 @@ function renderAdventure(q){
   return `<div class="mem-group">${esc(name)}<span>${got}/${list.length} 已收录</span></div>`+
    list.map(row=>`<div class="mem-row">
     <span class="mem-name">${hi(row.name,q)}</span>${stateBadge(row.got,row.viewed)}
+    ${row.got?'':`<span class="mem-chip need">完成该奇遇</span>`}
     <span class="mem-desc">${hi(row.desc||'暂无来由',q)}</span>
     <span class="mem-date">${row.got?(row.date?esc(row.date):'日期未知'):'尚无记忆'}</span>
    </div>`).join('');
