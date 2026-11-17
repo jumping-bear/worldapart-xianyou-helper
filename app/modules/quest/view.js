@@ -1,10 +1,12 @@
-/* 支线：页面渲染（自 output.py 原样搬入）。 */
+/* 支线：页面渲染（自 output.py 原样搬入；2.1 增加任务树 / 易踩坑 / 选项门槛）。 */
 (function(){
 const QUEST_FILTER_KEY='worldapart.quest.filters.v2';
 function initQuest(){
  const m=DATA.modules&&DATA.modules.quest;if(!m)return;
  const host=$('quest'),st=m.rows||{},rows=st.rows||[],stats=st.stats||{};
  if(!rows.length){host.innerHTML=sourceHtml(m)+'<div class="empty">暂无支线配置</div>';return}
+ const edges=st.edges||[],diag=st.diagnostics||{};
+ const hotN=(diag.option_gates||[]).filter(g=>g.no_grey).length;
  const byId={};rows.forEach(r=>byId[r.id]=r);
  let state=Object.assign({q:'',status:'all',group:'',view:'chain'},store.get(QUEST_FILTER_KEY,{}));
  const groups=[...new Set(rows.map(r=>r.group||'其他支线'))];
@@ -15,12 +17,16 @@ function initQuest(){
  const linkName=id=>byId[id]?byId[id].name:('#'+id);
  const rewardTip=x=>[(x.sources||[]).join('/'),x.type?('类型：'+x.type):'',x.price?('参考价 '+x.price):'',x.desc||''].filter(Boolean).join(' · ');
  const rewardChip=x=>`<span class="efchip fq${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)} ×${x.min===x.max?x.min:x.min+'-'+x.max}<span class="q">${esc(x.sources.join('/'))}</span></span>`;
+ const gateChips=r=>(r.option_gates||[]).filter(g=>g.priority==='P0'||!g.priority).map(g=>
+   `<span class="qgate ${g.no_grey?'nogrey':''}" title="${esc((g.option||'')+' · '+(g.alias||'')+' · '+(g.grey||'游戏内无灰字提示'))}">${g.no_grey?'[无灰字] ':''}需${esc(g.text)}</span>`).join('');
  function detailBody(r){
   const link=(r.prev?esc(linkName(r.prev))+' › ':'')+esc(r.name)+(r.next.length?' › '+r.next.map(linkName).map(esc).join(' / '):'');
   return (r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:'')+
    (giverName(r)?`<div class="qline"><b>委托人</b>${esc(giverName(r))}${r.npc_retired?'<span class="badge warn">已退隐</span>':''}</div>`:'')+
    (r.objectives.length?`<div class="qline"><b>目标</b>${r.objectives.slice(0,3).map(o=>esc(o.text)).join(' · ')}</div>`:'')+
    (r.rewards.length?`<div class="qline"><b>奖励</b><div class="efchips">${r.rewards.map(rewardChip).join('')}</div></div>`:`<div class="qline"><b>奖励</b><span class="muted">剧情向，无固定奖励</span></div>`)+
+   (gateChips(r)?`<div class="qline"><b>门槛</b><div class="qgates">${gateChips(r)}</div></div>`:'')+
+   (r.acq_readable?`<div class="qline"><b>接取条件</b><span title="${esc(r.acq_readable)}">${esc(r.acq_readable)}</span>${r.acq_mixed?'<span class="badge warn">混合逻辑</span>':''}</div>`:'')+
    (r.unreachable?`<div class="qline"><b>不可达</b>${esc(r.unreachable_text)}</div>`:'')+
    (!r.accepted&&r.status_hint?`<div class="qline"><b>接取</b>${esc(r.status_hint)}</div>`:'')+
    (r.branch&&r.branch_with.length?`<div class="qline"><b>分支</b>与「${esc(r.branch_with.join('」「'))}」二选一，实际以选择为准</div>`:'')+
@@ -65,6 +71,7 @@ function initQuest(){
    `<div class="qname">${esc(r.name)}</div>`+
    `<div class="qoptmeta"><span class="badge ${statusCls(r)}">${esc(statusText(r))}</span>`+
    (r.unreachable?'<span class="badge warn">不可达</span>':'')+`</div>`+
+   (gateChips(r)?`<div class="qgates">${gateChips(r)}</div>`:'')+
    `<div class="rwline">${rewardChips(r,2)||'<span class="mutedsm">剧情向，无固定奖励</span>'}</div>`+
    (r.unreachable?`<div class="why">${esc(r.unreachable_text)}</div>`:'')+
    (r.branch_missed?`<div class="why">未选：${esc(r.status_hint||r.branch_chosen)}</div>`:'')+
@@ -122,6 +129,49 @@ function initQuest(){
   return `<details class="qchain" ${open?'open':''}>${head}<div class="qchainbody">`+
    nextHtml+walkedHtml+todoHtml+missedHtml+deadHtml+`</div></details>`;
  }
+ // 任务树：只读 edges 画分叉/汇合/隐藏，按环数分层，每个节点列出其出边关系。
+ function treeBlock(items,full){
+  const all=(full&&full.length)?full:items;
+  const chainIds=new Set(all.map(r=>r.id));
+  const chainEdges=edges.filter(e=>chainIds.has(e.from)&&chainIds.has(e.to));
+  const levels={};
+  all.forEach(r=>{const lv=r.chain_index||1;(levels[lv]=levels[lv]||[]).push(r)});
+  const lvKeys=Object.keys(levels).map(Number).sort((a,b)=>a-b);
+  const kindName={sequential:'顺序',branch:'分叉',conditional:'条件',triggered:'触发'};
+  const nodeHtml=r=>{
+   const outs=chainEdges.filter(e=>e.from===r.id);
+   const inN=chainEdges.filter(e=>e.to===r.id).length;
+   const tip=r.hidden?('隐藏任务 · 任务列表不可见'+(r.trigger_label?'；'+r.trigger_label:'')):
+     ((r.acq_cond&&r.acq_cond.readable)?r.acq_cond.readable:(r.status_hint||r.name));
+   return `<div class="tnode ${r.hidden?'ishidden':''} ${r.done?'isdone':''}" title="${esc(tip)}">`+
+    `<span class="thead"><span class="tid">${r.id}</span><span class="tname">${esc(r.name)}</span>`+
+    (r.hidden?'<span class="tflag hidden">隐藏</span>':'')+
+    (inN>1?`<span class="tflag merge" title="${inN} 条路径在此汇合">汇合 ${inN}</span>`:'')+
+    `<span class="badge ${statusCls(r)}">${esc(statusText(r))}</span></span>`+
+    (outs.length?`<div class="tout">`+outs.map(e=>
+      `<span class="tedge k-${e.kind}${e.egg?' egg':''}${e.hidden?' tohidden':''}" title="${esc(e.label)}">`+
+      `<i>${kindName[e.kind]||e.kind}</i>→${esc(linkName(e.to))}${e.label?' · '+esc(e.label):''}`+
+      (e.egg?' <b>彩蛋</b>':'')+`</span>`).join('')+`</div>`:'')+
+    `</div>`;
+  };
+  return `<details class="qtree" open><summary><span class="evname">${esc(all[0].chain_name||'支线')} · 任务树</span>`+
+   `<span class="badge">${all.length} 环</span><span class="badge">${chainEdges.length} 关系</span></summary>`+
+   `<div class="qtreebody">`+lvKeys.map(lv=>
+     `<div class="tlevel"><span class="tlabel">第 ${lv} 环</span><div class="tnodes">`+
+     levels[lv].map(nodeHtml).join('')+`</div></div>`).join('')+`</div></details>`;
+ }
+ // 易踩坑面板：P0 选项门槛 chip，无灰字的高亮，点击跳到对应任务。
+ function pitfallPanel(){
+  const list=(diag.option_gates||[]).filter(g=>g.priority!=='P2');
+  if(!list.length)return '';
+  return `<div class="qpitfall" id="qpitfall"><div class="qptitle">易踩坑 · 选项门槛`+
+   `<span class="mutedsm">P0 玩家属性/好感/物品/门派门槛，其中 ${hotN} 条游戏内无灰字提示，助手补上</span></div>`+
+   `<div class="qpchips">`+list.slice(0,80).map(g=>
+     `<button class="qpchip ${g.no_grey?'hot':''}" data-quest="${g.quest||0}" title="${esc(g.option+' · '+g.text+' · '+(g.alias||''))}">`+
+     (g.quest?esc(linkName(g.quest)):'对话 '+g.dialogue)+`<span class="qpt">需${esc(g.text)}</span>`+
+     (g.no_grey?'<span class="qph">无灰字</span>':'')+`</button>`).join('')+
+   (list.length>80?`<span class="mutedsm">…另有 ${list.length-80} 条，展开各任务详情可见</span>`:'')+`</div></div>`;
+ }
  function matched(){
   const q=state.q.trim();
   return rows.filter(r=>{
@@ -130,6 +180,7 @@ function initQuest(){
    if(state.status==='done'&&!r.done)return false;
    if(state.status==='reward'&&!r.rewards.length)return false;
    if(state.status==='branch'&&!r.branch)return false;
+   if(state.status==='pitfall'&&!(r.option_gates||[]).some(x=>x.priority==='P0'||!x.priority))return false;
    if(state.status==='blocked'&&(r.done||!r.unreachable))return false;
    if(state.status==='can'&&r.status_label!=='可接取')return false;
    if(state.status==='cond'&&r.status_label!=='条件不足')return false;
@@ -149,7 +200,8 @@ function initQuest(){
    if(!q)return true;
    const hay=[r.name,r.desc,r.group,r.chain_name,giverName(r),locText(r),r.spot,r.unreachable_text,
     (r.objectives||[]).map(o=>o.text).join(' '),r.rewards.map(x=>x.name).join(' '),
-    (r.branch_with||[]).join(' '),linkName(r.prev),r.next.map(linkName).join(' ')].join(' ');
+    (r.branch_with||[]).join(' '),linkName(r.prev),r.next.map(linkName).join(' '),
+    (r.option_gates||[]).map(g=>g.text+' '+g.alias).join(' ')].join(' ');
    return hay.includes(q);
   });
  }
@@ -174,15 +226,16 @@ function initQuest(){
   $('qs').value=state.q;
   const list=matched();
   const breakdown=`未接取 ${stats.todo||0} 个（含折叠的前置未完成/未选分支/不可达）：可接取 ${stats.can_accept||0} · 条件不足 ${stats.cond_fail||0} · 待触发 ${stats.waiting||0} · 疑似已触发 ${stats.suspect||0} · 疑似已跳过 ${stats.skipped||0} · 剧情接取 ${stats.dialogue||0} · 触发未知 ${stats.unknown||0} · 前置未完成 ${stats.blocked_prev||0} · 未选分支 ${stats.missed||0} · 后续已完成 ${stats.record_gap||0} · 不可达 ${stats.unreachable||0}`;
-  if(state.view==='chain'){
+  if(state.view==='tree'||state.view==='chain'){
    const allMap=new Map();
    rows.forEach(r=>{const key=r.chain_id||('q'+r.id);if(!allMap.has(key))allMap.set(key,[]);allMap.get(key).push(r)});
    const map=new Map();
    list.forEach(r=>{const key=r.chain_id||('q'+r.id);if(!map.has(key))map.set(key,[]);map.get(key).push(r)});
    const chains=[...map.entries()].sort((a,b)=>chainRank(a[1])-chainRank(b[1])
     ||String(a[1][0].chain_name||'').localeCompare(String(b[1][0].chain_name||''),'zh-CN'));
-   $('qcount').textContent=`筛选结果：${chains.length} 条剧情线 / ${list.length} 个支线 · ${breakdown}`;
-   $('qlist').innerHTML=chains.map(([key,items])=>chainBlock(items,allMap.get(key))).join('')||'<div class="empty">没有符合条件的支线，试试放宽筛选。</div>';
+   $('qcount').textContent=(state.view==='tree'?'任务树：':'筛选结果：')+`${chains.length} 条剧情线 / ${list.length} 个支线 · ${breakdown}`;
+   $('qlist').innerHTML=chains.map(([key,items])=>
+     state.view==='tree'?treeBlock(items,allMap.get(key)):chainBlock(items,allMap.get(key))).join('')||'<div class="empty">没有符合条件的支线，试试放宽筛选。</div>';
   }else{
    const grouped={};
    list.forEach(r=>{const key=r.group||'其他支线';(grouped[key]=grouped[key]||[]).push(r)});
@@ -203,13 +256,14 @@ function initQuest(){
   `<div class="card"><div class="k">未拿奖励</div><div class="v">${stats.rewards_todo||0} <span>个</span></div><div class="s">灵石约 ${stats.stones_todo||0}（含分支）</div></div>`+
   `<div class="card"><div class="k">当前不可达</div><div class="v">${stats.unreachable||0} <span>个</span></div><div class="s">灵石约 ${stats.unreachable_stones||0} · ${esc(stats.player_realm_name||'未知境界')}${stats.blocked_by_prev?' · 前置连带 '+stats.blocked_by_prev:''}</div></div>`+
   `<div class="card"><div class="k">剧情链 / 二选一</div><div class="v">${stats.chains||0} <span>/ ${stats.branches||0}</span></div><div class="s">链 / 分支组</div></div>`+
+  `<div class="card qpcard"><div class="k">易踩坑门槛</div><div class="v">${stats.p0_gates||0} <span>条</span></div><div class="s">P0 选项门槛 · 无灰字 ${hotN}</div></div>`+
   `</div>`+
   `<div class="legend"><span>奖励颜色：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span><span>奖励后面的灰字是来源</span></div>`+
-  `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找支线 / 剧情线 / 委托人 / 奖励</span><input id="qs" placeholder="输入任务名、剧情线、地点、NPC 或奖励物品"></label></div></div>`+
+  `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找支线 / 剧情线 / 委托人 / 奖励 / 门槛</span><input id="qs" placeholder="输入任务名、剧情线、地点、NPC、奖励或门槛（如灵机）"></label></div></div>`+
   `<div class="chips" id="qview"><span class="chip-label">视图</span>`+
-   `<button class="chip" data-view="chain">剧情线</button><button class="chip" data-view="flat">逐条</button></div>`+
+   `<button class="chip" data-view="chain">剧情线</button><button class="chip" data-view="tree">任务树</button><button class="chip" data-view="flat">逐条</button></div>`+
   `<div class="chips" id="qstatus"><span class="chip-label">状态</span>`+
-   `<button class="chip" data-st="all">全部</button><button class="chip" data-st="worth">值得做 ${stats.worth||0}</button><button class="chip" data-st="todo">未接取 ${stats.todo||0}</button>`+
+   `<button class="chip" data-st="all">全部</button><button class="chip" data-st="worth">值得做 ${stats.worth||0}</button><button class="chip" data-st="pitfall">易踩坑 ${stats.p0_gates||0}</button><button class="chip" data-st="todo">未接取 ${stats.todo||0}</button>`+
    `<button class="chip" data-st="can">可接取 ${stats.can_accept||0}</button><button class="chip" data-st="cond">条件不足 ${stats.cond_fail||0}</button>`+
    `<button class="chip" data-st="wait">待触发 ${stats.waiting||0}</button><button class="chip" data-st="suspect">疑似已触发 ${stats.suspect||0}</button>`+
    `<button class="chip" data-st="skipped">疑似已跳过 ${stats.skipped||0}</button>`+
@@ -220,8 +274,11 @@ function initQuest(){
    `<button class="chip" data-st="blocked">不可达 ${stats.unreachable||0}</button></div>`+
   `<div class="chips" id="qgroups"><span class="chip-label">剧情线</span><button class="chip" data-group="">全部</button>`+
    groups.map(name=>`<button class="chip" data-group="${esc(name)}">${esc(name)}</button>`).join('')+`</div>`+
+  pitfallPanel()+
   `<div id="qcount" class="result-info"></div><div id="qlist"></div>`+
   `<div class="tip">奖励来自任务提交、阶段目标与剧情流水，全部实时读取游戏配置，任务或奖励改动后无需更新模块。奖励物品悬停可看类型、参考价与物品说明。`+
+  `「任务树」按环数分层，只读配置派生的 edges 画出顺序/分叉/条件/触发关系：分叉节点列出各条去路与门槛，多条路径汇入的节点标「汇合」，隐藏任务标「隐藏」并在悬停时说明触发条件，带彩蛋的关系标「彩蛋」。`+
+  `「易踩坑」汇总是选项条件（optionCondition）里的 P0 玩家门槛：灵机/体魄/神识≥N、好感≥N、灵石≥N 等，其中标「无灰字」的是游戏内连灰色提示都没有、最容易卡关的选项，点 chip 可跳到对应任务。`+
   `「待触发」表示有明确触发条件（前置任务、进入指定场景、修炼层数或好感度达标等），满足后自动出现；「疑似已触发」表示触发条件已满足但本环没有记录，可能已经触发过或记录缺失；`+
   `「剧情接取」表示要在剧情对话里接取，没有固定入口；「触发未知」表示配置里没有触发条件，只能靠剧情脚本触发，游戏内不一定有入口；`+
   `「疑似已跳过」表示同一段剧情流程里接取了几个任务，其中一个已完成、这个没有记录，多半是同源分支被跳过，也可能是记录缺失；`+
@@ -235,6 +292,7 @@ function initQuest(){
  $('qview').onclick=e=>{const b=e.target.closest('[data-view]');if(!b)return;state.view=b.dataset.view;store.set(QUEST_FILTER_KEY,state);renderAll()};
  $('qstatus').onclick=e=>{const b=e.target.closest('[data-st]');if(!b)return;state.status=b.dataset.st;store.set(QUEST_FILTER_KEY,state);renderAll()};
  $('qgroups').onclick=e=>{const b=e.target.closest('[data-group]');if(!b)return;state.group=b.dataset.group;store.set(QUEST_FILTER_KEY,state);renderAll()};
+ if($('qpitfall'))$('qpitfall').onclick=e=>{const b=e.target.closest('[data-quest]');if(!b)return;const r=byId[+b.dataset.quest];if(!r)return;state.q=r.name;state.view='flat';state.status='all';state.group='';store.set(QUEST_FILTER_KEY,state);renderAll()};
  renderAll();
 }
 window.PROGRESS_VIEWS=window.PROGRESS_VIEWS||{};

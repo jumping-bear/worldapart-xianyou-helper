@@ -1,0 +1,51 @@
+/* 支线：2.1 任务树 / 易踩坑 / 选项门槛（仅本模块选择器）。配色沿用既有模块。 */
+
+/* 选项门槛 chip：出现在选项卡、明细与任务树里 */
+.qgates{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 7px}
+.qgate{display:inline-flex;align-items:center;gap:3px;font-size:10px;line-height:1.4;padding:2px 7px;border-radius:5px;border:1px solid #4a3c22;background:#1d1a12;color:#e8c76d;cursor:help;white-space:nowrap}
+.qgate.nogrey{border-color:#7a4a2a;background:#2a1c12;color:#ffc987}
+
+/* 易踩坑统计卡 */
+.qpcard{border-color:#5a4c2a;background:#211c12}
+.qpcard .v{color:#f0d38a}
+.qpcard .s{color:#b39a5b}
+
+/* 易踩坑面板（P0 选项门槛） */
+.qpitfall{background:#15181f;border:1px solid #2c2a22;border-radius:10px;padding:10px 12px;margin:6px 0 12px}
+.qptitle{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;color:#f0d38a;font-size:12px;font-weight:600;margin-bottom:8px}
+.qptitle .mutedsm{font-weight:400}
+.qpchips{display:flex;flex-wrap:wrap;gap:6px;max-height:168px;overflow:auto}
+.qpchip{display:inline-flex;align-items:center;gap:5px;border:1px solid #4a3c22;background:#1a1712;color:#d7c99b;border-radius:7px;padding:4px 8px;font-size:11px;cursor:pointer;line-height:1.4;text-align:left}
+.qpchip:hover{border-color:#7a6a3a;background:#241f15;color:#f0d38a}
+.qpchip.hot{border-color:#7a4a2a;background:#2a1c12;color:#ffc987}
+.qpchip .qpt{color:#e8c76d;font-weight:600}
+.qpchip.hot .qpt{color:#ffb35c}
+.qpchip .qph{font-size:9px;border-radius:4px;padding:1px 5px;background:#5c2f1e;color:#ffd7b0;border:1px solid #7a4029}
+
+/* 任务树：按环数分层，节点列出出边关系 */
+.qtree{background:#12171f;border:1px solid #222a35;border-radius:10px;margin:0 0 10px;overflow:hidden}
+.qtree>summary{display:flex;flex-wrap:wrap;gap:8px;align-items:center;cursor:pointer;list-style:none;padding:9px 12px;background:#161c26;border-bottom:1px solid #222a35}
+.qtree>summary::-webkit-details-marker{display:none}
+.qtree[open]>summary{border-bottom-color:#2a3340}
+.qtreebody{padding:10px 12px 12px}
+.tlevel{display:flex;gap:10px;align-items:flex-start;margin-bottom:9px}
+.tlabel{flex:0 0 52px;color:#778292;font-size:11px;line-height:1.6;padding-top:4px;text-align:right}
+.tnodes{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.tnode{border:1px solid #2a3340;border-radius:8px;background:#141a23;padding:7px 9px;min-width:0;cursor:help}
+.tnode.isdone{border-color:#2e3d33;background:#111a15}
+.tnode.ishidden{border-style:dashed;border-color:#5a4c2a;background:#1c1811}
+.thead{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.tid{font-size:10px;color:#6f7787;font-variant-numeric:tabular-nums}
+.tname{font-weight:600;color:#e6edf5;font-size:13px}
+.tflag{font-size:10px;padding:1px 5px;border-radius:4px;white-space:nowrap}
+.tflag.hidden{border:1px solid #7a6a3a;background:#241f15;color:#f0d38a}
+.tflag.merge{border:1px solid #2e455c;background:#141d29;color:#a6cff0}
+.tout{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tedge{display:inline-flex;align-items:center;gap:4px;font-size:11px;line-height:1.4;border:1px solid #2b3441;border-radius:5px;padding:2px 7px;background:#10141a;color:#9aa3b2;cursor:help}
+.tedge i{font-style:normal;font-size:10px;color:#8b93a1}
+.tedge.k-branch{border-color:#453a5c;color:#cbb2ee;background:#1b1622}
+.tedge.k-conditional{border-color:#5a4c2a;color:#f0d38a;background:#211c12}
+.tedge.k-triggered{border-color:#2e455c;color:#a6cff0;background:#141d29}
+.tedge.tohidden{border-style:dashed}
+.tedge.egg{border-color:#7a4a2a;background:#2a1c12;color:#ffc987}
+.tedge b{font-weight:600;color:#ffb35c}

@@ -138,11 +138,11 @@ def _quest_highlight(value):
     return _plain(match.group(1)) if match else ""
 
 
-def _quest_condition(cond, npcs, quest_names=None):
+def _quest_condition(cond, npcs, quest_names=None, attr_names=None):
     """把接取条件表达式转成可判定的结构：好感度、城镇声望、境界、修炼阶段等。"""
     if not isinstance(cond, dict):
         return None
-    root = _cond_leaf(cond.get("condition"), npcs, quest_names)
+    root = _cond_leaf(cond.get("condition"), npcs, quest_names, attr_names)
     if not root:
         return None
     mode = root.get("mode") or "all"
@@ -167,7 +167,7 @@ def _quest_condition(cond, npcs, quest_names=None):
             "text": root.get("text") or " 且 ".join(check.get("text") or "" for check in flat)}
 
 
-def _cond_leaf(node, npcs, quest_names=None):
+def _cond_leaf(node, npcs, quest_names=None, attr_names=None):
     """单个条件或“且/或”组合，输出可读文本与可判定字段。"""
     node = _unwrap_expr(node)
     name, index, args = _call_parts(node)
@@ -180,14 +180,14 @@ def _cond_leaf(node, npcs, quest_names=None):
     if not index and isinstance(node, dict) and node.get("index"):
         index = _expr_string(node["index"]) or index
     if name in ("且", "或", "&&", "||", "and", "or") and args:
-        parts = [_cond_leaf(item, npcs, names) for item in args]
+        parts = [_cond_leaf(item, npcs, names, attr_names) for item in args]
         parts = [item for item in parts if item]
         if parts:
             mode = "any" if name in ("或", "||", "or") else "all"
             return {"mode": mode, "parts": parts,
                     "text": (" 且 " if mode == "all" else " 或 ").join(item["text"] for item in parts)}
     if name in ("非", "!") and args:
-        inner = _cond_leaf(args[0], npcs, names)
+        inner = _cond_leaf(args[0], npcs, names, attr_names)
         return {"kind": "", "need": 0, "text": "非（%s）" % (inner.get("text") or "条件")}
     if name == "条件" and isinstance(index, str) and values:
         quest_id = _int(values[0])
@@ -229,18 +229,16 @@ def _cond_leaf(node, npcs, quest_names=None):
             return {"kind": "city_rep", "city": _int(values[0]), "need": _int(values[1]),
                     "text": "城镇声望（%s）≥ %d" % (_int(values[0]), _int(values[1]))}
         if left_name == "玩家" and isinstance(left_index, str):
-            extra = ""
             left_values = _const_args(left_args)
-            attr_id = 0
             if left_values and left_index in ("探索属性等级", "属性等级"):
                 attr_id = _int(left_values[0])
-                extra = "（%s）" % attr_id
+                attr_label = (attr_names or {}).get(attr_id) or ("属性 %s" % attr_id)
+                return {"kind": "attr", "need": need, "attr": attr_id,
+                        "text": "%s ≥ %d" % (attr_label, need)}
             kind = {"修炼阶段": "phase", "境界": "realm", "灵石": "money",
                     "宗门声望": "sect_rep"}.get(left_index, "")
-            if attr_id:
-                kind = "attr"
-            return {"kind": kind, "need": need, "attr": attr_id,
-                    "text": "%s%s ≥ %d" % (left_index, extra, need)}
+            return {"kind": kind, "need": need, "attr": 0,
+                    "text": "%s ≥ %d" % (left_index, need)}
     if name in ("等于", "不等于", "大于", "小于", "小于等于") and args:
         left = _unwrap_expr(args[0])
         left_name, left_index, left_args = _call_parts(left)
@@ -284,23 +282,146 @@ def _expr_string(node):
     return node if isinstance(node, str) else ""
 
 
+COND_OPS = {
+    "且": "and", "&&": "and", "and": "and",
+    "或": "or", "||": "or", "or": "or",
+    "非": "not", "!": "not",
+}
+
+
+def _cond_tree(node, npcs, quest_names=None, attr_names=None):
+    """保留条件表达式的完整嵌套树（不再拍平），供三段式与混合逻辑判定。"""
+    node = _unwrap_expr(node)
+    name, index, args = _call_parts(node)
+    op = COND_OPS.get(name or "")
+    if op and args:
+        children = []
+        for arg in args:
+            child = _cond_tree(arg, npcs, quest_names, attr_names)
+            if child:
+                children.append(child)
+        if children:
+            joiner = " 且 " if op == "and" else " 或 "
+            if op == "not":
+                text = "非（%s）" % children[0]["text"]
+            elif len(children) > 1:
+                text = "（%s）" % joiner.join(child["text"] for child in children)
+            else:
+                text = children[0]["text"]
+            return {"op": op, "children": children, "text": text}
+    leaf = _cond_leaf(node, npcs, quest_names, attr_names)
+    if not leaf:
+        return None
+    return {"op": "", "children": [], "leaf": leaf, "text": leaf.get("text") or "条件"}
+
+
+def _cond_segments(tree):
+    """把条件树拆成三段式：前置 / 排除 / 判定逻辑，并标注混合逻辑。"""
+    require, exclude = [], []
+    flags = {"and": False, "or": False, "not": False}
+
+    def walk(node, negated=False):
+        op = node.get("op")
+        if op:
+            flags[op] = True
+            for child in node.get("children") or []:
+                walk(child, negated or op == "not")
+            return
+        leaf = node.get("leaf") or {}
+        text = leaf.get("text") or node.get("text") or "条件"
+        if negated:
+            exclude.append(text if text.startswith("非") else ("非（%s）" % text))
+        else:
+            require.append(text)
+
+    if tree:
+        walk(tree)
+    mixed = (flags["and"] and flags["or"]) or flags["not"]
+    if mixed:
+        logic = "混合逻辑（且/或/非嵌套），需人工确认"
+    elif flags["or"]:
+        logic = "任一满足（或）"
+    elif flags["and"]:
+        logic = "全部满足（且）"
+    else:
+        logic = "单一条件"
+    return {"require": "；".join(require), "exclude": "；".join(exclude),
+            "logic": logic, "mixed": mixed}
+
+
+def _cond_task_refs(tree):
+    """从条件树提取任务引用：任务提交→triggered，任务持有/接取→conditional。"""
+    out = []
+
+    def walk(node):
+        leaf = node.get("leaf") or {}
+        kind = leaf.get("kind") or ""
+        quest_id = _int(leaf.get("quest"))
+        if quest_id and kind in ("quest_done", "quest_hold", "quest_accepted", "quest_active"):
+            out.append({"quest": quest_id, "kind": kind, "text": leaf.get("text") or ""})
+        for child in node.get("children") or []:
+            walk(child)
+
+    if tree:
+        walk(tree)
+    return out
+
+
+def _cond_realm_refs(tree):
+    """从条件树提取“某NPC境界”的判定，用于反向门槛/彩蛋检测。"""
+    out = []
+
+    def walk(node):
+        leaf = node.get("leaf") or {}
+        text = leaf.get("text") or ""
+        match = re.match(r"^(.+)的境界\s*(=|≠|>|≥|<|≤)\s*(\d+)$", text)
+        if match:
+            out.append({"npc": match.group(1), "op": match.group(2),
+                        "value": _int(match.group(3)), "text": text})
+        for child in node.get("children") or []:
+            walk(child)
+
+    if tree:
+        walk(tree)
+    return out
+
+
 def _quest_gate(node):
-    """触发表达式：任务提交 / 进入场景 / NPC 好感度 / 修炼阶段。"""
+    """触发表达式：完整解析任务提交 / 进入场景 / 接取条件满足 / 好感 / 境界。
+
+    返回兼容旧 gate 的字段，并附 trigger_detail；quests 不再用 >1000 启发式，
+    由调用方按本模块任务集合过滤。
+    """
     if isinstance(node, (list, tuple)) and len(node) == 2 and isinstance(node[1], dict):
         node = node[1]
     name, index, args = _call_parts(node)
-    event = index or ""
-    values = [_int(value) for value in _expr_ints(node)]
-    gate = {"event": event, "quests": [], "space": 0, "npc": 0, "favor": 0, "layer": 0}
+    event = index or (name or "")
+    values = _quest_call_args(node, "args")
+    if not values:
+        values = [_int(value) for value in _expr_ints(node)]
+
+    detail = {"kind": "unknown", "event": event, "label": "", "quests": [],
+              "space": 0, "npc": 0, "favor": 0, "layer": 0}
     if event == "任务提交":
-        gate["quests"] = [value for value in values if value > 1000]
+        detail.update(kind="quest_submit", quests=[_int(value) for value in values])
+        detail["label"] = "提交前置任务后自动触发"
     elif event == "进入场景":
-        gate["space"] = values[0] if values else 0
+        detail.update(kind="scene_enter", space=_int(values[0]) if values else 0)
+        detail["label"] = "进入指定场景后触发"
+    elif event == "接取条件满足":
+        detail.update(kind="acq_satisfied")
+        detail["label"] = "接取条件满足后自动触发"
     elif event == "NPC好感度达到":
-        gate["npc"] = values[0] if values else 0
-        gate["favor"] = values[1] if len(values) > 1 else 0
+        detail.update(kind="npc_favor", npc=_int(values[0]) if values else 0,
+                      favor=_int(values[1]) if len(values) > 1 else 0)
+        detail["label"] = "NPC 好感度达标后触发"
     elif event == "修炼阶段达到":
-        gate["layer"] = values[0] if values else 0
+        detail.update(kind="realm", layer=_int(values[0]) if values else 0)
+        detail["label"] = "修炼阶段达标后触发"
+
+    gate = {"event": event, "quests": detail["quests"], "space": detail["space"],
+            "npc": detail["npc"], "favor": detail["favor"], "layer": detail["layer"],
+            "trigger_detail": detail}
     return gate
 
 
@@ -362,13 +483,13 @@ def build_quests(tables):
     for row in _rows(tables.get("tbquesttype")):
         if isinstance(row, dict) and row.get("id") is not None:
             type_names[_int(row["id"])] = _text(row.get("text")) or ("类型 %s" % row["id"])
+    # 从 tbquesttype 动态识别“支线”类型；type=5 红尘由独立模块负责，显式排除。
+    side_types = {_int(quest_type) for quest_type, label in type_names.items()
+                  if "支线" in label and "红尘" not in label}
+    if not side_types:
+        side_types = {2}
 
-    side = []
-    for row in all_rows:
-        quest_type = _int(row.get("type"))
-        label = type_names.get(quest_type) or ""
-        if quest_type == 2 or "支线" in label:
-            side.append(row)
+    side = [row for row in all_rows if _int(row.get("type")) in side_types]
     if not side:
         raise ValueError("支线任务配置为空")
     quest_names = {_int(row["id"]): (_plain(row.get("name")) or ("支线 %s" % row["id"]))
@@ -397,6 +518,11 @@ def build_quests(tables):
                 "price": _int(row.get("price")),
                 "desc": _plain(row.get("itemDesc")),
             }
+    attr_names = {}
+    for row in _rows(tables.get("tbinteractattribute")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            attr_names[_int(row["id"])] = _text(row.get("name")) or ("属性 %s" % row["id"])
+
     spaces = build_spaces(tables)
     realms = build_realms(tables)
     place_names = sorted(((info.get("name") or "", space_id) for space_id, info in spaces.items()
@@ -521,11 +647,24 @@ def build_quests(tables):
 
         track_ids = {_int(o.get("trackId")) for o in objectives if _int(o.get("trackId"))}
         cond_row = conds.get(_int(row.get("acqCondition")))
-        acq_cond = _quest_condition(cond_row, npcs, quest_names) if cond_row else None
+        acq_cond = _quest_condition(cond_row, npcs, quest_names, attr_names) if cond_row else None
+        if acq_cond and cond_row:
+            tree = _cond_tree(cond_row.get("condition"), npcs, quest_names, attr_names)
+            acq_cond["tree"] = tree
+            segments = _cond_segments(tree)
+            acq_cond["segments"] = segments
+            acq_cond["mixed"] = segments["mixed"]
+            acq_cond["readable"] = "前置：%s；排除：%s；判定：%s" % (
+                segments["require"] or "无", segments["exclude"] or "无", segments["logic"])
         gate = _quest_gate(row.get("triggerExpr"))
-        if not (gate["quests"] or gate["space"] or gate["npc"] or gate["layer"]
-                or gate["event"] == "接取条件满足"):
-            gate = None
+        if gate:
+            valid_ids = set(quest_names)
+            gate["quests"] = [value for value in gate["quests"]
+                              if value in valid_ids and value != quest_id]
+            gate["trigger_detail"]["quests"] = list(gate["quests"])
+            if not (gate["quests"] or gate["space"] or gate["npc"] or gate["layer"]
+                    or gate["event"] == "接取条件满足"):
+                gate = None
         quests[quest_id] = {
             "id": quest_id,
             "name": _plain(row.get("name")) or ("支线 %s" % quest_id),
@@ -557,12 +696,51 @@ def build_quests(tables):
             "reward_stone": sum(_int(x.get("max")) for x in rewards if _int(x.get("item")) == 50000),
             "acq_cond": acq_cond,
             "gate": gate,
+            "trigger_detail": (gate or {}).get("trigger_detail"),
+            "option_gates": [],
             "acq_branch_of": 0,
             "acq_branch_siblings": [],
             "prev_options": [],
             "acq_dialogue": acq_dialogues.get(quest_id),
             "acq_flows": [],
         }
+
+    # 对话选项门槛：optionCondition 引用 tbconditionexpr，翻译人话并按 alias 分级。
+    # P0=玩家属性/好感/物品/门派门槛（重点提示）；P2=善恶击杀/随机事件（低优先级）。
+    option_gates = {}
+    all_option_gates = []
+    for row in _rows(tables.get("tbdialogue")):
+        if not isinstance(row, dict):
+            continue
+        dialogue_id, sub_id = _int(row.get("id")), _int(row.get("subId"))
+        for option in row.get("options") or []:
+            if not isinstance(option, dict):
+                continue
+            cond_id = _int(option.get("optionCondition"))
+            if not cond_id:
+                continue
+            cond_row = conds.get(cond_id)
+            if not cond_row:
+                continue
+            alias = str(cond_row.get("alias") or "")
+            upper = alias.upper()
+            priority = "P2" if ("NPC_KILL_DEVOUR" in upper or "NPC_JEALOUS" in upper) else "P0"
+            leaf = _cond_leaf(cond_row.get("condition"), npcs, quest_names, attr_names)
+            text = _clip((leaf or {}).get("text") or alias or ("条件 %s" % cond_id), 120)
+            grey = _text(option.get("optionGreyText"))
+            opt_text = _text(option.get("optionText"))
+            calls = []
+            _quest_walk_calls(option.get("optionExpr"), calls)
+            children = [_int(args[0]) for name, args in calls
+                        if name.rsplit(".", 1)[-1] == "接取任务" and args and args[0]]
+            gate = {"cond": cond_id, "alias": alias, "text": text, "priority": priority,
+                    "dialogue": dialogue_id, "sub": sub_id, "option": opt_text,
+                    "grey": grey, "no_grey": not bool(grey), "children": children}
+            option_gates[(dialogue_id, sub_id, cond_id, opt_text)] = gate
+            all_option_gates.append(gate)
+            for child_id in children:
+                if child_id in quests and gate not in quests[child_id]["option_gates"]:
+                    quests[child_id]["option_gates"].append(gate)
 
     # 只有指向本模块支线的前置才算数，避免把 NPC id 当成前置任务。
     for quest in quests.values():
@@ -793,6 +971,119 @@ def build_quests(tables):
             for phase in row.get("phases") or []:
                 phases[str(_int(phase))] = realm_id
 
+    # 反向门槛（彩蛋）：同一 NPC 境界入口=0、后续≥1，属孤例，单点标记不剧透。
+    realm_by_npc = {}
+    for quest_id, quest in quests.items():
+        tree = (quest.get("acq_cond") or {}).get("tree")
+        for ref in _cond_realm_refs(tree):
+            realm_by_npc.setdefault(ref["npc"], []).append((ref, quest_id))
+    reverse_npcs = set()
+    for npc, entries in realm_by_npc.items():
+        ops = {entry[0]["op"] for entry in entries}
+        if ({"=", "≠"} & ops) and ({"≥", ">", "≤", "<"} & ops):
+            reverse_npcs.add(npc)
+
+    # 统一关系边：前端只读 edges 画树，含顺序/分叉/条件/触发/隐藏标注。
+    edges = []
+
+    def add_edge(src, dst, kind, label="", **extra):
+        if not src or not dst or src == dst or src not in quests or dst not in quests:
+            return
+        if any(e["from"] == _int(src) and e["to"] == _int(dst) for e in edges):
+            return
+        edge = {"from": _int(src), "to": _int(dst), "kind": kind, "label": label or ""}
+        edge.update(extra)
+        if edge not in edges:
+            edges.append(edge)
+
+    for quest_id, quest in quests.items():
+        prev = quest["prev"]
+        if not prev:
+            continue
+        gate_texts = [g["text"] for g in quest["option_gates"]
+                      if g["priority"] == "P0" and quest_id in g["children"]]
+        if quest["branch_key"] and quest["branch_key"].startswith(("d:", "p:")):
+            add_edge(prev, quest_id, "branch", "；".join(gate_texts) or "无条件分支",
+                     branch_key=quest["branch_key"])
+        elif gate_texts:
+            add_edge(prev, quest_id, "conditional", gate_texts[0],
+                     conditionAlias=quest["option_gates"][0]["alias"])
+        else:
+            add_edge(prev, quest_id, "sequential", "顺序推进")
+
+    # 接取条件/触发表达式引用的任务关系：任务提交→triggered，任务持有→conditional。
+    for quest_id, quest in quests.items():
+        acq = quest.get("acq_cond") or {}
+        tree = acq.get("tree")
+        for ref in _cond_task_refs(tree):
+            if ref["quest"] not in quests or ref["quest"] == quest_id:
+                continue
+            name = quests[ref["quest"]]["name"]
+            if ref["kind"] == "quest_done":
+                add_edge(ref["quest"], quest_id, "triggered",
+                         "完成「%s」后触发%s" % (name, "（隐藏）" if quest["hidden"] else ""),
+                         hidden=bool(quest["hidden"]), conditionAlias=acq.get("alias", ""))
+                continue
+            realm_refs = [r for r in _cond_realm_refs(tree) if r["op"] in ("≥", ">")
+                          and r["npc"] in reverse_npcs]
+            if realm_refs:
+                ref_realm = realm_refs[-1]
+                add_edge(ref["quest"], quest_id, "conditional",
+                         "%s境界%s%d" % (ref_realm["npc"], ref_realm["op"], ref_realm["value"]),
+                         egg=True, hidden=bool(quest["hidden"]))
+            else:
+                add_edge(ref["quest"], quest_id, "conditional",
+                         acq.get("readable") or ref["text"], hidden=bool(quest["hidden"]))
+        gate = quest.get("gate") or {}
+        for prev_quest_id in gate.get("quests") or []:
+            if prev_quest_id in quests:
+                add_edge(prev_quest_id, quest_id, "triggered",
+                         "提交「%s」后触发" % quests[prev_quest_id]["name"],
+                         hidden=bool(quest["hidden"]))
+
+    # diagnostics：隐藏且必需、混合逻辑、反向门槛、P0 选项门槛。
+    referenced = {edge["from"] for edge in edges}
+    diagnostics = {
+        "hidden_required": [
+            {"id": quest_id, "name": quest["name"], "chain": quest["chain_name"]}
+            for quest_id, quest in quests.items()
+            if quest["hidden"] and quest_id in referenced
+        ],
+        "mixed_logic": [
+            {"id": quest_id, "name": quest["name"],
+             "alias": (quest.get("acq_cond") or {}).get("alias", ""),
+             "readable": (quest.get("acq_cond") or {}).get("readable", "")}
+            for quest_id, quest in quests.items()
+            if (quest.get("acq_cond") or {}).get("mixed")
+            or (quest.get("acq_cond") or {}).get("mode") == "unknown"
+        ],
+        "reverse_gate": [
+            {"npc": npc, "egg": True,
+             "entries": [{"quest": quest_id, "text": ref["text"],
+                          "op": ref["op"], "value": ref["value"]}
+                         for ref, quest_id in realm_by_npc[npc]]}
+            for npc in sorted(reverse_npcs)
+        ],
+        "option_gates": [],
+        "hidden_total": sum(1 for quest in quests.values() if quest["hidden"]),
+    }
+    seen_gates = set()
+    for gate in all_option_gates:
+        if gate["priority"] != "P0":
+            continue
+        key = (gate["cond"], gate["dialogue"], gate["sub"], gate["option"])
+        if key in seen_gates:
+            continue
+        seen_gates.add(key)
+        linked = next((child for child in gate["children"] if child in quests), 0)
+        diagnostics["option_gates"].append({
+            "quest": linked, "quest_name": quests[linked]["name"] if linked else "",
+            "dialogue": gate["dialogue"], "alias": gate["alias"],
+            "text": gate["text"], "option": gate["option"],
+            "no_grey": gate["no_grey"], "grey": gate["grey"],
+        })
+    diagnostics["option_gates"].sort(key=lambda item: (not item["no_grey"], item["quest"]))
+
     # 链内按环数排序，链按首任务 id 排序，保证 UI 稳定。
     chain_order = {chain["id"]: index for index, chain in enumerate(
         sorted(chains, key=lambda item: item["first"]))}
@@ -835,6 +1126,10 @@ def build_quests(tables):
         "branches": len([branch for branch in branches.values() if len(branch["quests"]) > 1]),
         "hidden": sum(1 for quest in result if quest["hidden"]),
         "branch": sum(1 for quest in result if quest["branch"]),
+        "edges": len(edges),
+        "hidden_required": len(diagnostics["hidden_required"]),
+        "mixed_logic": len(diagnostics["mixed_logic"]),
+        "p0_gates": len(diagnostics["option_gates"]),
     }
     return {"schema": SCHEMA, "quests": result, "groups": sorted(groups.values(), key=lambda g: g["name"]),
             "chains": sorted(chains, key=lambda item: chain_order.get(item["id"], 0)),
@@ -845,6 +1140,7 @@ def build_quests(tables):
             "npc_homes": npc_homes,
             "npc_names": {str(key): value for key, value in npcs.items()},
             "realms": realms, "phases": phases,
+            "edges": edges, "diagnostics": diagnostics,
             "states": {str(k): v for k, v in QUEST_STATE_NAMES.items()},
             "types": {str(k): v for k, v in type_names.items()}, "stats": stats}
 
