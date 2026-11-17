@@ -46,6 +46,9 @@
 .sec-bar{height:5px;border-radius:3px;background:#232833;overflow:hidden;margin:0 0 7px}
 .sec-bar i{display:block;height:100%;background:linear-gradient(90deg,#3ddc84,#2f9e6b)}
 .sec-hint{color:#778292;font-size:11px;line-height:1.7}
+.sec-hint b{color:#c9d2df;font-variant-numeric:tabular-nums}
+.sec-offer-note{background:#221e15;border:1px solid #4a3c22;border-radius:8px;color:#d9c28e;font-size:11px;line-height:1.8;padding:8px 10px;margin:0 0 10px}
+.sec-offer-note b{color:#e8c76d;font-variant-numeric:tabular-nums}
 .sec-empty{color:#778292;font-size:12px;line-height:1.8;padding:6px 0}
 .sec-income{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px}
 .sec-income>div{background:#10141a;border:1px solid #2a3240;border-radius:9px;padding:10px 12px}

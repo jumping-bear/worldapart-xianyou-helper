@@ -289,8 +289,8 @@ def summary(module):
     rows = module.get("rows") or {}
     if not rows.get("in_sect"):
         return "宗门：尚未入宗"
-    return "宗门：%s · %s；贡献 %d，宗门声望 %d，本期任务 %d 项（已接 %d）" % (
+    return "宗门：%s · %s；贡献 %d，宗门声望 %d，委托板 %d 条，差遣/要务/重任已接 %d" % (
         rows.get("sect_name") or "未知宗门", rows.get("position_name") or "未知职位",
         _int(rows.get("contribution")), _int(rows.get("reputation")),
-        len(rows.get("offers") or []) + len(rows.get("accepted") or []),
+        len(rows.get("offers") or []),
         len(rows.get("accepted") or []))

@@ -87,7 +87,7 @@ function dashboardHtml(rows){
  const affordSub=next?`再攒 ${num(n(next.price)-n(rows.contribution))} 可换「${esc(next.name)}」`:`当前贡献 ${num(rows.contribution)}`;
  return `<div class="sec-actions">
   <div class="sec-action${pending?' primary':''}"><div class="k">待提交</div><div class="v">${pending}</div><div class="s">${pending?'先去交掉，别占着任务位':'暂无待提交'}</div></div>
-  <div class="sec-action"><div class="k">进行中</div><div class="v">${active}</div><div class="s">已接 ${n(rows.slots&&rows.slots.accepted)}/${n(rows.slots&&rows.slots.limit)} · 还可接 ${n(rows.slots&&rows.slots.remaining)}</div></div>
+  <div class="sec-action"><div class="k">进行中</div><div class="v">${active}</div><div class="s">可同时接 ${n(rows.slots&&rows.slots.limit)} 条 · 已接 ${n(rows.slots&&rows.slots.accepted)} · 还可接 ${n(rows.slots&&rows.slots.remaining)}</div></div>
   <div class="sec-action"><div class="k">晋升</div><div class="v">${promotionValue}</div><div class="s">${promotionSub}</div></div>
   <div class="sec-action"><div class="k">可兑换</div><div class="v">${n(rows.exchange_affordable)} 件</div><div class="s">${affordSub}</div></div>
  </div>
@@ -149,6 +149,7 @@ function tasksHtml(rows){
  const accepted=rows.accepted||[];
  const list=rows.offers||[];
  const slots=rows.slots||{};
+ const refresh=rows.refresh||{};
  const pending=accepted.filter(item=>item.state_text==='待提交');
  const done=accepted.filter(item=>item.state_text==='已提交');
  const active=accepted.filter(item=>!['待提交','已提交'].includes(item.state_text));
@@ -170,24 +171,36 @@ function tasksHtml(rows){
   </div>`;
  };
  const group=(title,items)=>items.length?`<div class="sec-sub">${title} ${items.length} 条</div>`+items.map(card).join(''):'';
- const offerBody=list.length?`<div class="sec-sub">委托板可接 ${list.length} 条</div>`+list.map(item=>{
+ // 委托板：每周期只挂 3 条外务委托，到期轮换；「3 条」≠「可同时接上限」。
+ const refreshText=refresh.next?`每周期轮换 · 下次刷新 ${esc(refresh.next)}`:'每周期轮换';
+ const offerHint=`委托板每周期只挂 <b>${list.length}</b> 条外务委托${refresh.next?`，下次刷新 <b>${esc(refresh.next)}</b>`:''}；做完或换周期才出新的一批。「${list.length} 条」只是本期挂出的数量，不是「只能做 ${list.length} 个」，与可同时接上限 <b>${n(slots.limit)}</b> 条是两回事。`;
+ const offerBody=list.length?list.map(item=>{
   const state=item.completed?badge('已完成','ok'):(item.locked?badge('职位不足','warn'):badge('可领取',''));
   return `<div class="sec-task${item.completed?' done':''}">
    <span class="sec-task-name">${esc(item.name)}</span>
-   ${badge(item.type_name||'宗门任务')}${badge('难度 '+n(item.difficulty))}
+   ${badge(item.type_name||'外务委托')}${badge('难度 '+n(item.difficulty))}
    ${item.min_position?badge(item.min_position_name||('职位 '+item.min_position)):''}
    <span class="sec-num">+${num(item.contribution)} 贡献</span>
    ${item.reputation?`<span class="sec-num">+${num(item.reputation)} 声望</span>`:''}
    ${item.stones?`<span class="sec-num">+${num(item.stones)} 灵石</span>`:''}
    ${state}
   </div>`;
- }).join(''):'';
- const body=(group('待提交',pending)+group('进行中',active)+group('已提交',done)+offerBody)
-  ||`<div class="sec-empty">本期没有可领取的宗门任务。${rows.refresh&&rows.refresh.next?('下次刷新：'+esc(rows.refresh.next)):'请前往宗门执事处查看。'}</div>`;
- return `<div class="sec-block">
-  <div class="sec-head">本期任务<span>待提交 ${pending.length} · 已接 ${n(slots.accepted)}/${n(slots.limit)} · 委托板 ${list.length} 条</span></div>
-  ${body}
+ }).join(''):`<div class="sec-empty">本期委托板没有挂出的外务委托。</div>`;
+ const offerBlock=`<div class="sec-block">
+  <div class="sec-head">委托板 · 外务委托<span>${refreshText}</span></div>
+  <div class="sec-hint sec-offer-note">${offerHint}</div>
+  ${offerBody}
  </div>`;
+ // 差遣/要务/重任：走执事/长老领取，与委托板是两套，已接的进入任务日志。
+ const dutyHint=`宗门差遣 / 要务 / 重任与委托板是两套：这三类找执事 / 长老领取，不在委托板上；已接的会进入任务日志，计在「可同时接 <b>${n(slots.limit)}</b> 条」里。`;
+ const dutyBody=(group('待提交',pending)+group('进行中',active)+group('已提交',done))
+  ||`<div class="sec-empty">当前没有已接取的差遣 / 要务 / 重任。这三类任务找执事 / 长老领取，不在委托板上。</div>`;
+ const dutyBlock=`<div class="sec-block">
+  <div class="sec-head">宗门差遣 · 要务 · 重任<span>可同时接 ${n(slots.limit)} 条 · 已接 ${n(slots.accepted)} · 待提交 ${pending.length}</span></div>
+  <div class="sec-hint">${dutyHint}</div>
+  ${dutyBody}
+ </div>`;
+ return offerBlock+dutyBlock;
 }
 
 function shopHtml(rows){
@@ -229,7 +242,7 @@ function shopHtml(rows){
    ${req.length?badge('需 '+req.join(' / '),'warn'):''}
    ${got?badge('模拟兑换 ×'+got,'ok'):''}
    <span class="sec-price">${num(entry.price)} 贡献</span>
-   <button type="button" class="sec-buy" data-buy="${esc(key)}" ${can?'':'disabled'}>兑换</button>
+   <button type="button" class="sec-buy" data-buy="${esc(key)}" ${can?'':'disabled'} title="仅规划，不进游戏存档">模拟 +1</button>
   </div>`;
  };
  const body=groups.filter(key=>cat[key].length).map(key=>{
