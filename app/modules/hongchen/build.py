@@ -585,6 +585,21 @@ def build_hongchen(tables):
             q["depth"] = depth
         line_quests.sort(key=lambda q: (q["depth"], q["id"]))
 
+        # 线级解锁门槛：引用本线之外任务（主线/支线）的 gate 是整条线的入口条件，
+        # 例如云嫣线「已提交过主线·天帷之破」。这类 gate 只挂在入口任务上，但实际
+        # 整条线都被它锁住——把它下发给线内所有任务，避免无前置的任务被误判「可接取」。
+        line_entry_gates = []
+        for q in line_quests:
+            for g in q["gates"]:
+                if g.get("kind") == "quest" and _int(g.get("need")) not in hc_ids \
+                        and g not in line_entry_gates:
+                    line_entry_gates.append(g)
+        if line_entry_gates:
+            for q in line_quests:
+                for g in line_entry_gates:
+                    if g not in q["gates"]:
+                        q["gates"].append(g)
+
         edges = []
         for q in line_quests:
             if q["prev"] in by_id:

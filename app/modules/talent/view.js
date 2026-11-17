@@ -27,9 +27,9 @@ function daoHint(m){
  if(d.capacity){
   const realm=d.realm_name?`当前境界「${esc(d.realm_name)}」`:'当前境界';
   const full=(d.count||0)>=(d.capacity)?'，同道位已满':'';
-  return `${realm}可同道 <b>${d.capacity}</b> 人，已同道 <b>${d.count||0}</b> 人${full}。同道位有限，挑人时请综合看这位 NPC 的全部天赋组合，尽量把每个同道位的价值用满。`;
+  return `${realm}可同道 <b>${d.capacity}</b> 人，已同道 <b>${d.count||0}</b> 人${full}`;
  }
- return '同道数量有限，挑人时请综合看这位 NPC 的全部天赋组合，尽量把每个同道位的价值用满。';
+ return '同道数量有限';
 }
 function initTalent(){
  const m=DATA.modules.talent;if(!m)return;

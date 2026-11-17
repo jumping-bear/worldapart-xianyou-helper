@@ -32,7 +32,7 @@ function initForge(){
  ].map(([k,v,s])=>'<div class="card"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'<span> '+esc(s)+'</span></div></div>').join('');
  // 分区标题：卡片包裹，区块之间视觉分层
  function fzone(id,title,sub,body){
-  return '<section class="fzone" id="'+id+'"><h2 class="fzone-head">'+esc(title)+'<span>'+esc(sub)+'</span></h2>'+body+'</section>';
+  return '<details class="fzone" id="'+id+'"><summary class="fzone-head">'+esc(title)+'<span>'+esc(sub)+'</span></summary><div class="fzone-body">'+body+'</div></details>';
  }
  // 我的器胚：有五行缺口的排最前并标「缺料」
  const embryoMissing=e=>(e.need||[]).some(r=>r.gap>0);
@@ -149,6 +149,10 @@ function initForge(){
  realmBox.onclick=e=>{const btn=e.target.closest('[data-realm]');if(!btn)return;state.realm=btn.dataset.realm;store.set(FORGE_FILTER_KEY,state);renderRealmChips();renderList()};
  slotBox.onclick=e=>{const btn=e.target.closest('[data-slot]');if(!btn)return;state.slot=btn.dataset.slot;store.set(FORGE_FILTER_KEY,state);renderSlotChips();renderList()};
  renderRealmChips();renderSlotChips();renderList();
+ document.querySelectorAll('.fnav a').forEach(a=>a.addEventListener('click',()=>{
+  const t=document.getElementById((a.getAttribute('href')||'#').slice(1));
+  if(t&&t.tagName==='DETAILS')t.open=true;
+ }));
 }
 window.PROGRESS_VIEWS=window.PROGRESS_VIEWS||{};
 window.PROGRESS_VIEWS['forge']=initForge;

@@ -7,10 +7,16 @@
 .fnav-item i{font-style:normal;color:#7d8593;font-size:11px}
 
 /* 分区卡片：区块之间用卡片与标题分层 */
-.fzone{background:#14181f;border:1px solid #232a36;border-radius:12px;padding:14px 16px 16px;margin:14px 0;scroll-margin-top:14px}
-.fzone-head{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:650;color:#d7dee8;margin:0 0 11px}
+.fzone{background:#14181f;border:1px solid #232a36;border-radius:12px;padding:0;margin:14px 0;scroll-margin-top:14px}
+.fzone summary{list-style:none;cursor:pointer}
+.fzone summary::-webkit-details-marker{display:none}
+.fzone[open]{padding:14px 16px 16px}
+.fzone-head{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:650;color:#d7dee8;margin:0;padding:13px 16px}
 .fzone-head:before{content:"";width:3px;height:14px;border-radius:2px;background:#4f9e73;flex:none}
+.fzone-head:after{content:"›";margin-left:auto;color:#7d8593;font-size:16px;transition:transform .15s}
+.fzone[open] .fzone-head:after{transform:rotate(90deg)}
 .fzone-head span{color:#7d8593;font-size:11px;font-weight:400}
+.fzone-body{padding:0 16px 14px}
 
 /* 全部器胚目录：境界 + 部位两级分组，默认收起 */
 .fgrp{background:#15181f;border:1px solid #232833;border-radius:10px;margin:0 0 10px;overflow:hidden}
