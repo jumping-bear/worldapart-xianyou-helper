@@ -190,22 +190,27 @@ def _find_game_dir():
     return ""
 
 
-def missing_hint(cfg):
-    """decrypted 目录不可用时，给页面一句「到底缺哪一步」的提示。
+def missing_hints(cfg):
+    """decrypted 目录不可用时，给页面几句「到底缺哪一步」的提示。
 
     原来统一写「请重新安装」，但最常见的原因是装完还没启动过游戏
     （BepInEx\\decrypted 由插件在游戏启动时生成），重装解决不了问题。
+    另外首次安装后第一次启动游戏要生成适配文件，会慢 1-3 分钟且无进度显示，
+    也要在这里讲清楚，免得玩家以为卡死提前关掉。
     """
+    slow = ("首次安装后第一次启动游戏会慢一些：插件要生成适配文件，可能 1-3 分钟没有"
+            "任何进度显示，这是正常的，别关游戏。")
     game_dir = (cfg.get("game_dir") or "").strip()
     if not game_dir or not os.path.isfile(os.path.join(game_dir, "WorldApart.exe")):
-        return "还没找到游戏目录：请运行「功能设置.bat」指定「不问凡尘」的安装文件夹。"
+        return ["还没找到游戏目录：请运行「功能设置.bat」指定「不问凡尘」的安装文件夹。"]
     if not os.path.isdir(os.path.join(game_dir, "BepInEx")):
-        return "还没安装插件：请运行「一键安装.bat」，装好后启动游戏并停在主菜单约 20 秒。"
+        return ["还没安装插件：请运行「一键安装.bat」，装好后启动游戏并停在主菜单约 20 秒。", slow]
     dec = os.path.join(game_dir, "BepInEx", "decrypted")
     if not os.path.isdir(dec) or not glob.glob(os.path.join(dec, "*gameworld*")):
-        return ("插件已安装，但存档副本还没生成：启动游戏、停在主菜单约 20 秒，本页会自动刷新。"
-                "如果已经这样做了仍然没有，重跑「一键安装.bat」看自检是否全部 ✓。")
-    return "存档副本目录异常：请运行「功能设置.bat」重新指定游戏目录。"
+        return ["插件已安装，但存档副本还没生成：请启动游戏、停在主菜单约 20 秒，本页会自动刷新。",
+                slow,
+                "如果已经这样做了仍然没有，重跑「一键安装.bat」看自检是否全部 ✓。"]
+    return ["存档副本目录异常：请运行「功能设置.bat」重新指定游戏目录。"]
 
 
 def find_dir(cfg, interactive=True):
