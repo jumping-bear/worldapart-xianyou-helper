@@ -190,6 +190,24 @@ def _find_game_dir():
     return ""
 
 
+def missing_hint(cfg):
+    """decrypted 目录不可用时，给页面一句「到底缺哪一步」的提示。
+
+    原来统一写「请重新安装」，但最常见的原因是装完还没启动过游戏
+    （BepInEx\\decrypted 由插件在游戏启动时生成），重装解决不了问题。
+    """
+    game_dir = (cfg.get("game_dir") or "").strip()
+    if not game_dir or not os.path.isfile(os.path.join(game_dir, "WorldApart.exe")):
+        return "还没找到游戏目录：请运行「功能设置.bat」指定「不问凡尘」的安装文件夹。"
+    if not os.path.isdir(os.path.join(game_dir, "BepInEx")):
+        return "还没安装插件：请运行「一键安装.bat」，装好后启动游戏并停在主菜单约 20 秒。"
+    dec = os.path.join(game_dir, "BepInEx", "decrypted")
+    if not os.path.isdir(dec) or not glob.glob(os.path.join(dec, "*gameworld*")):
+        return ("插件已安装，但存档副本还没生成：启动游戏、停在主菜单约 20 秒，本页会自动刷新。"
+                "如果已经这样做了仍然没有，重跑「一键安装.bat」看自检是否全部 ✓。")
+    return "存档副本目录异常：请运行「功能设置.bat」重新指定游戏目录。"
+
+
 def find_dir(cfg, interactive=True):
     """定位 BepInEx\\decrypted 目录，返回路径（空字符串表示失败）。"""
     configured = (cfg.get("decrypted_dir") or "").strip()
