@@ -1,25 +1,32 @@
-[h1]Xianyou Helper v2.1.1[/h1]
+[h1]Xianyou Helper v2.1.2[/h1]
 [b]Read-only save inspector. It never writes back to your save file.[/b]
 [b]Found it useful? Please rate and favorite.[/b]
+[i]The feature list below is long — just install it and explore as you play.[/i]
 
 [h2]What it does[/h2]
 [list]
-[*][b]Refining and the pill board[/b]: refining level, furnace and recipe manual; all 1590 pickup points (56 recipes, 431 attributes, 85 cleanses, 950 rewards, 34 portal pairs). Filter by element, tier, effect or name; click a result to highlight it, and portals show one-way/two-way routes and the beast core they cost.
-[*][b]NPC talents[/b]: talents are the main list; open any NPC to see all of their talents, which helps when you can only keep a few companions.
-[*][b]NPC inventory: theft and demand[/b]: look up an item to see who carries it, whether it can be stolen, the success rate and the penalty. Opening an NPC splits into Theft and Demand; Demand lists the fixed items they can hand over and the affinity cost of each.
-[*][b]Forging[/b]: forging level, exp, true fire, talent points and highest artifact score; owned embryos, material gaps, wash pity, and all 78 embryos with board layouts.
-[*][b]Joy house[/b]: each resident NPC has 3 body parts with 6 stages each (18 total); sort by progress to see who is nearly complete, and how many more you need for the 18-touches achievements. Character portraits are shown next to each name.
-[*][b]Stone gambling[/b]: bag stones, opening progress and finished results are listed separately. Each stone shows its quality tier, crack/bloom progress and current estimate; the guide tab lists odds by quality, along with exchange price bands, buyer offers and town shop locations.
-[*][b]Encounters and endings[/b]: 63 parent encounters plus 5 branch routes, with 369 endings grouped by realm; unlock conditions are shown per option with a check or cross against your current attributes. Each ending lists rewards first (colored by quality), then a numbered route, and the reward index jumps back to the encounter.
-[*][b]Side quests and story chains[/b]: all 254 side quests grouped by story chain, with 10 detailed states from available to unreachable. Two-way choices are flagged as a branch you did not take and can be filtered separately. Totals cover unclaimed rewards and missing spirit stones (including branches); search by quest, chain, location, quest giver or reward item.
-[*][b]Character gallery[/b]: an archive of 1685 NPCs around where they are, what they are to you, and what you can do to them. Filters for present/met/Dao companions/friends; safe-to-kill + present lists people you can deal with without losing reputation. Mortal NPCs show remaining lifespan, plus a Seclusion Lifespan panel — breaking through to Golden Core takes 75 years of seclusion, and it lists which mortals will die of old age.
-[*][b]Romance (heroine storylines)[/b]: 6 heroine lines and 250 quests with a ring progress axis; each card shows done X/Y and available N, and locked lines are dimmed as a whole.
-[*][b]Memoria (memory stone)[/b]: 187 memoria entries, 37 characters and 62 bond types, split into Memories, Bonds, Encounter Memories and Old Friends. Progress cards show collected versus total up front; each entry is marked collected, viewed or not-yet-bonded, and bonds show the collection date. Search by character name or memory text.
-[*][b]Core passives and arts (loadout check)[/b]: checks your current loadout, surfacing top issues and idle resources. Filter passives/arts/resonances by sect, element, realm and state; the Build tab tests up to 3 passives, 4 resonances and 4 arts against the real rules. Plan A fills gaps with what you already have; Plan B turns gaps into acquisition steps with spirit-stone, affinity and time totals.
-[*][b]Sect (contribution and promotion)[/b]: current rank, reputation and realm gaps to the next rank, salary and task cap; this period's tasks split into to-submit, in-progress, submitted and board offers, with material requisitions listed separately. The 23 scripture-pavilion exchanges can be filtered, searched, sorted by price or rank, and simulated one item at a time to show how much more contribution you need.
-[*][b]Town reputation (commissions and shelves)[/b]: 8 towns sorted by tier-up potential; a route list merges commissions by location and totals materials; shelves list each tier, price and unlock state.
-[*][b]Auction (lots and bid reference)[/b]: lots grouped by venue with start price, reference value and a suggested cap; filter worthwhile lots (1.2x+), chests or finale lots. Also shows loan limit, last consignment results and broker buy rates.
+[*][b]Refining and the pill board[/b]: refining level, furnace and recipe manual; all pickup points, recipes and portal routes. Filter by element, tier, effect or name; clicking highlights the map, and portals show one-way/two-way routes and the beast core they cost.
+[*][b]NPC talents[/b]: talents as the main list; open any NPC to see all their talents when choosing companions.
+[*][b]NPC inventory[/b]: look up an item to see who carries it, whether it can be stolen, the success rate and the penalty. Opening an NPC splits into Theft and Demand (fixed items and affinity cost).
+[*][b]Forging[/b]: forging level, exp, true fire, talent points and best artifact; embryos, material gaps, wash pity, all 78 embryos with board layouts.
+[*][b]Joy house[/b]: each NPC has 3 parts with 6 stages each (18 total); sort by progress to see who is nearly done and how many more for the 18-touches achievements.
+[*][b]Stone gambling[/b]: bag stones, opening progress and finished results listed separately, each with quality, crack/bloom progress and estimate; the guide lists odds, price bands, buyer offers and shop locations.
+[*][b]Encounters[/b]: 63 encounters plus 5 branch routes and 369 endings by realm; unlock conditions per option are checked against your stats. Each ending lists rewards first, then a numbered route.
+[*][b]Side quests[/b]: all 254 quests by story chain with 10 states from available to unreachable; unselected branches are flagged and filterable; search by quest, chain, location, giver or reward.
+[*][b]Character gallery[/b]: 1685 NPCs — where they are, what they are to you, what you can do to them. Filters for present/met/Dao companions/friends; safe-to-kill + present avoids reputation loss. Mortal NPCs show remaining lifespan, plus a Seclusion Lifespan panel (breaking through to Golden Core takes 75 years, and it lists who will die).
+[*][b]Romance[/b]: 6 heroine lines and 250 quests with a ring progress axis; each card shows done X/Y and available N; locked lines are dimmed as a whole.
+[*][b]Memoria[/b]: 187 entries, 37 characters, 62 bond types; progress cards show collected vs total; each entry is marked collected, viewed or not-yet-bonded; search by name or text.
+[*][b]Core passives and arts[/b]: checks your loadout, surfacing top issues and idle resources; the Build tab tests passives/resonances/arts against the real rules, Plan A fills gaps with what you own, Plan B turns gaps into acquisition steps.
+[*][b]Sect[/b]: rank, reputation and realm gaps, salary and task cap; this period's tasks split into to-submit, in-progress, submitted and board offers; 23 scripture-pavilion exchanges are filterable and simulatable one by one.
+[*][b]Town reputation[/b]: 8 towns sorted by tier-up potential; a route list merges commissions by location and totals materials; shelves list tier, price and unlock state.
+[*][b]Auction[/b]: lots by venue with start price, reference value and suggested cap; filter worthwhile lots (1.2x+), chests or finale lots; also shows loan limit and last consignment results.
 [*][b]Follows the game config[/b]: reads the current game configuration first, so most content updates need no tool update.
+[/list]
+
+[h2]v2.1.2[/h2]
+[list]
+[*]Runs from any folder: if the exe sits somewhere read-only (C:\ root, Program Files), config and page are written to %LOCALAPPDATA% instead of failing.
+[*]Shorter feature list; save-reading rules added to FAQ.
 [/list]
 
 [h2]v2.1.1[/h2]
@@ -30,13 +37,7 @@
 [h2]Update in v2.1.0[/h2]
 [list]
 [*][b]Two new tabs[/b]: Character gallery and Romance, for 15 tabs in total.
-[*]Character gallery: 1685 NPCs, mortal lifespans and a Seclusion Lifespan panel. Romance: 6 heroine lines with a ring progress axis.
-[*]Improved: encounter drop pools show random one of N; refining map selection no longer scrolls; NPC inventory collapsible by quality with reverse lookup; NPC talents lead with the talent view; sect board and duty tasks told apart; forging sections collapsible; finer side-quest states.
-[/list]
-
-[h2]Update in v2.0.0[/h2]
-[list]
-[*]Five new tabs: Stone gambling, Core passives and arts, Sect, Town reputation and Auction (13 tabs total); Joy house portraits, Memoria unlock conditions, and a wrapping tab bar.
+[*]Improved: encounter drop pools show random one of N; refining map selection no longer scrolls; NPC inventory collapsible by quality; NPC talents lead with the talent view; forging sections collapsible.
 [/list]
 
 [h2]Install[/h2]
@@ -51,7 +52,8 @@
 
 [h2]FAQ[/h2]
 [list]
-[*][b]Where is the workshop folder?[/b] `Steam\steamapps\workshop\content\4209920\3839624741`. You can also right-click the game in your Steam library, choose Manage > Browse local files, then go to `..\..\workshop\content\4209920\3839624741`. If you subscribe to many mods, look for the folder named 3839624741; it contains 一键安装.bat.
+[*][b]Where is the workshop folder?[/b] `Steam\steamapps\workshop\content\4209920\3839624741`. You can also right-click the game in your Steam library, choose Manage > Browse local files, then go to `..\..\workshop\content\4209920\3839624741`.
+[*][b]Which save does it read?[/b] The newest one by default. To inspect another save, save it again in-game so it becomes the newest one.
 [*][b]No BepInEx\decrypted folder?[/b] The plugin did not load. Fully close the game and run 「一键安装.bat」 again; check that every self-check shows ✓.
 [*][b]Does it conflict with other BepInEx plugins?[/b] The installer only adds this tool's plugin and leaves the BepInEx core untouched.
 [*][b]No data in the tool?[/b] Let the game run for 15-20 seconds so the save copy can be exported; press F8 to force a refresh.
@@ -61,7 +63,7 @@
 [list]
 [*]Only the exported save copy is read; game saves are never modified.
 [*]Data refreshes every 60 seconds; press F8 after saving to refresh immediately.
-[*]「功能设置.bat」 lets you enable or disable each module separately (Joy house, NPC talents, NPC inventory, refining, forging, stone gambling, encounters, side quests, character gallery, romance, core passives and arts, memoria, sect, reputation and auction).
+[*]「功能设置.bat」 lets you enable or disable each module separately.
 [*]The BepInEx console window stays closed by default; logs are still written to BepInEx\LogOutput.log. Set [Logging.Console] Enabled back to true in BepInEx.cfg when troubleshooting.
 [*]Uninstall: delete BepInEx\plugins\SaveDecryptProbe from your game folder.
 [/list]
