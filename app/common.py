@@ -22,6 +22,30 @@ OUT_HTML = os.path.join(HERE, "仙友助手.html")
 OUT_VERSION = os.path.join(HERE, "仙友助手版本.js")
 
 
+def _writable(directory):
+    """目录当前用户是否可写（用于识别 C:\\ 根、Program Files 等需要提权的位置）。"""
+    try:
+        os.makedirs(directory, exist_ok=True)
+        probe = os.path.join(directory, ".write_probe_%d" % os.getpid())
+        with open(probe, "wb") as f:
+            f.write(b"1")
+        os.remove(probe)
+        return True
+    except OSError:
+        return False
+
+
+if FROZEN and not _writable(HERE):
+    # exe 放在只读目录（C:\ 根、Program Files 等）时，config.json 与页面写不进去会报
+    # PermissionError；改写到用户目录，与缓存同根，避免要求管理员权限。
+    _data = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
+                         "WorldApartTouchProgress")
+    if _writable(_data):
+        CFG = os.path.join(_data, "config.json")
+        OUT_HTML = os.path.join(_data, "仙友助手.html")
+        OUT_VERSION = os.path.join(_data, "仙友助手版本.js")
+
+
 def set_output_dir(directory):
     """把页面生成物重定向到指定目录。
 
