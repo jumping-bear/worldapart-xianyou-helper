@@ -49,3 +49,4 @@ workshop_release/*_log*.txt
 workshop_release/*_log*.err
 workshop_release/workshop.vdf
 
+workshop_release/preview_cards_backup.png
