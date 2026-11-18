@@ -142,7 +142,7 @@ def main():
                 payload = render(dec, cfg) if dec or not enabled else {
                     "enabled": enabled,
                     "tabs": _enabled_tabs(enabled),
-                    "modules": {}, "warnings": [common.missing_hint(cfg)],
+                    "modules": {}, "warnings": common.missing_hints(cfg),
                 }
                 version, changed = write_outputs(payload)
                 if changed or last_signature is None:
