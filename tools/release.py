@@ -12,6 +12,7 @@
     * 页面只写 仙友助手/，根目录产物仅用于开发预览；
     * 失败一律在写入前拦下（先检查后写入），覆盖式写入都走临时文件 + 原子替换。
 """
+import glob
 import json
 import os
 import re
@@ -126,6 +127,15 @@ def preflight(version):
         errors.append("缺少 release/workshop.vdf.tpl")
     if not os.path.isfile(os.path.join(WORKSHOP_DIR, "preview.png")):
         errors.append("缺少 workshop_release/preview.png")
+
+    # 运行库目录不入库（.gitignore 排除），从旧发布目录/缓存拷入；缺了会让
+    # install.ps1 自检失败，安装后插件跑不起来，这里作为阻断项强制提醒。
+    coreclr = os.path.join(APP_DIR, "安装文件", "dotnet", "coreclr.dll")
+    if not os.path.isfile(coreclr):
+        errors.append("缺少仙友助手/安装文件/dotnet/coreclr.dll（.NET 运行时，不入库，需手动拷入）")
+    unity_libs = glob.glob(os.path.join(APP_DIR, "安装文件", "BepInEx", "unity-libs", "*.zip"))
+    if not unity_libs:
+        errors.append("缺少仙友助手/安装文件/BepInEx/unity-libs/*.zip（Unity 基础库，不入库，需手动拷入）")
 
     if not _has_decrypted_dir():
         todos.append("本机未找到可用的解密存档目录，--dry-run 将跳过页面生成")
