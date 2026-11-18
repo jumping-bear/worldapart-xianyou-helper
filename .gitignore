@@ -19,6 +19,7 @@ __pycache__/
 !docs/
 !tools/
 !release/
+!workshop_release/
 !留影石模块-交接单.md
 
 # tools 只收录脚本，逆向工具与缓存目录不入库
@@ -42,4 +43,9 @@ SaveDecryptProbe/*
 仙友助手/仙友助手.exe
 dist/
 *.zip
+
+# 工坊发布只收录描述与预览图，上传日志与本机 vdf 不入库
+workshop_release/*_log*.txt
+workshop_release/*_log*.err
+workshop_release/workshop.vdf
 
