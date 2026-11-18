@@ -112,6 +112,18 @@ def settings_menu(dry_run=False):
             return
 
 
+def _set_console_title(text):
+    """改控制台窗口标题（黑窗口容易和别的窗口混，标题里直接写明别关）。"""
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetConsoleTitleW(text)
+    except Exception:
+        try:
+            os.system("title %s" % text)
+        except Exception:
+            pass
+
+
 def main():
     if FROZEN:
         try:
@@ -119,6 +131,8 @@ def main():
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass
+        _set_console_title("仙友助手 - 功能设置" if "--settings" in sys.argv
+                           else "仙友助手 - 使用过程中请勿关闭这个窗口")
     if "--settings" in sys.argv:
         settings_menu(dry_run="--dry-run" in sys.argv)
         return
