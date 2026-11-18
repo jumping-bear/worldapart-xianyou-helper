@@ -60,8 +60,10 @@ def _first_line(path):
 
 
 def _vdf(value):
-    """VDF 字符串转义：换行与引号与现有 vdf 的写法保持一致。"""
-    return json.dumps(str(value), ensure_ascii=False)[1:-1]
+    """VDF 字符串转义：换行与反斜杠用 JSON 转义；双引号无法在 SteamCMD 的
+    KeyValues 里转义（不认 \\"），一律换成单引号，避免解析到一半截断报
+    「key name too long / got } in key」。"""
+    return json.dumps(str(value).replace('"', "'"), ensure_ascii=False)[1:-1]
 
 
 def _slash(path):
