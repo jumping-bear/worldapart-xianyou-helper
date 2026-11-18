@@ -15,6 +15,24 @@ CATEGORY_NAMES = {
 def build_talent(tables):
     realms = build_realms(tables)
     spaces = build_spaces(tables)
+    # 同道容量与境界层数映射：npc_dao_ally_capacity 是每个境界能同道的人数上限，
+    # phases 把存档里的 cultivate_layer_id 映射回境界 id（用于提示玩家当前境界）。
+    realm_capacity, phases = {}, {}
+    for row in _rows(tables["tbcultivaterealm"]):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        realm_id = str(row["id"])
+        try:
+            capacity = int(row.get("npc_dao_ally_capacity") or 0)
+        except (TypeError, ValueError):
+            capacity = 0
+        if capacity:
+            realm_capacity[realm_id] = capacity
+        for phase in row.get("phases") or []:
+            try:
+                phases[str(int(phase))] = realm_id
+            except (TypeError, ValueError):
+                pass
     npcs = {}
     for row in _rows(tables["tbnpcbasecfg"]):
         if not isinstance(row, dict) or row.get("id") is None:
@@ -32,6 +50,10 @@ def build_talent(tables):
             slots.append({
                 "slot_id": slot.get("slot_id"),
                 "required_npc_realm_id": slot.get("required_npc_realm_id", 0),
+                # fixed_talent_id 固定天赋；random_pool_group_id 随机池。两者用于
+                # 在 NPC 尚未出现在当前存档时，仍能从配置推断其固定天赋。
+                "fixed_talent_id": slot.get("fixed_talent_id", 0),
+                "random_pool_group_id": slot.get("random_pool_group_id", 0),
                 "unlock_conditions": conditions,
             })
         npcs[str(row["id"])] = {
@@ -56,7 +78,8 @@ def build_talent(tables):
         })
     if not talents:
         raise ValueError("NPC 天赋配置为空")
-    return {"schema": SCHEMA, "talents": talents, "npcs": npcs, "spaces": spaces, "realms": realms}
+    return {"schema": SCHEMA, "talents": talents, "npcs": npcs, "spaces": spaces,
+            "realms": realms, "realm_capacity": realm_capacity, "phases": phases}
 
 
 # 插件统一入口

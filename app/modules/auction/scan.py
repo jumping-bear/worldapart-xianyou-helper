@@ -200,7 +200,7 @@ def scan_auction(obj, meta, state=None):
             "name": pm.get("playerName") or "未命名",
             "layer": layer,
             "realm": player_realm,
-            "realm_name": (meta.get("realms") or {}).get(str(player_realm)) or ("境界 %s" % player_realm),
+            "realm_name": (meta.get("realms") or {}).get(str(player_realm)) or ("境界%s" % player_realm),
         },
         "sessions": sessions,
         "current": [s for s in sessions if s["state"] == "current"],

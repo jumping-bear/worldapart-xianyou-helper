@@ -6,11 +6,13 @@ from .build import QUEST_STATE_NAMES, build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "quest", "支线"
-ORDER, SELECT, SCHEMA = 70, "latest", 21  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 70, "latest", 28  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "quest_meta.json"
 TABLES = frozenset({
-    "tbquest", "tbrewarddrop", "tbitem", "tbitemtype", "tbgameactionflow",
-    "tbnpcbasecfg", "tbspace", "tbcultivaterealm", "tbconditionexpr",
+    "tbquest", "tbquesttype", "tbrewarddrop", "tbitem", "tbitemtype",
+    "tbgameactionflow", "tbnpcbasecfg", "tbspace", "tbcultivaterealm",
+    "tbcultivatephase", "tbcultivatelayer",
+    "tbconditionexpr", "tbdialogue", "tbinteractattribute",
 })
 
 
@@ -19,6 +21,8 @@ def builtin_ok(data):
 
 
 def empty():
-    return {"schema": DATA_SCHEMA, "quests": [], "groups": [], "realms": {"0": "凡人"},
+    return {"schema": DATA_SCHEMA, "quests": [], "groups": [], "storylines": [],
+            "dup_names": {}, "edges": [], "diagnostics": {},
+            "realms": {"0": "凡人"}, "layer_phases": {}, "phase_names": {},
             "states": {str(k): v for k, v in QUEST_STATE_NAMES.items()},
-            "types": {}, "stats": {"quests": 0, "with_rewards": 0}}
+            "types": {}, "stats": {"quests": 0, "with_rewards": 0, "storylines": 0}}

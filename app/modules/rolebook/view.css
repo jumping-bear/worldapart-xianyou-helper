@@ -1,0 +1,226 @@
+/* 人物图鉴：仅本模块 .rolebook-* 选择器。信息层级：在哪 → 是谁 → 关系 → 能做什么 → 善恶后果 → 履历 */
+.rolebook-hero{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;background:linear-gradient(120deg,#182031 0%,#151a24 60%,#1b1a26 100%);border:1px solid #2b3446;border-radius:14px;padding:18px 22px;margin:2px 0 12px}
+.rolebook-hero-text h2{font-size:18px;font-weight:600;color:#eef2f8;letter-spacing:.5px}
+.rolebook-hero-text p{color:#9aa6b8;font-size:12px;line-height:1.8;margin-top:6px;max-width:640px}
+.rolebook-hero-figures{display:flex;gap:22px}
+.rolebook-hero-figures>div{text-align:center;min-width:62px}
+.rolebook-hero-figures b{display:block;font-size:23px;color:#cfe9db;font-variant-numeric:tabular-nums;line-height:1.25}
+.rolebook-hero-figures span{color:#7d8593;font-size:11px}
+
+/* 玩家关系概览 */
+.rolebook-player{background:#151922;border:1px solid #262e3b;border-radius:12px;padding:12px 16px;margin:0 0 12px}
+.rolebook-player-stats{display:flex;flex-wrap:wrap;gap:10px}
+.rolebook-pstat{display:flex;align-items:baseline;gap:7px;background:#1b2130;border:1px solid #2a3444;border-radius:8px;padding:6px 13px}
+.rolebook-pstat b{color:#e8eaed;font-size:15px;font-variant-numeric:tabular-nums}
+.rolebook-pstat span{color:#8b93a1;font-size:11px}
+.rolebook-player-note{color:#8b93a1;font-size:11px;margin-top:10px;line-height:1.7}
+.rolebook-player-note b{color:#dfe6ef}
+.rolebook-demon{color:#ff9aa8}
+
+/* 闭关寿元面板 */
+.rolebook-breakthrough{background:#151922;border:1px solid #262e3b;border-radius:12px;margin:0 0 12px;overflow:hidden}
+.rolebook-breakthrough-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:linear-gradient(120deg,#1c2633,#181d28);border:0;border-bottom:1px solid #2b3446;color:#dfe6ef;font-size:13px;font-weight:600;font-family:inherit;padding:12px 16px;cursor:pointer;text-align:left}
+.rolebook-breakthrough-toggle:hover{background:linear-gradient(120deg,#223043,#1c2330)}
+.rolebook-bt-caret{color:#7fb6d8;font-size:12px;transition:transform .18s}
+.rolebook-breakthrough-toggle.on .rolebook-bt-caret{transform:rotate(180deg)}
+.rolebook-breakthrough-body{padding:12px 16px}
+.rolebook-bt-entry{display:flex;flex-direction:column;gap:3px;padding:9px 0;border-bottom:1px dashed #232b38}
+.rolebook-bt-entry:last-child{border-bottom:0}
+.rolebook-bt-head{color:#c3d3e6;font-size:12.5px;font-weight:600}
+.rolebook-bt-deaths{color:#7d8593;font-size:11.5px;line-height:1.7}
+.rolebook-bt-deaths b{color:#e0b98a}
+.rolebook-bt-deaths-has{color:#d8b98a}
+
+.rolebook-filters{background:#151922;border:1px solid #262e3b;border-radius:12px;padding:14px 16px;margin:0 0 12px}
+.rolebook-filters-row{display:grid;grid-template-columns:2fr repeat(5,1fr);gap:11px;align-items:end}
+.rolebook-filters-row2{grid-template-columns:1fr;margin-top:11px;padding-top:11px;border-top:1px solid #222936}
+.rolebook-search>span,.rolebook-field>span{display:block;color:#aeb8c7;font-size:11px;margin:0 0 6px}
+.rolebook-search input,.rolebook-field select{width:100%;background:#0f131a;border:1px solid #2f3847;border-radius:8px;color:#e8eaed;padding:9px 10px;font-size:12px;outline:none;font-family:inherit;transition:border-color .15s}
+.rolebook-search input:focus,.rolebook-field select:focus{border-color:#5b8d78;box-shadow:0 0 0 2px #263b34}
+.rolebook-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid #222936}
+.rolebook-chips-label{color:#7d8593;font-size:11px;margin-right:2px}
+.rolebook-chip{border:1px solid #333d4c;background:#1a1f29;color:#aeb8c7;border-radius:20px;padding:6px 14px;cursor:pointer;font-size:12px;font-family:inherit;transition:.15s}
+.rolebook-chip:hover{border-color:#4d6d5e;color:#cfe9db}
+.rolebook-chip.on{background:#263b34;border-color:#3d735b;color:#c9f5dd}
+.rolebook-chip-reset{margin-left:auto;color:#c9a976;border-color:#4a4230}
+.rolebook-chip-reset:hover{color:#f0d59a;border-color:#8a7442}
+.rolebook-count{color:#8b93a1;font-size:12px;margin:2px 2px 12px}
+.rolebook-count b{color:#e8eaed}
+.rolebook-empty{background:#151922;border:1px dashed #303846;border-radius:12px;padding:40px;text-align:center;color:#8b93a1;font-size:13px}
+
+/* 卡片墙 */
+.rolebook-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(238px,1fr));gap:12px}
+.rolebook-card{position:relative;background:#151922;border:1px solid #262e3b;border-radius:12px;padding:14px;cursor:pointer;transition:transform .16s,border-color .16s,box-shadow .16s;outline:none;overflow:hidden;content-visibility:auto;contain-intrinsic-size:auto 200px}
+.rolebook-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#4a5464}
+.rolebook-card-bad:before{background:#c0505f}
+.rolebook-card-good:before{background:#3d9e6b}
+.rolebook-card-mid:before{background:#7d8593}
+.rolebook-card:hover,.rolebook-card:focus{border-color:#4d6d5e;transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.rolebook-card-top{display:flex;align-items:center;gap:11px}
+
+/* 真实头像：优先显示 <img>，首字母圆牌作为加载/失败回退 */
+.rolebook-avatar{position:relative;width:50px;height:50px;flex:none;border-radius:50%;background:linear-gradient(135deg,#2f6d8f,#2b4a6b);border:1px solid #3f6b86;display:flex;align-items:center;justify-content:center;color:#dff0f8;font-size:20px;font-weight:600;overflow:hidden}
+.rolebook-avatar.has-img{background:#0f131a;border-color:#3d735b}
+.rolebook-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center;z-index:1}
+.rolebook-avatar-initial{opacity:1}
+.rolebook-avatar-lg{width:66px;height:66px;font-size:26px}
+.rolebook-card-bad .rolebook-avatar:not(.has-img){background:linear-gradient(135deg,#7a3542,#4a2430);border-color:#9c4856;color:#ffdadd}
+.rolebook-card-good .rolebook-avatar:not(.has-img){background:linear-gradient(135deg,#2f7d54,#1f5238);border-color:#3d9e6b;color:#d6f5e2}
+.rolebook-card-id{min-width:0;flex:1}
+.rolebook-card-name{color:#eef2f8;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rolebook-card-title{color:#a9bed6;font-size:11.5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rolebook-card-realm{color:#8b93a1;font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* 当前位置：本模块最重要的一行。主=空间名，副=完整路径/配置地区 */
+.rolebook-card-place{display:flex;align-items:flex-start;gap:6px;margin:11px 0 0;background:#1b2433;border:1px solid #2c3d52;border-radius:8px;padding:6px 9px;color:#c7dcf0;overflow:hidden}
+.rolebook-card-place .rolebook-pin{color:#7fb6d8;flex:none;line-height:1.5}
+.rolebook-card-place-off{background:#191d25;border-color:#2a303b;color:#7d8593}
+.rolebook-card-place-off .rolebook-pin{color:#5f6774}
+.rolebook-place-box{display:flex;flex-direction:column;min-width:0;flex:1;gap:1px}
+.rolebook-place-main{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rolebook-place-sub{font-size:10px;color:#7d8593;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rolebook-card-place-off .rolebook-place-main{font-weight:500}
+.rolebook-card-badges{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 8px;min-height:18px}
+.rolebook-role{font-size:10px;border-radius:5px;padding:1px 7px;line-height:1.7;border:1px solid}
+.rolebook-role-师尊{background:#2a2340;color:#cbb8f5;border-color:#4a3b6b}
+.rolebook-role-弟子{background:#22303a;color:#a6d4e8;border-color:#35566b}
+.rolebook-role-道侣{background:#3a2331;color:#f5b8d8;border-color:#6b3552}
+.rolebook-role-朋友{background:#1e2b25;color:#bfe8d3;border-color:#356047}
+.rolebook-role-仇敌{background:#3a1f26;color:#ff9aa8;border-color:#7a3040}
+.rolebook-role-已故{background:#262626;color:#9aa0a6;border-color:#454545}
+.rolebook-role-none{color:#5f6774;font-size:10.5px}
+/* 凡人寿命徽标 */
+.rolebook-lifespan{font-size:10px;line-height:1.7;border-radius:5px;padding:1px 7px;background:#1d2a3a;border:1px solid #3a5470;color:#bcd8f5;font-weight:600}
+.rolebook-lifespan-prot{background:#322a1a;border-color:#6b5830;color:#f0d59a}
+.rolebook-lifespan-over{background:#2e1e22;border-color:#6b3440;color:#ff9aa8}
+.rolebook-band{position:relative;height:8px;border-radius:5px;margin:2px 0 9px;background:linear-gradient(90deg,#8e3746 0%,#5a4a4e 35%,#4a5464 50%,#4a7a5c 65%,#2f9e6b 100%)}
+.rolebook-band-axis{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:rgba(255,255,255,.25)}
+.rolebook-band-dot{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #151922;box-shadow:0 0 0 1px rgba(255,255,255,.6);transform:translate(-50%,-50%);transition:left .2s}
+.rolebook-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rolebook-evil-label{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.rolebook-evil-bad{color:#ff8a98}
+.rolebook-evil-good{color:#6edda2}
+.rolebook-evil-mid{color:#aeb8c7}
+.rolebook-tier,.rolebook-favor{color:#9aa6b8;font-size:11px}
+.rolebook-favor{color:#c9e2a0}
+.rolebook-card-icos{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+.rolebook-ico{width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;background:#202734;color:#8b97a8;border:1px solid #2c3644}
+.rolebook-ico-met{color:#bcd8f5;border-color:#3a5470}
+.rolebook-ico-house{color:#a7d8d0;border-color:#33655b}
+.rolebook-ico-dao{color:#f5b8d8;border-color:#6b3552}
+.rolebook-ico-spar{color:#c9e2a0;border-color:#4a5d33}
+.rolebook-ico-steal{color:#e0c69a;border-color:#6b5a33}
+.rolebook-ico-mer{color:#a7d8d0;border-color:#33655b}
+.rolebook-ico-mem{color:#d3b4f0;border-color:#5a4072}
+
+.rolebook-more-wrap{display:flex;justify-content:center;margin:18px 0 6px}
+.rolebook-more{border:1px solid #3d735b;background:#1c2b24;color:#bfe8d3;border-radius:10px;padding:10px 28px;cursor:pointer;font-size:13px;font-family:inherit;transition:.15s}
+.rolebook-more:hover{background:#263b34;color:#e0f7ea}
+
+/* 详情抽屉 */
+.rolebook-mask{position:fixed;inset:0;background:rgba(6,8,12,.55);opacity:0;pointer-events:none;transition:opacity .22s;z-index:900;backdrop-filter:blur(1px)}
+.rolebook-mask.show{opacity:1;pointer-events:auto}
+.rolebook-drawer{position:fixed;top:0;right:0;bottom:0;width:min(540px,94vw);background:#12161e;border-left:1px solid #2b3446;box-shadow:-12px 0 40px rgba(0,0,0,.5);transform:translateX(102%);transition:transform .26s cubic-bezier(.22,.7,.3,1);z-index:901;overflow-y:auto}
+.rolebook-drawer.open{transform:translateX(0)}
+.rolebook-drawer-head{position:sticky;top:0;display:flex;align-items:center;gap:14px;padding:20px 22px;background:linear-gradient(120deg,#1c2533,#181d28);border-bottom:1px solid #2b3446;z-index:2}
+.rolebook-head-bad{background:linear-gradient(120deg,#331c25,#1d1620)}
+.rolebook-head-good{background:linear-gradient(120deg,#182e24,#161f1b)}
+.rolebook-drawer-id{flex:1;min-width:0}
+.rolebook-drawer-id h3{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:19px;color:#eef2f8}
+.rolebook-drawer-id>div{color:#9aa6b8;font-size:12px;margin-top:4px}
+.rolebook-drawer-sub{display:flex;align-items:center;gap:10px;color:#c3d3e6}
+.rolebook-id{color:#5f6774;font-size:10.5px;letter-spacing:.3px}
+.rolebook-drawer-roles{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.rolebook-close{border:none;background:#242b36;color:#9aa6b8;width:32px;height:32px;border-radius:8px;font-size:22px;line-height:1;cursor:pointer;font-family:inherit;transition:.15s}
+.rolebook-close:hover{background:#333d4c;color:#fff}
+.rolebook-drawer-body{padding:8px 22px 40px}
+.rolebook-sec{padding:16px 0;border-bottom:1px solid #232b38}
+.rolebook-sec:last-child{border-bottom:0}
+.rolebook-sec h4{margin:0 0 12px;font-size:13px;color:#dfe6ef;font-weight:600;display:flex;align-items:baseline;gap:8px}
+.rolebook-sec h4:before{content:"";width:3px;height:13px;background:#3d735b;border-radius:2px}
+.rolebook-sec h4 small{color:#6f7787;font-weight:400;font-size:11px}
+.rolebook-grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}
+.rolebook-kv{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed #232b38;padding:5px 0}
+.rolebook-kv>span{color:#8b93a1;font-size:12px}
+.rolebook-kv>b{color:#dfe6ef;font-size:12px;font-weight:600;text-align:right;min-width:0;overflow-wrap:anywhere}
+
+/* 当前所在（详情）：主=空间名，副=完整路径/地区 */
+.rolebook-place-card{background:#171d28;border:1px solid #2a3444;border-radius:10px;padding:13px 14px}
+.rolebook-place-head{display:flex;align-items:flex-start;gap:12px}
+.rolebook-place-ico{font-size:22px;color:#7fb6d8;line-height:1.2}
+.rolebook-place-body{min-width:0;flex:1}
+.rolebook-place-body b{display:block;color:#8b93a1;font-size:11px;font-weight:500;letter-spacing:.5px}
+.rolebook-place-name{display:block;color:#e6edf6;font-size:17px;font-weight:600;line-height:1.5;margin-top:3px;overflow-wrap:anywhere}
+.rolebook-place-body .rolebook-place-path{display:block;color:#9fb4c9;font-size:12px;line-height:1.6;margin-top:2px;overflow-wrap:anywhere}
+.rolebook-place-unknown{color:#9aa6b8 !important;font-size:14px !important;font-weight:500}
+.rolebook-place-body .rolebook-place-path.rolebook-place-unknown{font-size:12px !important;color:#7d8593 !important}
+.rolebook-place-body small{display:block;color:#7d8593;font-size:10.5px;margin-top:6px;line-height:1.6}
+
+/* 关系网 */
+.rolebook-relnet{display:flex;align-items:flex-start;gap:14px;margin-bottom:12px}
+.rolebook-relme{flex:none;width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#2f6d8f,#2b4a6b);border:1px solid #3f6b86;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;box-shadow:0 0 0 4px #1b2130}
+.rolebook-relnodes{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1}
+.rolebook-relnode{background:#191e28;border:1px solid #28313f;border-radius:9px;padding:8px 10px}
+.rolebook-rellabel{display:inline-block;font-size:11px;font-weight:600;color:#cbb8f5;margin-bottom:5px}
+.rolebook-relnode-朋友 .rolebook-rellabel{color:#bfe8d3}
+.rolebook-relnode-道侣 .rolebook-rellabel{color:#f5b8d8}
+.rolebook-relnode-仇敌 .rolebook-rellabel{color:#ff9aa8}
+.rolebook-relnode-弟子 .rolebook-rellabel{color:#a6d4e8}
+.rolebook-relnode-已故 .rolebook-rellabel{color:#9aa0a6}
+.rolebook-relpeople{display:flex;flex-wrap:wrap;gap:4px}
+.rolebook-relperson{font-size:10.5px;background:#232a36;border:1px solid #313c4b;color:#c2ccda;border-radius:5px;padding:2px 7px}
+
+.rolebook-inline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:10px;color:#8b93a1;font-size:11px}
+.rolebook-tag{display:inline-block;background:#232a36;border:1px solid #313c4b;color:#c2ccda;border-radius:6px;padding:3px 9px;font-size:11px}
+.rolebook-tag-blue{background:#1e2c3d;border-color:#2f4a68;color:#bcd8f5}
+.rolebook-tag-gold{background:#322a1a;border-color:#6b5830;color:#f0d59a}
+.rolebook-note{color:#9aa6b8;font-size:12px;line-height:1.8;margin:8px 0 0}
+.rolebook-lede{color:#c2ccda;font-size:12px;margin:0 0 12px}
+.rolebook-lede b{color:#fff}
+.rolebook-dao-tag{color:#f5b8d8}
+.rolebook-duo{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rolebook-duo-item{background:#191e28;border:1px solid #28313f;border-radius:10px;padding:12px 14px}
+.rolebook-duo-item>span{display:block;color:#8b93a1;font-size:11px}
+.rolebook-duo-item>b{display:block;font-size:22px;font-weight:600;color:#eef2f8;margin-top:3px;font-variant-numeric:tabular-nums}
+.rolebook-duo-item>small{display:block;color:#9aa6b8;font-size:11px;margin:2px 0 8px}
+.rolebook-duo-item .rolebook-band{margin-bottom:0}
+.rolebook-duo-bad>b{color:#ff8a98}
+.rolebook-duo-good>b{color:#6edda2}
+.rolebook-stages{position:relative;display:flex;flex-wrap:wrap;gap:6px}
+.rolebook-stage{display:flex;align-items:center;gap:5px;background:#191e28;border:1px solid #28313f;border-radius:7px;padding:5px 9px;font-size:11px;color:#7d8593}
+.rolebook-stage-dot{width:7px;height:7px;border-radius:50%;background:#3a4352}
+.rolebook-stage-name{color:#aeb8c7}
+.rolebook-stage-need{color:#6f7787}
+.rolebook-stage.on{background:#1c2b24;border-color:#356047;color:#bfe8d3}
+.rolebook-stage.on .rolebook-stage-dot{background:#3d9e6b}
+.rolebook-stage.on .rolebook-stage-name{color:#d6f5e2}
+.rolebook-stage.cur{box-shadow:0 0 0 1px #3d9e6b}
+.rolebook-tags{display:flex;gap:6px;flex-wrap:wrap}
+.rolebook-acts{display:flex;gap:7px;flex-wrap:wrap}
+.rolebook-act{border:1px solid #2c3442;background:#191e28;color:#8b93a1;border-radius:7px;padding:5px 11px;font-size:12px}
+.rolebook-act.on{background:#1e2b25;border-color:#356047;color:#bfe8d3}
+.rolebook-act.off{color:#5f6774}
+/* 安全击杀小标记：杀他不掉善恶、不扣声望 */
+.rolebook-safe{font-size:10px;line-height:1.7;border-radius:5px;padding:1px 7px;background:#1e2b25;border:1px solid #356047;color:#8fd0a9;font-weight:600}
+
+/* 击杀后果：数字在前，规则原文退居小字 */
+.rolebook-kill{background:#171d28;border:1px solid #2a3444;border-radius:10px;padding:12px 14px}
+.rolebook-kill-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px}
+.rolebook-kill-delta{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;padding:2px 8px;border-radius:6px;border:1px solid #2c3442;background:#1b2130;color:#c2ccda}
+.rolebook-kill-up{background:#1e2b25;border-color:#356047;color:#8fd0a9}
+.rolebook-kill-down{background:#2e1e22;border-color:#6b3440;color:#ff9aa8}
+.rolebook-kill-flat{color:#7d8593}
+.rolebook-kill-sep{color:#4a5464;font-size:11px}
+.rolebook-kill-raw{color:#7d8593;font-size:11px}
+.rolebook-kill-tip{color:#a9c7b8;font-size:12px;line-height:1.8;margin:9px 0 0}
+.rolebook-kill-tip b{color:#dff0e5}
+.rolebook-kill-warn{color:#e0b98a}
+.rolebook-chase{margin-top:12px}
+.rolebook-chase>span{color:#c2ccda;font-size:12px}
+.rolebook-chase ul{margin:7px 0 0;padding-left:18px}
+.rolebook-chase li{color:#9aa6b8;font-size:11px;line-height:1.9}
+.rolebook-chase li b{color:#ffb3bd}
+.rolebook-rel-label{color:#c2ccda;font-size:12px;margin:10px 0 6px;font-weight:600}
+.rolebook-rel-label:first-child{margin-top:0}
+@media(max-width:860px){.rolebook-filters-row{grid-template-columns:repeat(3,1fr)}.rolebook-search{grid-column:span 3}.rolebook-relnodes{grid-template-columns:1fr}}
+@media(max-width:560px){.rolebook-filters-row{grid-template-columns:1fr 1fr}.rolebook-search{grid-column:span 2}.rolebook-hero-figures{gap:12px}.rolebook-grid{grid-template-columns:1fr}.rolebook-grid2,.rolebook-duo,.rolebook-relnodes{grid-template-columns:1fr}.rolebook-hero{padding:14px 16px}.rolebook-drawer-body{padding:8px 16px 32px}.rolebook-drawer-head{padding:16px}}

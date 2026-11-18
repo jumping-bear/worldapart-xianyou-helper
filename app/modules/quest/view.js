@@ -1,241 +1,361 @@
-/* 支线：页面渲染（自 output.py 原样搬入）。 */
+/* 支线：剧情线任务脊柱。默认按玩家进度排序，节点内联展开，不弹窗、不另开面板。 */
 (function(){
-const QUEST_FILTER_KEY='worldapart.quest.filters.v2';
+const KEY='worldapart.quest.story.v4';
+const STATUS={done:'已完成',doing:'进行中',ready:'可接取',cond:'条件不足',wait:'未触发（需满足条件）',unpicked:'未选分支'};
+const FILTERS=[['all','全部'],['ready','可接取'],['doing','进行中'],['wait','未触发'],
+  ['cond','条件不足'],['unpicked','未选分支'],['done','已完成']];
+// 章节顺序与配色来自配置表（境界表），新增境界不用改代码
+const CHAP_TONE=(()=>{ try{ return DATA.modules.quest.rows.chapter_tones||{}; }catch(e){ return {}; } })();
+const CHAP_ORDER=(()=>{ try{ return DATA.modules.quest.rows.chapter_order||{}; }catch(e){ return {}; } })();
+const chapCls=c=>'c'+((CHAP_TONE&&CHAP_TONE[c]!==undefined)?CHAP_TONE[c]:0);
+
 function initQuest(){
  const m=DATA.modules&&DATA.modules.quest;if(!m)return;
- const host=$('quest'),st=m.rows||{},rows=st.rows||[],stats=st.stats||{};
+ const host=$('quest'),st=m.rows||{},rows=st.rows||[],stats=st.stats||{},lines=st.storylines||[];
  if(!rows.length){host.innerHTML=sourceHtml(m)+'<div class="empty">暂无支线配置</div>';return}
  const byId={};rows.forEach(r=>byId[r.id]=r);
- let state=Object.assign({q:'',status:'all',group:'',view:'chain'},store.get(QUEST_FILTER_KEY,{}));
- const groups=[...new Set(rows.map(r=>r.group||'其他支线'))];
- const giverName=r=>(r.giver&&r.giver.name)||'';
- const locText=r=>{const l=r.location;if(!l){if(r.place_text)return r.place_text;return r.spot||'位置未定'}const path=((l.path&&l.path.length)?l.path:[l.name]).join(' / ');return (r.spot?r.spot+' · ':'')+path};
- const statusText=r=>r.status_label||(!r.accepted?'未接取':r.state_name);
- const statusCls=r=>r.status_cls||(r.done?'ok':r.state===4?'warn':'');
- const linkName=id=>byId[id]?byId[id].name:('#'+id);
- const rewardTip=x=>[(x.sources||[]).join('/'),x.type?('类型：'+x.type):'',x.price?('参考价 '+x.price):'',x.desc||''].filter(Boolean).join(' · ');
- const rewardChip=x=>`<span class="efchip fq${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)} ×${x.min===x.max?x.min:x.min+'-'+x.max}<span class="q">${esc(x.sources.join('/'))}</span></span>`;
- function detailBody(r){
-  const link=(r.prev?esc(linkName(r.prev))+' › ':'')+esc(r.name)+(r.next.length?' › '+r.next.map(linkName).map(esc).join(' / '):'');
-  return (r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:'')+
-   (giverName(r)?`<div class="qline"><b>委托人</b>${esc(giverName(r))}${r.npc_retired?'<span class="badge warn">已退隐</span>':''}</div>`:'')+
-   (r.objectives.length?`<div class="qline"><b>目标</b>${r.objectives.slice(0,3).map(o=>esc(o.text)).join(' · ')}</div>`:'')+
-   (r.rewards.length?`<div class="qline"><b>奖励</b><div class="efchips">${r.rewards.map(rewardChip).join('')}</div></div>`:`<div class="qline"><b>奖励</b><span class="muted">剧情向，无固定奖励</span></div>`)+
-   (r.unreachable?`<div class="qline"><b>不可达</b>${esc(r.unreachable_text)}</div>`:'')+
-   (!r.accepted&&r.status_hint?`<div class="qline"><b>接取</b>${esc(r.status_hint)}</div>`:'')+
-   (r.branch&&r.branch_with.length?`<div class="qline"><b>分支</b>与「${esc(r.branch_with.join('」「'))}」二选一，实际以选择为准</div>`:'')+
-   `<div class="qline"><b>链路</b>${link}</div>`+
-   (r.chain_name?`<div class="qline"><b>剧情线</b>${esc(r.chain_name)}</div>`:'');
- }
- function rewardChips(r,limit){
-  const list=(r.rewards||[]).filter(x=>x.name!=='灵石'),stone=r.reward_stone||0;
-  if(!list.length)return stone?`<span class="rwstone">灵石 ${stone}</span>`:'';
-  const shown=list.slice(0,limit||3);
-  return shown.map(x=>`<span class="rwq f${x.quality||0}" title="${esc([(x.sources||[]).join('/'),x.type||'',x.desc||''].filter(Boolean).join(' · '))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}</span>`).join('')+
-   (list.length>shown.length?`<span class="rwq more">+${list.length-shown.length}</span>`:'')+
-   (stone?`<span class="rwstone">灵石 ${stone}</span>`:'');
- }
- function actHint(r){
-  return (!r.accepted&&['可接取','条件不足','剧情接取'].indexOf(r.status_label)>=0)
-   ?`<span class="qact">${esc(r.status_hint)}</span>`:'';
- }
- function card(r){
-  return `<details class="ev" data-quest="${r.id}"><summary>`+
-   `<span class="evname">${esc(r.name)}</span>`+
-   `<span class="badge ${statusCls(r)}">${esc(statusText(r))}</span>`+
-   (r.hidden?'<span class="badge">隐藏</span>':'')+
-   `<span class="rwline">${rewardChips(r,2)}</span>`+
-   actHint(r)+
-   `<span class="evloc">${esc(locText(r))}</span></summary>`+
-   `<div class="evbody">${detailBody(r)}</div></details>`;
- }
- function stepRow(r,cls){
-  return `<details class="qstep ${cls||''}"><summary>`+
-   `<span class="stepno">${r.chain_index||1}</span>`+
-   `<span class="evname">${esc(r.name)}</span>`+
-   `<span class="badge ${statusCls(r)}">${esc(statusText(r))}</span>`+
-   (r.hidden?'<span class="badge">隐藏</span>':'')+
-   `<span class="rwline">${rewardChips(r,3)}</span>`+
-   actHint(r)+
-   `<span class="evloc">${esc(locText(r))}</span></summary>`+
-   `<div class="evbody">${detailBody(r)}</div></details>`;
- }
- function optionCard(r,chosen,missed){
-  return `<div class="qopt ${chosen?'chosen':''} ${missed?'missed':''}">`+
-   `<div class="qname">${esc(r.name)}</div>`+
-   `<div class="qoptmeta"><span class="badge ${statusCls(r)}">${esc(statusText(r))}</span>`+
-   (r.unreachable?'<span class="badge warn">不可达</span>':'')+`</div>`+
-   `<div class="rwline">${rewardChips(r,2)||'<span class="mutedsm">剧情向，无固定奖励</span>'}</div>`+
-   (r.unreachable?`<div class="why">${esc(r.unreachable_text)}</div>`:'')+
-   (r.branch_missed?`<div class="why">未选：${esc(r.status_hint||r.branch_chosen)}</div>`:'')+
-   `</div>`;
- }
- function chainBlock(items,full){
-  const source=(full&&full.length)?full:items;
-  const sorted=[...items].sort((a,b)=>(a.chain_index||0)-(b.chain_index||0)||a.id-b.id);
-  const groups={};
-  sorted.forEach(r=>{if(r.branch_key)(groups[r.branch_key]=groups[r.branch_key]||[]).push(r)});
-  const taken={},walked=[],todo=[],missed=[],dead=[];
-  sorted.forEach(r=>{
-   if(r.branch_key&&taken[r.branch_key])return;
-   const peers=r.branch_key?groups[r.branch_key]:[r];
-   if(r.branch_key)taken[r.branch_key]=1;
-   if(peers.some(x=>x.done||x.doing))walked.push(peers);
-   else if(peers.every(x=>x.unreachable))dead.push(peers);
-   else if(peers.every(x=>x.branch_missed))missed.push(peers);
-   else todo.push(peers);
-  });
-  const flat=list=>list.reduce((acc,cur)=>acc.concat(cur),[]);
-  const doneRows=source.filter(r=>r.done),total=source.length;
-  const got=doneRows.reduce((sum,r)=>sum+(r.reward_stone||0),0);
-  const left=source.filter(r=>!r.done).reduce((sum,r)=>sum+(r.reward_stone||0),0);
-  const todoN=flat(todo).length,missN=flat(missed).length,deadN=flat(dead).length;
-  const next=[...flat(todo)].sort((a,b)=>statusRank(a)-statusRank(b))[0];
-  const block=peers=>peers.length<2?stepRow(peers[0]):`<div class="qbranch ${peers.length>2?'three':''}">`+
-   peers.map(x=>optionCard(x,x.done||x.doing,peers.some(y=>y.done||y.doing)&&!(x.done||x.doing))).join('')+`</div>`;
-  const secHead=(label,meta)=>`<div class="qsechd"><span>${label}</span><i>${meta||''}</i></div>`;
-  const allDone=doneRows.length===total;
-  const headBadge=allDone?'<span class="badge ok">已走完</span>'
-   :(next?(next.status_label==='可接取'?'<span class="badge ok">可接取</span>'
-     :(next.status_label==='条件不足'?'<span class="badge warn">条件不足</span>'
-     :`<span class="badge">${esc(next.status_label)}</span>`))
-   :(todoN?`<span class="badge">未走 ${todoN}</span>`:'<span class="badge warn">无法继续</span>'));
-  const rewardRows=source.filter(r=>r.rewards.length);
-  const final=rewardRows.length?rewardRows.reduce((a,b)=>((b.chain_index||0)>=(a.chain_index||0)?b:a)):null;
-  const head=`<summary><span class="evname">${esc(items[0].chain_name||'支线')}</span>`+
-   headBadge+`<span class="badge">已走 ${doneRows.length}/${total}</span>`+
-   `<span class="badge">灵石 ${got}${left?' · 可拿 '+left:''}</span>`+
-   (final?`<span class="rwline qfinal"><b>终奖</b>${rewardChips(final,3)}</span>`:'')+
-   (missN?`<span class="badge">未选 ${missN}</span>`:'')+
-   (deadN?`<span class="badge warn">不可达 ${deadN}</span>`:'')+
-   `<span class="evloc">${esc(items[0].group||'')}</span></summary>`;
-  const nextHtml=next?`<div class="qnext"><b>下一步</b>${esc(next.name)}<span>${esc(next.status_hint)}</span></div>`:'';
-  const walkedHtml=walked.length?`<div class="qwalk">`+secHead('已走',`${doneRows.length} 环 · 灵石 ${got}`)+walked.map(block).join('')+`</div>`:'';
-  const todoHtml=todo.length?secHead('未走',`${todoN} 环 · 可拿 ${left} 灵石`)+todo.map(block).join(''):'';
-  const missedHtml=missed.length?`<details class="qfold"><summary><span class="qfoldt">未选分支</span>`+
-   `<span class="qfoldn">${missN} 环</span><span class="qfoldx">已选了另一条路，游戏里不会有入口</span></summary>`+
-   `<div class="qfoldbody">${missed.map(block).join('')}</div></details>`:'';
-  const deadHtml=dead.length?`<details class="qfold"><summary><span class="qfoldt">不可达</span>`+
-   `<span class="qfoldn">${deadN} 环</span><span class="qfoldx">${esc([...new Set(flat(dead).map(r=>r.unreachable_text))].join('；'))}</span></summary>`+
-   `<div class="qfoldbody">${dead.map(block).join('')}</div></details>`:'';
-  const open=items.some(r=>r.doing)||!!next||(doneRows.length>0&&!allDone);
-  return `<details class="qchain" ${open?'open':''}>${head}<div class="qchainbody">`+
-   nextHtml+walkedHtml+todoHtml+missedHtml+deadHtml+`</div></details>`;
- }
- function matched(){
-  const q=state.q.trim();
-  return rows.filter(r=>{
-   if(state.status==='todo'&&r.accepted)return false;
-   if(state.status==='doing'&&!r.doing)return false;
-   if(state.status==='done'&&!r.done)return false;
-   if(state.status==='reward'&&!r.rewards.length)return false;
-   if(state.status==='branch'&&!r.branch)return false;
-   if(state.status==='blocked'&&(r.done||!r.unreachable))return false;
-   if(state.status==='can'&&r.status_label!=='可接取')return false;
-   if(state.status==='cond'&&r.status_label!=='条件不足')return false;
-   if(state.status==='wait'&&r.status_label!=='待触发')return false;
-   if(state.status==='suspect'&&r.status_label!=='疑似已触发')return false;
-   if(state.status==='skipped'&&r.status_label!=='疑似已跳过')return false;
-   if(state.status==='dialog'&&r.status_label!=='剧情接取')return false;
-   if(state.status==='unknown'&&r.status_label!=='触发未知')return false;
-   if(state.status==='prev'&&r.status_label!=='前置未完成')return false;
-   if(state.status==='missed'&&r.status_label!=='未选分支')return false;
-   if(state.status==='gap'&&r.status_label!=='后续已完成')return false;
-   if(state.status==='worth'){
-    if(r.done||r.doing||r.unreachable||r.branch_missed||!(r.rewards||[]).length)return false;
-    if(!['可接取','待触发','剧情接取','前置未完成'].includes(r.status_label))return false;
+ // 任务名 → id：让条件里的「任务名」可以点进去看它是什么、在哪
+ const questIndex=st.quest_index||{};
+ const nameToId={};
+ rows.forEach(r=>{if(r.name&&nameToId[r.name]===undefined)nameToId[r.name]=r.id});
+ Object.keys(questIndex).forEach(id=>{const nm=(questIndex[id]||{}).name;if(nm&&nameToId[nm]===undefined)nameToId[nm]=+id});
+ // 同名任务：游戏里可能有两处同名（如「小蝶所托」），必须按章节区分，不能凭名字乱跳。
+ const dupNames=st.dup_names||{};
+ const dupNameOf={};
+ Object.keys(dupNames).forEach(nm=>(dupNames[nm]||[]).forEach(e=>{dupNameOf[e.id]=nm}));
+ const lineMetaOf={};
+ lines.forEach(l=>(l.quests||[]).forEach(id=>{lineMetaOf[id]={line:l.name||'',chapter:l.chapter||'',region:l.region||''}}));
+ const chapOf=id=>(lineMetaOf[id]||{}).chapter||'';
+ const linkify=text=>esc(text||'').replace(/「([^」]{1,40})」(?:（([^）]{1,12})）)?/g,(m0,nm,chap)=>{
+   const cands=dupNames[nm];
+   let id=nameToId[nm];
+   if(cands){
+     if(chap){const hit=cands.filter(e=>e.chapter===chap)[0];if(hit)id=hit.id;}
+     // 同名又没给章节：宁可不跳，也不能跳到另一个同名任务上去。
+     else return m0;
    }
-   if(state.group&&(r.group||'其他支线')!==state.group)return false;
-   if(!q)return true;
-   const hay=[r.name,r.desc,r.group,r.chain_name,giverName(r),locText(r),r.spot,r.unreachable_text,
-    (r.objectives||[]).map(o=>o.text).join(' '),r.rewards.map(x=>x.name).join(' '),
-    (r.branch_with||[]).join(' '),linkName(r.prev),r.next.map(linkName).join(' ')].join(' ');
-   return hay.includes(q);
-  });
+   if(id===undefined)return m0;
+   const sfx=(cands&&chap)?`<span class="sq-chap-sfx">（${esc(chap)}）</span>`:'';
+   const tail=(chap&&!cands)?`（${esc(chap)}）`:'';
+   return '「<a class="sq-ref" data-jump="'+id+'">'+esc(nm)+sfx+'</a>」'+tail;
+ });
+
+ let state=Object.assign({q:'',status:'all',view:'story',open:{}},store.get(KEY,{}));
+ if(!state.open||typeof state.open!=='object')state.open={};
+
+ const sk=r=>r.status_key||'wait';
+ const statusText=r=>STATUS[sk(r)]||r.status_label||'';
+ const locText=r=>{const l=r.location;if(!l)return r.place_text||r.spot||(r.hidden?'剧情中触发':'位置未定');
+   const path=(l.path&&l.path.length)?l.path.join(' / '):l.name;return (r.spot?r.spot+' · ':'')+path};
+ const rewardTip=x=>[(x.sources||[]).join('/'),x.type?('类型：'+x.type):'',x.price?('参考价 '+x.price):''].filter(Boolean).join(' · ');
+ const rewardChips=(r,limit)=>{
+   const list=(r.rewards||[]).filter(x=>x.name!=='灵石');
+   const stone=r.reward_stone||0,cap=limit||3;
+   let out=list.slice(0,cap).map(x=>`<span class="sq-rw f${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}</span>`);
+   if(list.length>cap)out.push(`<span class="sq-rw more">+${list.length-cap}</span>`);
+   if(stone)out.push(`<span class="sq-stone">灵石 ${stone}</span>`);
+   return out.join('');
+ };
+ const hay=(r)=>[r.name,r.desc,r.group,(r.giver||{}).name,locText(r),
+   (r.objectives||[]).map(o=>o.text).join(' '),
+   (r.rewards||[]).map(x=>x.name).join(' '),
+   (r.option_gates||[]).map(g=>(g.option||'')+' '+(g.text||'')).join(' ')].join(' ').toLowerCase();
+ const query=()=>(state.q||'').trim().toLowerCase();
+ const match=r=>!query()||hay(r).includes(query());
+ const passStatus=r=>state.status==='all'||sk(r)===state.status;
+
+ function checkRow(c){
+   const ok=c.ok===true,bad=c.ok===false;
+   return `<div class="sq-chk ${ok?'ok':bad?'bad':''}"><span class="sq-mark">${ok?'✓':bad?'✗':'?'}</span>`+
+     `<span class="sq-ctext">${linkify(c.text||'条件')}</span><span class="sq-cval">${esc(c.cur_text||'')}</span></div>`;
+ }
+ function sceneHtml(g){
+   const c=g.context||{},sibs=c.siblings||[],lns=(c.lines||[]).slice(0,4);
+   if(!sibs.length&&!lns.length)return '';
+   return `<details class="sq-say"><summary>当时的对话${c.npc_name?' · '+esc(c.npc_name):''}</summary><div class="sq-say-body">`+
+     lns.map(l=>`<div class="sq-dline"><span>${esc(l.sub)}</span>${esc(l.text)}</div>`).join('')+
+     (sibs.length?`<div class="sq-sibs">${sibs.map(s=>`<span class="${esc(s)===g.option?'cur':''}">${esc(s)}</span>`).join('')}</div>`:'')+
+     `</div></details>`;
+ }
+ function gatesHtml(r){
+   const gates=r.gate_eval||[];if(!gates.length)return '';
+   return `<div class="sq-sec">选项与门槛</div>`+gates.map(g=>{
+     const ev=g.eval||{},ok=ev.ok===true,bad=ev.ok===false;
+     return `<div class="sq-opt ${ok?'ok':bad?'bad':''}">`+
+       `<div class="sq-opt-h"><span class="sq-optn">选项「${esc(g.option||'—')}」</span>`+
+       `<span class="sq-dotsep">·</span><span class="sq-need">需 ${esc(g.text||'无额外条件')}</span>`+
+       (g.hint_missing?'<span class="sq-tag risk">容易选错</span>':'')+
+       `<span class="sq-cur ${ok?'ok':bad?'bad':''}">${ev.cur_text?('· 你当前 '+esc(ev.cur_text)):''}${ok?' ✓':bad?' ✗':''}</span></div>`+
+       (g.hint_missing?'<div class="sq-note">游戏内不会提示这个条件，选之前先看清门槛。</div>':'')+
+       (g.hint?`<div class="sq-note">游戏内选项提示：${esc(g.hint)}</div>`:'')+
+       sceneHtml(g)+`</div>`;
+   }).join('');
+ }
+ function eggHtml(note){
+   if(!note)return '';
+   const desc=note.item_desc?String(note.item_desc).split('\n')[0]:'';
+   return `<details class="sq-egg"><summary>隐藏结局 · 剧透（点开才看）</summary><div class="sq-egg-body">`+
+     (note.trigger?`<p><b>怎么触发</b>${esc(note.trigger)}</p>`:'')+
+     (note.complete?`<p><b>怎么做</b>${esc(note.complete)}</p>`:'')+
+     (note.item_name?`<p><b>关键道具</b>${esc(note.item_name)}${desc?'：'+esc(desc):''}</p>`:'')+
+     (note.egg?`<p class="bad"><b>隐藏结局</b>${esc(note.egg)}</p>`:'')+`</div></details>`;
+ }
+ function howHtml(r){
+   const h=r.how||{},pre=r.prereq||[];
+   if(!h.text&&!pre.length)return '';
+   const where=[];
+   if(h.giver)where.push(`委托人「${esc(h.giver)}」${h.giver_home?' · 常驻地 '+esc(h.giver_home):''}`);
+   if(h.place)where.push(`地点 ${esc(h.place)}`);
+   return `<div class="sq-sec">怎么触发</div><div class="sq-how">`+
+     `<span class="sq-howtag ${h.auto?'auto':'npc'}">${esc(h.text||'条件满足时出现')}</span>`+
+     (where.length?`<span class="sq-howmeta">${where.join(' ｜ ')}</span>`:'')+
+     `</div>`+
+     (pre.length?`<div class="sq-prereq"><b>要做的前置${r.prereq_any&&pre.length>1?'（满足其一即可）':''}</b><div class="sq-pres">`+pre.map(p=>{
+       const chap=p.chapter||chapOf(p.id);
+       const dup=!!dupNameOf[p.id];
+       const showLine=!!p.line&&(p.line!==p.name||dup);
+       return p.side
+         ? `<button class="sq-pre" data-jump="${p.id}" title="点这里跳到「${esc(p.name)}」${chap?'（'+esc(chap)+'）':''}${dup?' · 与当前任务同名，不是同一个任务':''}">
+              ${chap?`<span class="sq-chap ${chapCls(chap)}">${esc(chap)}</span>`:''}
+              <span>${esc(p.name)}</span><em>${esc(p.status_label||'未完成')}</em>${showLine?`<i>${esc(p.line)}</i>`:''}</button>`
+         : `<span class="sq-pre out" title="该任务不在支线页">
+              <span>${esc(p.name)}</span><em>${esc(p.type_name||'其他任务')} · 不在支线页</em></span>`
+     }).join('')+`</div></div>`:'');
+ }
+ // 同名任务：不同章节各有一个同名任务时，把“另一个是什么、在哪、什么状态”摆出来，避免认错。
+ function sameNameHtml(r){
+   const info=r.same_name_info||[];
+   if(!info.length)return '';
+   const mine=lineMetaOf[r.id]||{},chap=mine.chapter||'';
+   const otherDone=info.filter(x=>x.done)[0];
+   let lead;
+   if(otherDone){
+     lead=`游戏里有 ${info.length+1} 个「${esc(r.name)}」：你完成的那个在「${esc((otherDone.chapter||'')+(otherDone.line?' · '+otherDone.line:''))}」，本行这条在「${esc(chap+(mine.line?' · '+mine.line:''))}」——不是同一个任务。`;
+   }else{
+     lead=`游戏里有 ${info.length+1} 个「${esc(r.name)}」，它们不是同一个任务。本行这条在「${esc(chap+(mine.line?' · '+mine.line:''))}」，另外还有：`;
+   }
+   return `<div class="sq-sec">同名任务</div><div class="sq-same"><div class="sq-sn-lead">${lead}</div>`+
+     info.map(x=>`<button class="sq-sn" data-jump="${x.id}" title="点这里跳到「${esc(x.name)}」">
+         <span class="sq-sn-nm">${esc(x.name)}</span>
+         ${x.chapter?`<span class="sq-chap ${chapCls(x.chapter)}">${esc(x.chapter)}</span>`:''}
+         <span class="sq-sn-line">${esc(x.line||'—')}</span>
+         <span class="sq-badge b-${x.status_key||'wait'}">${esc(x.status_label||'')}</span></button>`).join('')+
+     `</div>`;
+ }
+ function bodyHtml(r){
+   const ce=r.cond_eval||{},checks=ce.checks||[],gaps=ce.gaps||[];
+   const logic=ce.logic==='满足其一'?'满足其一即可':ce.logic==='全部满足'?'需要全部满足':(ce.logic?'部分条件满足其一即可':'');
+   const cond=checks.length
+     ? `<div class="sq-checks">${logic?`<div class="sq-logic">${esc(logic)}</div>`:''}${checks.map(checkRow).join('')}</div>`+
+       (gaps.length?`<div class="sq-gap"><b>还差</b>${gaps.map(g=>`<span>${esc(g)}</span>`).join('')}</div>`:'')
+     : `<div class="sq-muted">${esc(r.cond_text||r.trigger_text||((r.prereq||[]).length?'完成上面的前置后自动出现':'剧情到这里自动出现，不需要额外条件'))}</div>`;
+   const rewards=(r.rewards||[]).length
+     ? `<div class="sq-rwlist">${r.rewards.map(x=>`<span class="sq-rw f${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}<i>${esc((x.sources||[]).join('/'))}</i></span>`).join('')}</div>`
+     : `<div class="sq-muted">剧情向，无固定奖励</div>`;
+   return howHtml(r)+sameNameHtml(r)+`<div class="sq-sec">触发条件</div>${cond}`+
+     (r.desc?`<div class="sq-sec">这一段剧情</div><div class="sq-desc">${linkify(r.desc)}</div>`:'')+
+     gatesHtml(r)+
+     ((r.objectives||[]).length?`<div class="sq-sec">要做的事</div><ul class="sq-objs">${r.objectives.map(o=>`<li>${esc(o.text)}${o.npc?'<em>'+esc(o.npc)+'</em>':''}</li>`).join('')}</ul>`:'')+
+     `<div class="sq-sec">奖励</div>${rewards}`+
+     (r.egg_note?eggHtml(r.egg_note):'')+
+     (r.egg_note?'':(r.status_hint?`<div class="sq-hint"><b>怎么走</b>${esc(r.status_hint)}</div>`:''))+
+     (r.unreachable?`<div class="sq-warn">${esc(r.unreachable_text)}</div>`:'');
+ }
+ function nodeHtml(r,index){
+   const key=sk(r),one=r.hidden?(r.trigger_text||r.trigger_line||r.cond_text||r.status_hint):(r.trigger_line||r.status_hint||r.trigger_text||r.cond_text);
+   const peers=r.branch_key?rows.filter(x=>x.id!==r.id&&x.branch_key===r.branch_key):[];
+   const peerPicked=peers.some(x=>x.done||x.doing);
+   const branchTag=r.branch_key&&(r.branch_with||[]).length
+     ? ((r.done||r.doing)?'<span class="sq-tag sel">已选</span>':(peerPicked?'<span class="sq-tag unsel">未选</span>':''))
+     : '';
+   const hit=match(r)&&!!query();
+   const open=hit?' open':'';
+   return `<details class="sq-node k-${key}${r.hidden?' hidden':''}${hit?' hit':''}" data-q="${r.id}"${open}>`+
+     `<summary><span class="sq-step">${index}</span><span class="sq-nm">${esc(r.name)}</span>`+
+     (dupNameOf[r.id]?'<span class="sq-tag dup" title="游戏里有多个同名任务，注意区分">同名</span>':'')+
+     `<span class="sq-badge b-${key}">${esc(statusText(r))}</span>`+
+     (r.hidden?'<span class="sq-tag hid">不显示在任务面板</span>':'')+
+     (r.egg_note?'<span class="sq-tag egg">含隐藏结局</span>':'')+branchTag+
+     `<span class="sq-rwline">${rewardChips(r,2)||'<span class="sq-rw more">剧情向</span>'}</span><span class="sq-loc">${esc(locText(r))}</span>`+
+     (!r.done&&r.how?`<span class="sq-mode ${r.how.auto?'auto':'npc'}">${r.how.auto?'自动触发':'找人接取'}</span>`:'')+
+     `<span class="sq-one">${linkify(one||'')}</span></summary>`+
+     `<div class="sq-body">${bodyHtml(r)}</div></details>`;
+ }
+ function groupBranches(items){
+   const out=[],seen={};
+   items.forEach(r=>{
+     if(r.branch_key&&seen[r.branch_key])return;
+     if(r.branch_key){
+       const group=items.filter(x=>x.branch_key===r.branch_key);
+       seen[r.branch_key]=1;
+       if(group.length>1){out.push(group);return}
+     }
+     out.push([r]);
+   });
+   return out;
+ }
+ function lineNodes(line){return (line.quests||[]).map(id=>byId[id]).filter(Boolean)}
+ const lineText=line=>`${line.name||''} ${line.chapter||''} ${line.region||''}`.toLowerCase();
+ function lineVisible(line){
+   const nodes=lineNodes(line);
+   if(query()&&!nodes.some(match)&&!lineText(line).includes(query()))return false;
+   if(state.status!=='all'&&!nodes.some(r=>sk(r)===state.status))return false;
+   return true;
+ }
+ function lineRank(line){
+   const nodes=lineNodes(line);
+   if(!line.total)return nodes.every(r=>r.done)?9:8;
+   if(nodes.some(r=>!r.done&&r.doing))return 0;
+   if(nodes.some(r=>!r.done&&sk(r)==='ready'))return 1;
+   if(nodes.some(r=>!r.done&&sk(r)==='cond'))return 2;
+   if(nodes.some(r=>!r.done&&sk(r)==='wait'))return 3;
+   if(nodes.every(r=>r.done))return 9;
+   return 5;
+ }
+ function lineHtml(line){
+   const nodes=lineNodes(line),visible=nodes.filter(passStatus);
+   if(!nodes.length||(!visible.length&&state.status!=='all'))return '';
+   if(query()&&!nodes.some(match)&&!lineText(line).includes(query()))return '';
+   const depths=line.depths||{},rings={};
+   nodes.forEach(r=>{const d=Number(depths[String(r.id)]||r.chain_index||1);(rings[d]=rings[d]||[]).push(r)});
+   const body=Object.keys(rings).map(Number).sort((a,b)=>a-b).map((d,idx,arr)=>{
+     const items=rings[d].filter(passStatus);
+     if(!items.length)return '';
+     const groups=groupBranches(items).map(group=>{
+       if(group.length>1){
+         return `<div class="sq-pair"><div class="sq-pair-h">${group.length>2?'多选一':'二选一'} · 只能选一条</div><div class="sq-pair-grid">`+
+           group.map(r=>nodeHtml(r,d)).join('')+`</div></div>`;
+       }
+       return nodeHtml(group[0],d);
+     }).join('');
+     return `<div class="sq-ring"><div class="sq-rail"><span class="sq-dot">${d}</span>${idx<arr.length-1?'<i class="sq-bar"></i>':''}</div><div class="sq-nodes">${groups}</div></div>`;
+   }).join('');
+   if(!body)return '';
+   const stored=state.open[line.id];
+   const nextRow=line.next?byId[line.next]:null;
+   const open=(state.q?true:(stored!==undefined?stored:(line.doing>0||(nextRow&&(nextRow.doing||sk(nextRow)==='ready')))));
+   const npcs=(line.npc||[]).filter(n=>n&&line.name.indexOf(n)<0);
+   return `<details class="sq-line" data-line="${esc(line.id)}"${open?' open':''}>`+
+     `<summary class="sq-line-h"><span class="sq-chap ${chapCls(line.chapter)}">${esc(line.chapter)}</span>`+
+     (line.region?`<span class="sq-region">${esc(line.region)}</span>`:'')+
+     `<span class="sq-lname">${esc(line.name)}</span>`+
+     (npcs.length?`<span class="sq-npc">${esc(npcs.slice(0,3).join('、'))}</span>`:'')+
+     `<span class="sq-prog" title="已走环数 / 可走环数（不含未选分支）">${line.total?('已走 '+line.done+'/'+line.total):'已选另一条路'}</span>`+
+     (line.stones_left?`<span class="sq-stone">可拿灵石 ${line.stones_left}</span>`:'')+
+     `<span class="sq-caret">›</span></summary>`+
+     `<div class="sq-spine">${body}</div></details>`;
+ }
+ function flatCard(r){
+   const key=sk(r),cy=r.cond_eval||{},checks=cy.checks||[];
+   return `<details class="sq-flat${r.hidden?' hidden':''}" data-q="${r.id}">`+
+     `<summary><span class="sq-nm">${esc(r.name)}</span><span class="sq-badge b-${key}">${esc(statusText(r))}</span>`+
+     (r.hidden?'<span class="sq-tag hid">不显示在任务面板</span>':'')+
+     `<span class="sq-rwline">${rewardChips(r,2)}</span><span class="sq-loc">${esc(locText(r))}</span></summary>`+
+     `<div class="sq-body">`+
+       (checks.length?`<div class="sq-checks">${checks.map(checkRow).join('')}</div>`:'')+
+       (r.status_hint?`<div class="sq-hint"><b>怎么走</b>${esc(r.status_hint)}</div>`:'')+
+       (r.desc?`<div class="sq-muted">${esc(r.desc)}</div>`:'')+
+       gatesHtml(r)+eggHtml(r.egg_note)+`</div></details>`;
+ }
+ function flatHtml(){
+   const list=rows.filter(r=>passStatus(r)&&match(r));
+   if(!list.length)return '';
+   const lineOf={};lines.forEach(line=>(line.quests||[]).forEach(id=>{lineOf[id]=line.name}));
+   const groups={};
+   list.forEach(r=>{const name=lineOf[r.id]||r.chain_name||'其他支线';(groups[name]=groups[name]||[]).push(r)});
+   return Object.keys(groups).sort((a,b)=>a.localeCompare(b,'zh-CN')).map(name=>{
+     const items=groups[name].sort((a,b)=>(a.chain_index||0)-(b.chain_index||0)||a.id-b.id);
+     return `<div class="sq-flat-g">${esc(name)}<span>${items.length} 个</span></div>`+items.map(flatCard).join('');
+   }).join('');
  }
  function renderChips(){
-  document.querySelectorAll('#qview .chip').forEach(b=>b.classList.toggle('on',b.dataset.view===state.view));
-  document.querySelectorAll('#qstatus .chip').forEach(b=>b.classList.toggle('on',b.dataset.st===state.status));
-  document.querySelectorAll('#qgroups .chip').forEach(b=>b.classList.toggle('on',b.dataset.group===state.group));
+   document.querySelectorAll('#qview .chip').forEach(b=>b.classList.toggle('on',b.dataset.view===state.view));
+   document.querySelectorAll('#qstatus .chip').forEach(b=>b.classList.toggle('on',b.dataset.st===state.status));
  }
- function statusRank(r){
-  const order={'可接取':0,'待触发':1,'剧情接取':2,'前置未完成':3,'条件不足':4,'疑似已触发':5,'疑似已跳过':6,'触发未知':7};
-  return order[r.status_label]!==undefined?order[r.status_label]:8;
+ function render(){
+   renderChips();
+   const q=$('qs');if(q.value!==state.q)q.value=state.q;
+   const list=$('qlist');
+   if(state.view==='flat'){
+     const count=rows.filter(r=>passStatus(r)&&match(r)).length;
+     $('qcount').textContent=`逐个看：${count} / ${rows.length} 个支线 · 共 ${stats.storylines||lines.length} 条剧情线`;
+     list.innerHTML=flatHtml()||'<div class="empty">没有符合条件的支线，换个筛选试试。</div>';
+     return;
+   }
+   const visible=lines.filter(lineVisible).sort((a,b)=>lineRank(a)-lineRank(b)
+     ||b.size-a.size
+     ||(CHAP_ORDER[a.chapter]||99)-(CHAP_ORDER[b.chapter]||99)
+     ||(b.done/Math.max(1,b.total))-(a.done/Math.max(1,a.total))
+     ||a.name.localeCompare(b.name,'zh-CN'));
+   const questCount=visible.reduce((sum,line)=>sum+lineNodes(line).filter(r=>passStatus(r)&&match(r)).length,0);
+   $('qcount').textContent=`剧情线：${visible.length} 条 / ${questCount} 个支线 · 共 ${stats.storylines||lines.length} 条`;
+   list.innerHTML=visible.map(lineHtml).join('')||'<div class="empty">没有符合条件的剧情线，换个筛选试试。</div>';
+   if(query()&&query().length>=2){
+     const hit=list.querySelector('.sq-node.hit');
+     if(hit&&hit.scrollIntoView)hit.scrollIntoView({block:'center'});
+   }
  }
- function chainRank(items){
-  if(items.some(r=>r.doing))return 0;
-  const pending=items.filter(r=>!r.done&&!r.unreachable&&!r.branch_missed);
-  if(pending.length)return 1+Math.min(...pending.map(statusRank));
-  if(items.every(r=>r.done))return 9;
-  return 10;
+ const cards=`<div class="cards">`+
+   `<div class="card"><div class="k">支线完成</div><div class="v">${stats.done||0} <span>/ ${stats.total||0}</span></div><div class="s">进行中 ${stats.doing||0}</div></div>`+
+   `<div class="card"><div class="k">剧情线</div><div class="v">${stats.storylines||lines.length} <span>条</span></div><div class="s">按委托人 / 章节归拢</div></div>`+
+   `<div class="card"><div class="k">还能拿的灵石</div><div class="v">${stats.stones_todo||0}</div><div class="s">未完成支线的奖励</div></div>`+
+   `<div class="card"><div class="k">隐藏任务</div><div class="v">${stats.hidden||0} <span>个</span></div><div class="s">不会显示在游戏任务面板</div></div>`+
+   `</div>`;
+ const legend=`<div class="legend"><span>物品品质(0-5)：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span></div>`;
+ host.innerHTML=sourceHtml(m)+cards+
+   `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找任务 / 剧情线 / 委托人 / 地点 / 奖励</span><input id="qs" placeholder="输入任务名、剧情线、委托人、地点或奖励"></label></div></div>`+
+   `<div class="chips" id="qview"><span class="chip-label">视图</span>`+
+   `<button class="chip" data-view="story">剧情线</button><button class="chip" data-view="flat">逐条</button></div>`+
+   `<div class="chips" id="qstatus"><span class="chip-label">状态</span>`+
+   FILTERS.map(([value,label])=>`<button class="chip" data-st="${value}">${label}</button>`).join('')+`</div>`+
+   `<div id="qcount" class="result-info"></div><div id="qlist"></div>`+
+   legend+
+   `<div class="tip">「剧情线」按委托人 / 章节把支线串成一条路：点剧情线展开脊柱，点任务看触发条件、选项门槛与奖励。`+
+   `隐藏任务用虚线框标出，触发方式直接写在任务名下面；同一处只能选一条的分支会并排显示，已选 / 未选一眼可辨。`+
+   `搜索框会直接定位并展开对应剧情线里的任务。折叠状态、筛选与搜索会记住。</div>`;
+
+ $('qview').onclick=e=>{const b=e.target.closest('[data-view]');if(!b)return;state.view=b.dataset.view;store.set(KEY,state);render()};
+ $('qstatus').onclick=e=>{const b=e.target.closest('[data-st]');if(!b)return;state.status=b.dataset.st;store.set(KEY,state);render()};
+ $('qs').oninput=e=>{state.q=e.target.value;store.set(KEY,state);render()};
+ $('qlist').addEventListener('toggle',e=>{
+   const el=e.target;
+   if(el.classList&&el.classList.contains('sq-line')){state.open[el.dataset.line]=el.open;store.set(KEY,state)}
+ },true);
+ render();
+ // 任务名可点：跳到对应剧情线的节点；不在支线页的任务给出归属提示
+ function notice(text){
+   const box=$('qcount');if(!box)return;
+   const old=document.getElementById('qnotice');
+   if(old)old.remove();
+   const tip=document.createElement('div');
+   tip.id='qnotice';tip.className='sq-notice';tip.textContent=text;
+   box.parentNode.insertBefore(tip,box);
+   setTimeout(()=>{if(tip.parentNode)tip.remove()},3200);
  }
- function renderAll(){
-  renderChips();
-  $('qs').value=state.q;
-  const list=matched();
-  const breakdown=`未接取 ${stats.todo||0} 个（含折叠的前置未完成/未选分支/不可达）：可接取 ${stats.can_accept||0} · 条件不足 ${stats.cond_fail||0} · 待触发 ${stats.waiting||0} · 疑似已触发 ${stats.suspect||0} · 疑似已跳过 ${stats.skipped||0} · 剧情接取 ${stats.dialogue||0} · 触发未知 ${stats.unknown||0} · 前置未完成 ${stats.blocked_prev||0} · 未选分支 ${stats.missed||0} · 后续已完成 ${stats.record_gap||0} · 不可达 ${stats.unreachable||0}`;
-  if(state.view==='chain'){
-   const allMap=new Map();
-   rows.forEach(r=>{const key=r.chain_id||('q'+r.id);if(!allMap.has(key))allMap.set(key,[]);allMap.get(key).push(r)});
-   const map=new Map();
-   list.forEach(r=>{const key=r.chain_id||('q'+r.id);if(!map.has(key))map.set(key,[]);map.get(key).push(r)});
-   const chains=[...map.entries()].sort((a,b)=>chainRank(a[1])-chainRank(b[1])
-    ||String(a[1][0].chain_name||'').localeCompare(String(b[1][0].chain_name||''),'zh-CN'));
-   $('qcount').textContent=`筛选结果：${chains.length} 条剧情线 / ${list.length} 个支线 · ${breakdown}`;
-   $('qlist').innerHTML=chains.map(([key,items])=>chainBlock(items,allMap.get(key))).join('')||'<div class="empty">没有符合条件的支线，试试放宽筛选。</div>';
-  }else{
-   const grouped={};
-   list.forEach(r=>{const key=r.group||'其他支线';(grouped[key]=grouped[key]||[]).push(r)});
-   $('qcount').textContent=`筛选结果：${list.length} / ${rows.length} 个支线 · ${breakdown}`;
-   $('qlist').innerHTML=Object.keys(grouped).map(key=>{
-    const items=grouped[key].slice().sort((a,b)=>statusRank(a)-statusRank(b)
-     ||(a.chain_index||0)-(b.chain_index||0)||String(a.name).localeCompare(String(b.name),'zh-CN'));
-    const rewards=items.filter(r=>r.rewards.length).length;
-    const stones=items.reduce((sum,r)=>sum+(r.reward_stone||0),0);
-    return `<div class="qgroup">${esc(key)}<span class="gmeta">${items.length} 个 · 带奖励 ${rewards} 个 · 灵石 ${stones}</span></div>`+items.map(card).join('');
-   }).join('')||'<div class="empty">没有符合条件的支线，试试放宽筛选。</div>';
-  }
+ function jumpTo(qid){
+   qid=Number(qid);
+   const line=lines.filter(l=>(l.quests||[]).indexOf(qid)>=0)[0];
+   if(!line){
+     const info=questIndex[String(qid)]||{};
+     notice(info.name?('「'+info.name+'」属于'+(info.type_name||'其他任务')+'，不在支线页。'):'这个任务不在支线页。');
+     return;
+   }
+   state.open[line.id]=true;store.set(KEY,state);render();
+   requestAnimationFrame(()=>{
+     const el=document.querySelector('[data-q="'+qid+'"]');
+     if(!el)return;
+     if(el.tagName==='DETAILS')el.open=true;
+     if(el.scrollIntoView)el.scrollIntoView({block:'center'});
+     el.classList.add('sq-flash');
+     setTimeout(()=>el.classList.remove('sq-flash'),1800);
+   });
  }
- host.innerHTML=sourceHtml(m)+
-  `<div class="cards">`+
-  `<div class="card"><div class="k">支线完成</div><div class="v">${stats.done||0} <span>/ ${stats.total||0}</span></div><div class="s">进行中 ${stats.doing||0} · 未接取 ${stats.todo||0}</div></div>`+
-  `<div class="card"><div class="k">带奖励支线</div><div class="v">${stats.rewards_done||0} <span>/ ${stats.with_rewards||0}</span></div><div class="s">已提交 / 全部</div></div>`+
-  `<div class="card"><div class="k">未拿奖励</div><div class="v">${stats.rewards_todo||0} <span>个</span></div><div class="s">灵石约 ${stats.stones_todo||0}（含分支）</div></div>`+
-  `<div class="card"><div class="k">当前不可达</div><div class="v">${stats.unreachable||0} <span>个</span></div><div class="s">灵石约 ${stats.unreachable_stones||0} · ${esc(stats.player_realm_name||'未知境界')}${stats.blocked_by_prev?' · 前置连带 '+stats.blocked_by_prev:''}</div></div>`+
-  `<div class="card"><div class="k">剧情链 / 二选一</div><div class="v">${stats.chains||0} <span>/ ${stats.branches||0}</span></div><div class="s">链 / 分支组</div></div>`+
-  `</div>`+
-  `<div class="legend"><span>奖励颜色：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span><span>奖励后面的灰字是来源</span></div>`+
-  `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找支线 / 剧情线 / 委托人 / 奖励</span><input id="qs" placeholder="输入任务名、剧情线、地点、NPC 或奖励物品"></label></div></div>`+
-  `<div class="chips" id="qview"><span class="chip-label">视图</span>`+
-   `<button class="chip" data-view="chain">剧情线</button><button class="chip" data-view="flat">逐条</button></div>`+
-  `<div class="chips" id="qstatus"><span class="chip-label">状态</span>`+
-   `<button class="chip" data-st="all">全部</button><button class="chip" data-st="worth">值得做 ${stats.worth||0}</button><button class="chip" data-st="todo">未接取 ${stats.todo||0}</button>`+
-   `<button class="chip" data-st="can">可接取 ${stats.can_accept||0}</button><button class="chip" data-st="cond">条件不足 ${stats.cond_fail||0}</button>`+
-   `<button class="chip" data-st="wait">待触发 ${stats.waiting||0}</button><button class="chip" data-st="suspect">疑似已触发 ${stats.suspect||0}</button>`+
-   `<button class="chip" data-st="skipped">疑似已跳过 ${stats.skipped||0}</button>`+
-   `<button class="chip" data-st="dialog">剧情接取 ${stats.dialogue||0}</button><button class="chip" data-st="unknown">触发未知 ${stats.unknown||0}</button>`+
-   `<button class="chip" data-st="prev">前置未完成 ${stats.blocked_prev||0}</button><button class="chip" data-st="missed">未选分支 ${stats.missed||0}</button>`+
-   `<button class="chip" data-st="doing">进行中 ${stats.doing||0}</button><button class="chip" data-st="done">已完成 ${stats.done||0}</button>`+
-   `<button class="chip" data-st="reward">有奖励</button><button class="chip" data-st="branch">二选一</button>`+
-   `<button class="chip" data-st="blocked">不可达 ${stats.unreachable||0}</button></div>`+
-  `<div class="chips" id="qgroups"><span class="chip-label">剧情线</span><button class="chip" data-group="">全部</button>`+
-   groups.map(name=>`<button class="chip" data-group="${esc(name)}">${esc(name)}</button>`).join('')+`</div>`+
-  `<div id="qcount" class="result-info"></div><div id="qlist"></div>`+
-  `<div class="tip">奖励来自任务提交、阶段目标与剧情流水，全部实时读取游戏配置，任务或奖励改动后无需更新模块。奖励物品悬停可看类型、参考价与物品说明。`+
-  `「待触发」表示有明确触发条件（前置任务、进入指定场景、修炼层数或好感度达标等），满足后自动出现；「疑似已触发」表示触发条件已满足但本环没有记录，可能已经触发过或记录缺失；`+
-  `「剧情接取」表示要在剧情对话里接取，没有固定入口；「触发未知」表示配置里没有触发条件，只能靠剧情脚本触发，游戏内不一定有入口；`+
-  `「疑似已跳过」表示同一段剧情流程里接取了几个任务，其中一个已完成、这个没有记录，多半是同源分支被跳过，也可能是记录缺失；`+
-  `「条件不足」表示委托人还在，但接取条件没满足（如好感度、城镇声望），展开可以看到当前数值；`+
-  `「未选分支」表示同组另一个选项已经做了，后续环也会一并标为未选分支，游戏里不会有入口；`+
-  `「后续已完成」表示后续任务有记录但本环没有，可能是自动跳过或记录缺失；「不可达」表示境界已过或委托人已退隐，前置链上的后续环同样不可达。`+
-  `剧情线视图把每条线拆成「已走 / 未走 / 未选分支·不可达」三块：已走的在上、未走的在下，未选中或不可达的默认折叠成一行；奖励直接显示在每一环上，不用展开；可继续的线会给出「下一步」。`+
-  `「值得做」只列出未完成、可达且有奖励的任务（可接取 / 待触发 / 剧情接取）；「未接取」按任务数统计，包含折叠在未走、未选分支、不可达里的环，所以比展开后看到的条数多。`+
-  `折叠状态、筛选和搜索会记住。</div>`;
- $('qs').oninput=e=>{state.q=e.target.value;store.set(QUEST_FILTER_KEY,state);renderAll()};
- $('qview').onclick=e=>{const b=e.target.closest('[data-view]');if(!b)return;state.view=b.dataset.view;store.set(QUEST_FILTER_KEY,state);renderAll()};
- $('qstatus').onclick=e=>{const b=e.target.closest('[data-st]');if(!b)return;state.status=b.dataset.st;store.set(QUEST_FILTER_KEY,state);renderAll()};
- $('qgroups').onclick=e=>{const b=e.target.closest('[data-group]');if(!b)return;state.group=b.dataset.group;store.set(QUEST_FILTER_KEY,state);renderAll()};
- renderAll();
+ $('qlist').addEventListener('click',e=>{
+   const ref=e.target.closest('[data-jump]');
+   if(!ref)return;
+   e.preventDefault();e.stopPropagation();
+   jumpTo(ref.getAttribute('data-jump'));
+ });
 }
 window.PROGRESS_VIEWS=window.PROGRESS_VIEWS||{};
 window.PROGRESS_VIEWS['quest']=initQuest;

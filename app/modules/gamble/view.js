@@ -392,7 +392,7 @@
       '<div class="gmb-panel" data-panel="mine">' +
       '<div class="gmb-advice-box"><div class="gmb-sec-h">下一步建议</div><div id="gmb-advice"></div></div>' +
       '<div class="gmb-toolbar"><input id="gmb-search" placeholder="搜玉料名 / 词缀" value="' + esc(state.text) + '"></div>' +
-      '<div class="gmb-chips" id="gmb-qchips">' + qualityChips.map(function (item) {
+      '<div class="gmb-chips" id="gmb-qchips"><span class="chip-label">璞石品阶(白~橙)</span>' + qualityChips.map(function (item) {
         return '<button type="button" class="gmb-chip' +
           (String(state.q) === String(item.value) ? ' on' : '') +
           (item.value ? ' gmb-qchip q' + item.value : '') +

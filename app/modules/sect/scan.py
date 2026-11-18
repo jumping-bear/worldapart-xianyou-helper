@@ -210,7 +210,8 @@ def scan(obj, meta_obj, state=None):
     contribution_id = _int(constants.get("SECT_CONTRIBUTION_ITEM_ID"), 50002)
     stone_id = _int(constants.get("STONE_ITEM_ID"), 50000)
     contribution = bag.get(contribution_id, 0)
-    # 委托板只挂 3 条；已接任务在任务日志里，单独计数。每周期上限来自职位 task_limit。
+    # 委托板每周期挂出的数量（本期挂多少看存档 current_offer_pool_ids，是轮换的）；
+    # 玩家「可同时接」的上限来自职位 task_limit（真传弟子=10，不是 3）。
     limit = _int(position.get("task_limit")) or _int(constants.get("SECT_TASK_DEFAULT_LIMIT"), 3)
     accepted_count = sum(1 for item in accepted if item["state"] in (1, 2, 6))
     settled_count = _int(tasks_state.get("current_cycle_settled_count")) or \
@@ -289,8 +290,10 @@ def summary(module):
     rows = module.get("rows") or {}
     if not rows.get("in_sect"):
         return "宗门：尚未入宗"
-    return "宗门：%s · %s；贡献 %d，宗门声望 %d，本期任务 %d 项（已接 %d）" % (
+    slots = rows.get("slots") or {}
+    return "宗门：%s · %s；贡献 %d，宗门声望 %d，可同时接 %d 条（委托板本期挂 %d 条），差遣/要务/重任已接 %d" % (
         rows.get("sect_name") or "未知宗门", rows.get("position_name") or "未知职位",
         _int(rows.get("contribution")), _int(rows.get("reputation")),
-        len(rows.get("offers") or []) + len(rows.get("accepted") or []),
+        _int(slots.get("limit")),
+        len(rows.get("offers") or []),
         len(rows.get("accepted") or []))

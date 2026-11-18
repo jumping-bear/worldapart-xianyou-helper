@@ -1,0 +1,35 @@
+/* 炼器：分区导航、卡片分区、器胚目录折叠分组与缺料标识。仅本模块 fz/fgrp/fnav/fmiss 选择器。 */
+
+/* 分区导航 */
+.fnav{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 6px}
+.fnav-item{display:inline-flex;align-items:center;gap:6px;background:#171b23;border:1px solid #2b3340;color:#b7c0cd;border-radius:18px;padding:7px 14px;font-size:12px;text-decoration:none;cursor:pointer}
+.fnav-item:hover{border-color:#3d735b;color:#c9f5dd}
+.fnav-item i{font-style:normal;color:#7d8593;font-size:11px}
+
+/* 分区卡片：区块之间用卡片与标题分层 */
+.fzone{background:#14181f;border:1px solid #232a36;border-radius:12px;padding:0;margin:14px 0;scroll-margin-top:14px}
+.fzone summary{list-style:none;cursor:pointer}
+.fzone summary::-webkit-details-marker{display:none}
+.fzone[open]{padding:14px 16px 16px}
+.fzone-head{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:650;color:#d7dee8;margin:0;padding:13px 16px}
+.fzone-head:before{content:"";width:3px;height:14px;border-radius:2px;background:#4f9e73;flex:none}
+.fzone-head:after{content:"›";margin-left:auto;color:#7d8593;font-size:16px;transition:transform .15s}
+.fzone[open] .fzone-head:after{transform:rotate(90deg)}
+.fzone-head span{color:#7d8593;font-size:11px;font-weight:400}
+.fzone-body{padding:0 16px 14px}
+
+/* 全部器胚目录：境界 + 部位两级分组，默认收起 */
+.fgrp{background:#15181f;border:1px solid #232833;border-radius:10px;margin:0 0 10px;overflow:hidden}
+.fgrp>summary{list-style:none;cursor:pointer;padding:11px 14px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#d7dee8}
+.fgrp>summary::-webkit-details-marker{display:none}
+.fgrp>summary:before{content:"›";color:#6f7787;font-size:16px;transition:.15s;width:14px;flex:none}
+.fgrp[open]>summary:before{transform:rotate(90deg)}
+.fgrp-n{margin-left:auto;color:#7d8593;font-size:11px;font-weight:400}
+.fgrp-body{padding:2px 12px 12px;border-top:1px solid #232833}
+.fgrp-slot{margin-top:10px}
+.fgrp-slot-h{color:#9aa3b2;font-size:12px;font-weight:600;margin:0 0 6px;display:flex;align-items:center;gap:6px}
+.fgrp-slot-h i{font-style:normal;color:#6f7787;font-size:11px;font-weight:400}
+
+/* 我的器胚：缺料标识与置顶行 */
+.badge.fmiss{background:#3a2620;border:1px solid #5c3a2a;color:#e8a17c}
+tr.fmiss-row td:first-child{box-shadow:inset 2px 0 0 #d97a4e}

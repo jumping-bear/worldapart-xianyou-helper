@@ -1,0 +1,68 @@
+不问凡尘 · 仙友助手 —— 创意工坊上传步骤
+==========================================
+
+一、上传前要准备的东西
+------------------------
+1. SteamCMD（已下载并完成自更新）
+   位置：C:\Users\Hason Shaw\steamcmd
+
+2. 一个能登录 Steam 的账号（需要过 Steam Guard）
+   这个账号要拥有《不问凡尘》。
+
+3. 本目录里已经准备好的：
+   workshop.vdf     上传配置
+   content\         物品内容（订阅后原样下载到玩家电脑）
+   preview.png      预览图，1280x720
+
+二、第一次上传
+--------------
+1. 打开命令提示符，进入 steamcmd 目录：
+
+   cd /d "%USERPROFILE%\steamcmd"
+
+   或者直接双击本目录的「upload_to_workshop.bat」，路径会自动填好。
+
+2. 启动并登录：
+
+   steamcmd.exe +login 你的账号
+
+   按提示输入密码和 Steam Guard 验证码。
+
+3. 登录成功后执行上传：
+
+   workshop_build_item "f:\project\temp_20261114_01\workshop_release\workshop.vdf"
+
+   路径要加英文引号。上传目录已放在纯英文路径下，
+   SteamCMD 对中文路径支持不好，不要挪到带中文的文件夹。
+
+4. 上传成功后，窗口里会输出新物品的 ID（一串数字）。
+   这就是 publishedfileid，第一次上传时 vdf 里填的是 0。
+
+5. 到创意工坊页面打开这个物品，补充：
+   - 详细描述：把 工坊描述.txt 的内容整段粘贴进去
+   - 标签：按游戏工坊现有习惯选择
+   - 可见性：确认是否公开
+
+三、后续更新怎么发
+------------------
+1. 把 workshop.vdf 里的
+
+   "publishedfileid"  "0"
+
+   改成上次拿到的物品 ID。
+
+2. 用新的 content 目录内容替换旧的。
+3. 改一下 "changenote" 写本次更新说明。
+4. 重新执行：
+
+   workshop_build_item "f:\project\temp_20261114_01\workshop_release\workshop.vdf"
+
+四、注意事项
+------------
+- 订阅不会自动装进游戏。玩家订阅后要自己运行 content 目录里的「一键安装.bat」，
+  这一点和工坊里现有的语音插件一致。
+- 如果上传时报无权限，说明该 App 的社区上传没有开放，
+  需要联系游戏方在 Steamworks 后台为 AppID 4209920 开启创意工坊上传权限。
+- 预览图建议保持 16:9，更换时直接替换 preview.png 再上传一次即可。
+- content 里的 config.json 是安装时会被改写的本机配置，
+  上传前可以保留当前内容，安装脚本会自动指向玩家自己的游戏目录。

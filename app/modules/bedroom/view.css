@@ -3,3 +3,10 @@
 .bed-avatar{width:36px;height:36px;border-radius:50%;background:#243430;border:1px solid #3a5f4f;color:#bfe8d3;display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;flex:none;position:relative;overflow:hidden}
 .bed-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .bed-avatar.has-img{background:#11161c}
+/* 6 段进度块：实心＝已获得，空心＝还缺 */
+.bed-controls{margin:0 0 12px}
+.bseg{width:16px;height:16px;border-radius:4px;display:inline-block;background:transparent;border:1px solid #46505f}
+.bseg.on{background:#2f9e6b;border-color:#3ddc84}
+.bseg.miss{background:#1b2027;border-color:#3a424e}
+.part .pl em{font-style:normal;color:#6f7787;font-size:11px;margin-left:6px}
+tr.full-row td:first-child{box-shadow:inset 2px 0 0 #2f9e6b}

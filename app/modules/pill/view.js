@@ -43,6 +43,21 @@ function portalCost(mp,cfg){
  if(!pt)return '';
  return pt[5]?`${pt[4]||'妖丹'} ×${pt[5]}`:'无需妖丹';
 }
+// 详情面板为空时的视觉引导：三步流程，不堆文字
+const PILL_HINT=`<div class="pill-hint">`+
+ `<span class="hstep" style="--c:#e8c76d"><i>1</i><b>选丹方</b></span><em>→</em>`+
+ `<span class="hstep" style="--c:#ff7b72"><i>2</i><b>点地图</b></span><em>→</em>`+
+ `<span class="hstep" style="--c:#6edda2"><i>3</i><b>看路线与妖丹</b></span></div>`;
+const PILL_LEGEND=`<div class="legend pill-legend">`+
+ `<div class="lg"><span class="lg-t">拾取对象</span>`+
+  [2,1,3,4,5].map(t=>`<span><i style="background:${PILL_COLOR[t]}"></i>${PILL_TYPE[t]}</span>`).join('')+
+ `</div>`+
+ `<div class="lg"><span class="lg-t">五行丹方</span>`+
+  [1,2,3,4,5].map(t=>`<span><i style="background:${PILL_ELEMENT_COLOR[t]}"></i>${PILL_ELEMENT[t]}</span>`).join('')+
+ `</div>`+
+ `<div class="lg"><span class="lg-t">地形</span>`+
+  `<span><i style="background:#5a4a36"></i>山</span><span><i style="background:#26414a"></i>沼泽</span></div>`+
+ `</div>`;
 function initPill(){
  const m=DATA.modules&&DATA.modules.pill;if(!m)return;const host=$('pill');
  const st=m.rows||{},maps=(st.map&&st.map.maps)||[];
@@ -68,8 +83,9 @@ function initPill(){
  host.innerHTML=sourceHtml(m)+`<div class="cards">${cards}</div>`+
   (maps.length>1?`<div class="chips" id="pillmaps"><span class="chip-label">盘面</span>`+
    maps.map((x,i)=>`<button class="chip${x===mp?' on':''}" data-map="${i}">${esc(x.name)}<i>${(x.pois||[]).length}</i></button>`).join('')+`</div>`:'')+
-  `<div class="pill-grid"><div class="mapbox"><canvas id="pillmap"></canvas><svg id="pillsvg" viewBox="0 0 ${cols} ${rowsN}" xmlns="http://www.w3.org/2000/svg"></svg><div class="map-tip" id="pillherbtip"></div></div>`+
+  `<div class="pill-grid"><div class="mapbox"><canvas id="pillmap"></canvas><svg id="pillsvg" viewBox="0 0 ${cols} ${rowsN}" xmlns="http://www.w3.org/2000/svg"></svg><div class="map-tip" id="pillherbtip"></div><div class="map-tip" id="pillpoitip"></div></div>`+
   `<div class="pill-side">`+
+  `<div class="pill-detail" id="pillinfo">${PILL_HINT}</div>`+
   `<div class="fsec"><div class="fhead"><b>显示对象</b><span class="fhint">Alt+点击 独选</span>`+
    `<span class="fops"><button type="button" data-op="none" data-row="types">清</button><button type="button" data-op="all" data-row="types">全</button></span></div>`+
    `<div class="chips" id="pillchips"></div></div>`+
@@ -81,13 +97,12 @@ function initPill(){
    `<div class="frow"><span class="chip-label">药效</span><div class="chips" id="pillkeys"></div>`+
     `<span class="fops"><button type="button" data-op="none" data-row="keywords">清</button></span></div>`+
   `</div>`+
+  `<input id="pillq" class="pill-search" placeholder="搜索丹方 / 药效 / 奖励，例如：攻击、暴击">`+
   `<div class="fsec"><div class="fhead"><b>视图</b></div><div class="chips" id="pillview"></div></div>`+
-  `<input id="pillq" class="pill-search" placeholder="搜索名称 / 丹方药效 / 奖励说明">`+
   `<div class="pill-active" id="pillactive"></div>`+
-  `<div class="pill-detail" id="pillinfo">点击盘面上的标记或右侧结果查看详情</div>`+
   `<div class="pill-sum" id="pillsum"></div>`+
   `<div class="pill-list" id="pilllist"></div>`+
-  `<div class="legend">${[1,3,4,5].map(t=>`<span><i style="background:${PILL_COLOR[t]}"></i>${PILL_TYPE[t]}</span>`).join('')}${[1,2,3,4,5].map(t=>`<span><i style="background:${PILL_ELEMENT_COLOR[t]}"></i>${PILL_ELEMENT[t]}丹方</span>`).join('')}<span><i style="background:#5a4a36"></i>山</span><span><i style="background:#26414a"></i>沼泽</span></div></div></div>`+
+  `${PILL_LEGEND}</div></div>`+
   `<div class="manual"><div class="manual-head">丹方手记<span>已学会 ${(st.manual||[]).length} 张 · 点击定位盘面</span></div><div class="manual-list" id="pillmanual"></div></div>`+
   `<div class="tip">盘面为游戏内置固定地图（${cols}×${rowsN} 格，每格 ${ts} 单位），并非随机生成；带删除线的拾取点表示本存档已拾取过。「迷雾」开启后只显示已探索区域，落在迷雾里的拾取点会一起隐藏。「药材路线」默认关闭，打开后显示盘面自带的 ${(mp.trajectories||[]).length} 条药材分布轨迹，鼠标停在线路上才会显示药材名。</div>`;
  // 地形
@@ -155,6 +170,8 @@ function initPill(){
  svg.appendChild(herbLayer);
  // 药材轨迹：名字用 HTML 悬浮提示（盘面 500×500 缩放后 SVG 文字只剩几像素，没法看）
  const herbTip=$('pillherbtip');
+ const poiTip=$('pillpoitip');
+ function poiTipText(p){return `${pillName(p,mp)} · ${portalCost(mp,p[10])}`}
  (mp.trajectories||[]).forEach(([hid,,,segs])=>{
   if(!segs||!segs.length)return;const pts=segs.map(s=>`${s[1]/ts},${s[2]/ts}`).join(' ');
   const name=herbs[String(hid)]||('药材 '+hid);
@@ -174,20 +191,39 @@ function initPill(){
   hit.addEventListener('mouseleave',()=>herbTip.classList.remove('on'));
   herbLayer.appendChild(group)});
  // 拾取点
- const dots=[];
+ const dots=[],portalHits=[];
  mp.pois.forEach(p=>{
+  const isPortal=p[1]===5||p[1]===6;
   const c=document.createElementNS(NS,'circle');
   c.setAttribute('cx',p[6]/ts);c.setAttribute('cy',p[7]/ts);
-  c.setAttribute('r',p[1]===2?2.4:1.7);
+  c.setAttribute('r',isPortal?3.4:(p[1]===2?2.4:1.7));
   c.setAttribute('fill',poiFill(p));
   c.setAttribute('fill-opacity',p[1]===4?'.75':'.95');
   c.setAttribute('stroke','#0b0d10');c.setAttribute('stroke-width','.4');
   c.classList.add('poi-dot');
+  if(isPortal)c.classList.add('poi-portal');
   const tip=document.createElementNS(NS,'title');
-  tip.textContent=pillName(p,mp);c.appendChild(tip);
+  tip.textContent=isPortal?poiTipText(p):pillName(p,mp);c.appendChild(tip);
   if(consumed.has(p[0]))c.classList.add('dim');
   if(strokes.length&&!exploredAt(p[6],p[7]))c.classList.add('unseen');
-  c.addEventListener('click',()=>showPoi(p));
+  if(isPortal){
+   // 传送口放大命中区 + 悬浮提示，解决 POI 太小难选中
+   const hit=document.createElementNS(NS,'circle');
+   hit.setAttribute('cx',p[6]/ts);hit.setAttribute('cy',p[7]/ts);
+   hit.setAttribute('r','8');hit.setAttribute('fill','transparent');hit.setAttribute('stroke','none');
+   hit.setAttribute('pointer-events','all');hit.classList.add('poi-hit');
+   hit.addEventListener('click',()=>showPoi(p));
+   hit.addEventListener('mouseenter',()=>{poiTip.textContent=poiTipText(p);poiTip.classList.add('on')});
+   hit.addEventListener('mousemove',e=>{
+    const r=mapbox.getBoundingClientRect();
+    poiTip.style.left=(e.clientX-r.left)+'px';
+    poiTip.style.top=(e.clientY-r.top)+'px';
+   });
+   hit.addEventListener('mouseleave',()=>poiTip.classList.remove('on'));
+   portalHits.push(hit);
+  }else{
+   c.addEventListener('click',()=>showPoi(p));
+  }
   svg.appendChild(c);dots.push(c);
  });
  const routeLayer=document.createElementNS(NS,'g');
@@ -197,6 +233,8 @@ function initPill(){
  ring.setAttribute('fill','none');ring.setAttribute('stroke','#fff');
  ring.setAttribute('stroke-width','.9');ring.setAttribute('r','6');
  ring.style.display='none';svg.appendChild(ring);
+ // 传送口命中区铺在最上层，保证可点（不会被路线/圆环挡住）
+ portalHits.forEach(h=>svg.appendChild(h));
  // 把传送路线画在盘面上，避免只给坐标却看不到门在哪
  function drawRoute(steps){
   while(routeLayer.firstChild)routeLayer.removeChild(routeLayer.firstChild);
@@ -238,8 +276,9 @@ function initPill(){
   else if(p[1]<=3&&p[2])tags.push(`${PILL_ELEMENT[p[2]]||''}${p[3]?` · ${p[3]}阶`:''}`);
   if(isRecipe&&rec)tags.push(learned.has(rid)?'已学会':'未学会');
   if(consumed.has(p[0]))tags.push('已拾取');
-  let html=`<b>${esc(pillName(p,mp))}</b>　<span class="muted">${esc(tags.filter(Boolean).join(' · '))}</span>`+
-   `<div style="margin-top:4px">坐标 ${p[6]}, ${p[7]}　编号 #${p[0]}</div>`;
+  let html=`<div class="detail-head"><i class="dh-dot" style="background:${poiFill(p)}"></i>`+
+   `<div class="dh-title"><b>${esc(pillName(p,mp))}</b><span class="muted">${esc(tags.filter(Boolean).join(' · '))}</span></div></div>`+
+   `<div class="dh-meta">坐标 ${p[6]}, ${p[7]}　编号 #${p[0]}</div>`;
   if(rec){
    const tiers=(rec.g||[]).join(' / ')||'—';
    html+=`<div class="rec-info"><div><span>丹毒上限</span>${rec.x||0}</div>`+
@@ -262,11 +301,18 @@ function initPill(){
     html+=`<div class="route"><span>传送</span>无需传送，与你出发的区域连通</div>`;
    }else{
     if(steps.length){
-     html+=`<div class="route"><span>传送 ${steps.length} 次</span>`+steps.map(([cfg,x1,y1,x2,y2])=>{
-      const name=((mp.portals||{})[String(cfg)]||[])[0]||('传送口 '+cfg);
-      return `<button class="route-item" data-x="${x1}" data-y="${y1}">${esc(name)}`+
-       `<i>${Math.round(x1)},${Math.round(y1)} → ${Math.round(x2)},${Math.round(y2)}</i></button>`;
-     }).join('')+`</div>`;
+     html+=`<div class="route route-steps"><span class="route-head">传送 ${steps.length} 次 · 每步所需妖丹</span>`+
+      steps.map(([cfg,x1,y1,x2,y2],idx)=>{
+       const pt=(mp.portals||{})[String(cfg)]||[];
+       const name=pt[0]||('传送口 '+cfg);
+       const cost=portalCost(mp,cfg);
+       return `<button class="route-item" data-x="${x1}" data-y="${y1}">`+
+        `<b class="ri-step">${idx+1}</b>`+
+        `<span class="ri-name">${esc(name)}</span>`+
+        `<i class="ri-coord">${Math.round(x1)},${Math.round(y1)} → ${Math.round(x2)},${Math.round(y2)}</i>`+
+        `<em class="ri-cost ${pt[5]?'has':'free'}">${esc(cost)}</em>`+
+        `</button>`;
+      }).join('')+`</div>`;
     }else{
      html+=`<div class="route"><span>传送</span>这一片没有连通传送口，暂时过不去</div>`;
     }
@@ -274,8 +320,9 @@ function initPill(){
   }
   if(p[1]===5||p[1]===6){
    const pt=(mp.portals||{})[String(p[10])];
-   html+=`<div class="muted" style="margin-top:4px">${pt&&pt[2]?'双向传送':'单向传送'} · `+
-    `${pt&&pt[5]?`消耗 ${esc(pt[4]||'妖丹')} ×${pt[5]}`:'不需要妖丹'}</div>`;
+   const cost=portalCost(mp,p[10]);
+   html+=`<div class="portal-cost"><span>${pt&&pt[2]?'双向':'单向'}传送</span>`+
+    `<em class="ri-cost ${pt&&pt[5]?'has':'free'}">${esc(cost)}</em></div>`;
    const other=mp.pois.find(q=>(q[1]===5||q[1]===6)&&q[10]===p[10]&&q[0]!==p[0]);
    if(other)html+=`<div class="route"><span>${p[1]===5?'出口':'入口'}</span>`+
     `${p[1]===5?'穿过这里就是':'从这里可以回到'} ${Math.round(other[6])},${Math.round(other[7])}`+
@@ -465,7 +512,8 @@ function initPill(){
  function markSelected(id){
   document.querySelectorAll('#pilllist .pill-item.focus').forEach(n=>n.classList.remove('focus'));
   const node=document.querySelector('#pilllist .pill-item[data-id="'+id+'"]');
-  if(node){node.classList.add('focus');node.scrollIntoView({block:'nearest'})}
+  // 仅高亮列表项，不滚动页面/列表：地图点选时整页曾因 scrollIntoView 跳到下方列表
+  if(node)node.classList.add('focus');
  }
  function resetAll(){
   pillFilter.types=allTypes();pillFilter.elements=allElems.slice();
@@ -571,6 +619,22 @@ function initPill(){
   saveFilter();
  }
  applyFilter();
+ // 默认示例：自动选中一条「需传送」的丹方，一眼看到 选丹方→路线→妖丹 的完整链路
+ (function(){
+  let best=null,score=-1;
+  mp.pois.forEach(p=>{
+   if(p[1]!==2)return;
+   const comp=compById.has(p[0])?compById.get(p[0]):-1;
+   if(mp.main===undefined||comp<0||comp===mp.main)return;
+   const r2=String((mp.pool||[])[p[5]]||'');
+   const r=(mp.recipes||{})[r2]||{};
+   const s=((r.d||'').includes('攻击')?100:0)+((r.t||0)*10);
+   if(s>score){score=s;best=p}
+  });
+  if(!best)best=mp.pois.find(p=>{if(p[1]!==2)return false;const c=compById.has(p[0])?compById.get(p[0]):-1;return c>=0&&c!==mp.main});
+  if(!best)best=mp.pois.find(p=>p[1]===2);
+  if(best)showPoi(best);
+ })();
  // 丹方手记
  const manual=st.manual||[];
  if(manual.length){
