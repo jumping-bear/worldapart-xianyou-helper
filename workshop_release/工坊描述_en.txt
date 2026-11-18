@@ -1,5 +1,6 @@
 [h1]Xianyou Helper v2.1.1[/h1]
 [b]Read-only save inspector. It never writes back to your save file.[/b]
+[b]Found it useful? Please rate and favorite.[/b]
 
 [h2]What it does[/h2]
 [list]
@@ -23,7 +24,7 @@
 
 [h2]v2.1.1[/h2]
 [list]
-[*]Removed an invalid bat; double-click 仙友助手.exe to check progress.
+[*]Removed an invalid bat file.
 [/list]
 
 [h2]Update in v2.1.0[/h2]
