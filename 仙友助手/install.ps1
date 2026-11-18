@@ -270,7 +270,7 @@ Write-Host ''
 Write-Host '────────────────── 其他说明 ──────────────────' -ForegroundColor DarkGray
 Write-Host '游戏内已关闭 BepInEx 控制台黑窗，日志仍写在 BepInEx\LogOutput.log。' -ForegroundColor DarkGray
 Write-Host '需要看插件日志时，把 BepInEx\config\BepInEx.cfg 里 [Logging.Console] 的 Enabled 改成 true。' -ForegroundColor DarkGray
-Write-Host '可用「功能设置.bat」单独开关各模块；「查进度.bat」等同双击 仙友助手.exe。' -ForegroundColor DarkGray
+Write-Host '可用「功能设置.bat」单独开关各模块；查进度直接双击 仙友助手.exe。' -ForegroundColor DarkGray
 Write-Host '卸载：删掉 游戏目录\BepInEx\plugins\SaveDecryptProbe 文件夹即可。' -ForegroundColor DarkGray
 
 
