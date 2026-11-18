@@ -286,7 +286,7 @@ CSS += r"""
 @media(max-width:560px){.topt{font-size:11px}.tbranch{margin-left:6px;padding-left:6px}.epath{flex-direction:column;gap:4px}}
 """
 
-HTML_TEMPLATE = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>不问凡尘 · 仙友助手</title><style>__CSS__ __PLUGIN_CSS__ </style></head><body><div class="wrap"><h1>不问凡尘 · 仙友助手 <span class="appver">v__VER__</span></h1><div class="sub">只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。</div><div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div>__PANELS__<div class="tip">游戏保存后按 F8 可立即导出副本，平时插件每 60 秒自动同步。本页仅在数据变化时自动刷新。<br>配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。若存档结构、加密或 Unity 格式大改，仍需更新工具。</div></div><script src="仙友助手版本.js"></script><script>
+HTML_TEMPLATE = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>不问凡尘 · 仙友助手</title><style>__CSS__ __PLUGIN_CSS__ </style></head><body><div class="wrap"><h1>不问凡尘 · 仙友助手 <span class="appver">v__VER__</span></h1><div class="sub">只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。</div>__CONSOLE_NOTE__<div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div>__PANELS__<div class="tip">游戏保存后按 F8 可立即导出副本，平时插件每 60 秒自动同步。本页仅在数据变化时自动刷新。<br>配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。若存档结构、加密或 Unity 格式大改，仍需更新工具。</div></div><script src="仙友助手版本.js"></script><script>
 const INITIAL_VERSION=window.PROGRESS_VERSION||'';const DATA=__DATA__;
 const $=id=>document.getElementById(id);const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
@@ -333,9 +333,15 @@ def build_html(payload):
     body = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     body = body.replace("</", "<\\/").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
     css, js = _plugin_assets()
+    # 只有打包后的 exe 才有那个黑色控制台窗口；关掉它就没有自动刷新了。
+    console_note = (""
+                    if not common.FROZEN else
+                    '<div class="notice">使用期间请留着那个黑色小窗口（可以最小化）——'
+                    '<b>它负责每 3 秒检查数据，关掉后本页就不再自动刷新。</b></div>')
     return (HTML_TEMPLATE.replace("__CSS__", CSS)
             .replace("__PLUGIN_CSS__", css)
             .replace("__PANELS__", _panels(tabs))
+            .replace("__CONSOLE_NOTE__", console_note)
             .replace("__VER__", common.APP_VERSION)
             .replace("__PLUGIN_JS__", js.replace("</script", "<\\/script"))
             .replace("__DATA__", body))
