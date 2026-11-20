@@ -71,6 +71,7 @@ def settings_menu(dry_run=False):
         base = len(specs)
         print("  %d. 重新设置解密存档目录" % (base + 1))
         print("  %d. 选择存档角色：%s" % (base + 2, cfg.get("save_file") or "自动跟随最近存档"))
+        print("  %d. 覆盖窗口呼出快捷键：%s" % (base + 3, cfg.get("overlay_hotkey") or common.HOTKEY_DEFAULT))
         print("  0. 保存并退出")
         if dry_run:
             return
@@ -106,6 +107,14 @@ def settings_menu(dry_run=False):
                     print("已固定读取：%s" % options[int(picked) - 1]["name"])
                 else:
                     print("输入无效，未修改。")
+        elif choice == str(base + 3):
+            print("可选：" + " / ".join(common.HOTKEY_CHOICES))
+            picked = input("输入快捷键（如 F6）: ").strip().upper()
+            if picked in common.HOTKEY_CHOICES:
+                cfg["overlay_hotkey"] = picked
+                print("已改为 %s，重新打开覆盖窗口后生效。" % picked)
+            else:
+                print("输入无效，未修改。")
         elif choice == "0":
             if save_cfg(cfg):
                 print("设置已保存。重新打开查询工具后生效。")
@@ -124,24 +133,11 @@ def _set_console_title(text):
             pass
 
 
-def main():
-    if FROZEN:
-        try:
-            os.system("chcp 65001 >nul")
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
-        _set_console_title("仙友助手 - 功能设置" if "--settings" in sys.argv
-                           else "仙友助手 - 使用过程中请勿关闭这个窗口")
-    if "--settings" in sys.argv:
-        settings_menu(dry_run="--dry-run" in sys.argv)
-        return
-    if "--out-dir" in sys.argv:
-        common.set_output_dir(sys.argv[sys.argv.index("--out-dir") + 1])
-    open_browser = "--no-browser" not in sys.argv
+def watch(open_browser=True, once=False, interactive=True):
+    """监视存档并持续生成页面；overlay 模式下由后台线程调用。"""
     cfg = load_cfg()
     enabled = _enabled_keys(cfg)
-    dec = find_dir(cfg, interactive=bool(enabled))
+    dec = find_dir(cfg, interactive=interactive and bool(enabled))
     opened = False
     last_signature = None
     print("已生成：%s" % common.OUT_HTML)
@@ -150,7 +146,7 @@ def main():
             cfg = load_cfg()
             enabled = _enabled_keys(cfg)
             if enabled and (not dec or not os.path.isdir(dec)):
-                dec = find_dir(cfg, interactive=last_signature is None)
+                dec = find_dir(cfg, interactive=interactive and last_signature is None)
             signature = state_signature(dec, cfg)
             if signature != last_signature or not os.path.exists(common.OUT_HTML):
                 payload = render(dec, cfg) if dec or not enabled else {
@@ -170,7 +166,7 @@ def main():
                 except Exception:
                     pass
                 opened = True
-            if "--once" in sys.argv:
+            if once:
                 return
             time.sleep(3)
         except KeyboardInterrupt:
@@ -178,6 +174,40 @@ def main():
         except Exception as e:
             print("监视结束：%s" % e)
             return
+
+
+def main():
+    if FROZEN:
+        try:
+            os.system("chcp 65001 >nul")
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+        _set_console_title("仙友助手 - 功能设置" if "--settings" in sys.argv
+                           else "仙友助手 - 使用过程中请勿关闭这个窗口")
+    if "--settings" in sys.argv:
+        settings_menu(dry_run="--dry-run" in sys.argv)
+        return
+    if "--out-dir" in sys.argv:
+        common.set_output_dir(sys.argv[sys.argv.index("--out-dir") + 1])
+    once = "--once" in sys.argv
+    if "--overlay" in sys.argv:
+        import threading
+
+        from app.overlay import run as run_overlay, watch_parent
+        common.OVERLAY_MODE = True
+        if "--parent-pid" in sys.argv:
+            try:
+                parent = int(sys.argv[sys.argv.index("--parent-pid") + 1])
+                threading.Thread(target=watch_parent, args=(parent,), daemon=True).start()
+            except ValueError:
+                pass
+        threading.Thread(target=watch, kwargs={"open_browser": False, "interactive": False},
+                         daemon=True).start()
+        run_overlay(common.OUT_HTML, start_hidden="--silent" in sys.argv,
+                    hotkey=load_cfg().get("overlay_hotkey") or common.HOTKEY_DEFAULT)
+        return
+    watch(open_browser="--no-browser" not in sys.argv, once=once)
 
 
 if __name__ == "__main__":

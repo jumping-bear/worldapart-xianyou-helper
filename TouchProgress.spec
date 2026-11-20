@@ -24,8 +24,10 @@ try:
     hiddenimports += collect_submodules('app.modules')
 except Exception:
     pass
+# 覆盖模式的 pywebview 后端由运行期按平台动态导入，静态分析收不到。
+hiddenimports += ['app.overlay', 'webview.platforms.winforms', 'webview.platforms.edgechromium']
 # 只读取 TextAsset；压缩、类型树和 UnityPy 原生模块需要随 EXE 一起收集。
-for package in ('UnityPy', 'lz4', 'brotli', 'tpk_ar'):
+for package in ('UnityPy', 'lz4', 'brotli', 'tpk_ar', 'pythonnet', 'clr_loader'):
     try:
         d, b, h = collect_all(package)
         datas += d

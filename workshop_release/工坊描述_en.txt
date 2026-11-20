@@ -1,4 +1,4 @@
-[h1]Xianyou Helper v2.1.2[/h1]
+[h1]Xianyou Helper v2.3.0[/h1]
 [b]Read-only save inspector. It never writes back to your save file.[/b]
 [b]Found it useful? Please rate and favorite.[/b]
 [i]The feature list below is long — just install it and explore as you play.[/i]
@@ -23,21 +23,14 @@
 [*][b]Follows the game config[/b]: reads the current game configuration first, so most content updates need no tool update.
 [/list]
 
-[h2]v2.1.2[/h2]
+[h2]v2.3.0[/h2]
 [list]
-[*]Runs from any folder: if the exe sits somewhere read-only (C:\ root, Program Files), config and page are written to %LOCALAPPDATA% instead of failing.
-[*]Shorter feature list; save-reading rules added to FAQ.
-[/list]
-
-[h2]v2.1.1[/h2]
-[list]
-[*]Removed an invalid bat file.
-[/list]
-
-[h2]Update in v2.1.0[/h2]
-[list]
-[*][b]Two new tabs[/b]: Character gallery and Romance, for 15 tabs in total.
-[*]Improved: encounter drop pools show random one of N; refining map selection no longer scrolls; NPC inventory collapsible by quality; NPC talents lead with the talent view; forging sections collapsible.
+[*][b]Automatic updates (highlights)[/b]: once Steam refreshes the workshop content, the next game launch syncs the new panel and plugin DLL automatically. No need to run 「一键安装.bat」 again.
+[*][b]Zoom[/b]: scale the panel from 50% to 250%; click the percentage to reset to 100%.
+[*][b]Three window sizes[/b]: switch between small / medium / large from the top bar.
+[*][b]Drag to move[/b]: drag the top bar to place the panel anywhere; position and size are remembered.
+[*][b]Resume where you were[/b]: after a save refresh, the active tab and scroll position are kept.
+[*]Existing users: run 「一键安装.bat」 one last time; all later updates are automatic.
 [/list]
 
 [h2]Install[/h2]
@@ -47,7 +40,7 @@
 [*]3. Open the workshop folder: `Steam\steamapps\workshop\content\4209920\3839624741` (4209920 is the AppID of the game, 3839624741 is this item's ID). The folder contains 「一键安装.bat」; run it and confirm your game directory.
 [*]4. The script self-checks each step; continue only when everything shows ✓.
 [*]5. Stay on the main menu for about 20 seconds so the plugin can export a save copy. The first launch generates interop files and may take 1-3 minutes with no visible progress; this is normal, do not close the game.
-[*]6. Run 「仙友助手.exe」 from the same folder; the page opens in your browser.
+[*]6. Press [b]F3[/b] in-game to open the panel (the first open shows 「Loading save」 and switches automatically once ready). You no longer need to double-click 「仙友助手.exe」.
 [/list]
 
 [h2]FAQ[/h2]
@@ -57,15 +50,19 @@
 [*][b]No BepInEx\decrypted folder?[/b] The plugin did not load. Fully close the game and run 「一键安装.bat」 again; check that every self-check shows ✓.
 [*][b]Does it conflict with other BepInEx plugins?[/b] The installer only adds this tool's plugin and leaves the BepInEx core untouched.
 [*][b]No data in the tool?[/b] Let the game run for 15-20 seconds so the save copy can be exported; press F8 to force a refresh.
+[*][b]F3 does nothing / updating from an old version?[/b] On v2.2.0 or older, close the game and run 「一键安装.bat」 one last time; v2.3.0 and later update automatically. Close any other software that grabs F3.
+[*][b]How do I update?[/b] v2.2.0 and older: close the game and run 「一键安装.bat」 once. v2.3.0 and newer: nothing to do — updates sync on the next game launch.
+[*][b]Uninstall[/b]: close the game, delete BepInEx\plugins\SaveDecryptProbe and BepInEx\仙友助手, then unsubscribe. Optionally delete BepInEx\decrypted and %LOCALAPPDATA%\WorldApartTouchProgress.
 [/list]
 
 [h2]Notes[/h2]
 [list]
 [*]Only the exported save copy is read; game saves are never modified.
+[*]Since v2.2 the panel starts with the game; press F3 to open it. You can still double-click 「仙友助手.exe」 to view it in a browser.
 [*]Data refreshes every 60 seconds; press F8 after saving to refresh immediately.
 [*]「功能设置.bat」 lets you enable or disable each module separately.
 [*]The BepInEx console window stays closed by default; logs are still written to BepInEx\LogOutput.log. Set [Logging.Console] Enabled back to true in BepInEx.cfg when troubleshooting.
-[*]Uninstall: delete BepInEx\plugins\SaveDecryptProbe from your game folder.
+[*]Uninstall: delete BepInEx\plugins\SaveDecryptProbe and BepInEx\仙友助手 from your game folder, then unsubscribe. Optionally delete BepInEx\decrypted and %LOCALAPPDATA%\WorldApartTouchProgress.
 [/list]
 
 If something does not work, please leave a comment with your game version and a screenshot.

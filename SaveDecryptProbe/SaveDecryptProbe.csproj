@@ -16,6 +16,8 @@
     <Reference Include="Il2CppInterop.Runtime"><HintPath>F:\Program Files (x86)\Steam\steamapps\common\A1\BepInEx\core\Il2CppInterop.Runtime.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>F:\Program Files (x86)\Steam\steamapps\common\A1\BepInEx\interop\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.InputLegacyModule"><HintPath>F:\Program Files (x86)\Steam\steamapps\common\A1\BepInEx\interop\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>F:\Program Files (x86)\Steam\steamapps\common\A1\BepInEx\interop\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AK.Wwise.Unity.API"><HintPath>F:\Program Files (x86)\Steam\steamapps\common\A1\BepInEx\interop\AK.Wwise.Unity.API.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Il2Cppmscorlib"><HintPath>F:\Program Files (x86)\Steam\steamapps\common\A1\BepInEx\interop\Il2Cppmscorlib.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="SimpleSave.Runtime"><HintPath>F:\Program Files (x86)\Steam\steamapps\common\A1\BepInEx\interop\SimpleSave.Runtime.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>

@@ -182,6 +182,13 @@ def generate_vdf(target, version, content_dir):
     return title
 
 
+def write_version_file(version):
+    """插件靠 仙友助手/version.json 判断工坊里是否有新版本，必须随包发布。"""
+    path = os.path.join(APP_DIR, "version.json")
+    _write_atomic(path, json.dumps({"version": version}, ensure_ascii=False) + "\n")
+    print("已生成 仙友助手/version.json（v%s）" % version)
+
+
 def update_readme(version):
     path = os.path.join(APP_DIR, "使用说明.txt")
     lines = _read(path).splitlines()
@@ -253,6 +260,7 @@ def release(version):
     try:
         generate_pages(APP_DIR, version)
         update_readme(version)
+        write_version_file(version)
         staging = build_exe()
         archive = make_zip(staging, version)
         clean_private_artifacts()

@@ -41,8 +41,8 @@ Write-Host ''
 Write-Host '装完后这样用（3 步）：' -ForegroundColor Green
 Write-Host '  1) 启动游戏，停在主菜单约 20 秒（插件自动导出存档副本）'
 Write-Host '     首次启动要生成适配文件，可能慢 1~3 分钟且看起来没反应，属正常，别关游戏'
-Write-Host '  2) 双击 仙友助手.exe，浏览器会自动打开查询页面'
-Write-Host '  3) 平时不用管：每 60 秒自动同步；游戏里保存后按 F8 可立即刷新'
+Write-Host '  2) 游戏里按 F3 呼出查询面板，再按 F3 收起；退出游戏时面板自动关闭'
+Write-Host '  3) 平时不用管：每 3 秒自动同步；游戏里保存后按 F8 可立即刷新'
 Write-Host ''
 Write-Host '开始安装（约 1 分钟）…' -ForegroundColor Cyan
 Write-Host ''
@@ -217,11 +217,19 @@ $configPath = Join-Path $here 'config.json'
 $settings = @{
     decrypted_dir = (Join-Path $game 'BepInEx\decrypted')
     game_dir = $game
+    overlay_hotkey = 'F3'
+    overlay_size = 2
     modules = @{ bedroom = $true; talent = $true; items = $true; pill = $true; forge = $true; event = $true; quest = $true; memoria = $true }
 }
 if (Test-Path $configPath) {
     try {
         $old = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $hotkey = $old.PSObject.Properties['overlay_hotkey']
+        if ($null -ne $hotkey -and $hotkey.Value) { $settings.overlay_hotkey = [string]$hotkey.Value }
+        $size = $old.PSObject.Properties['overlay_size']
+        if ($null -ne $size -and $null -ne $size.Value) { $settings.overlay_size = [int]$size.Value }
+        $pos = $old.PSObject.Properties['overlay_pos']
+        if ($null -ne $pos -and $null -ne $pos.Value) { $settings.overlay_pos = $pos.Value }
         if ($old.modules) {
             foreach ($name in @('bedroom', 'talent', 'items', 'pill', 'forge', 'event', 'quest', 'memoria')) {
                 $property = $old.modules.PSObject.Properties[$name]
@@ -235,6 +243,24 @@ if (Test-Path $configPath) {
 $configJson = $settings | ConvertTo-Json -Depth 4 -Compress
 [System.IO.File]::WriteAllText($configPath, $configJson, (New-Object System.Text.UTF8Encoding($false)))
 
+# 覆盖窗口：复制到游戏目录，插件会在游戏启动时自动拉起，玩家按 F3 呼出。
+$assistDir = Join-Path $game 'BepInEx\仙友助手'
+New-Item -ItemType Directory -Path $assistDir -Force | Out-Null
+$assistExe = Join-Path $here '仙友助手.exe'
+if (Test-Path $assistExe) {
+    try {
+        Copy-Item $assistExe (Join-Path $assistDir '仙友助手.exe') -Force
+        Copy-Item $configPath (Join-Path $assistDir 'config.json') -Force
+        $verFile = Join-Path $here 'version.json'
+        if (Test-Path $verFile) { Copy-Item $verFile (Join-Path $assistDir 'version.json') -Force }
+        Write-Host '已安装覆盖窗口：游戏启动后按 F3 呼出，退出游戏自动关闭。' -ForegroundColor Green
+    } catch {
+        Write-Host '覆盖窗口文件被占用（可能正在运行），请关闭后再运行一次安装程序。' -ForegroundColor Yellow
+    }
+} else {
+    Write-Host '警告：安装包里没有 仙友助手.exe，跳过覆盖窗口安装。' -ForegroundColor Yellow
+}
+
 Write-Host ''
 Write-Host '────────────────── 安装自检 ──────────────────' -ForegroundColor Cyan
 
@@ -245,6 +271,8 @@ $checks = @(
     @{ label='BepInEx\core（运行时核心）';           path='BepInEx\core\BepInEx.Unity.IL2CPP.dll' },
     @{ label='BepInEx\unity-libs（Unity 基础库）';   path='BepInEx\unity-libs\*.zip' },
     @{ label='SaveDecryptProbe.dll（查询插件）';     path='BepInEx\plugins\SaveDecryptProbe\SaveDecryptProbe.dll' },
+    @{ label='仙友助手.exe（覆盖窗口）';             path='BepInEx\仙友助手\仙友助手.exe' },
+    @{ label='version.json（自动更新标记）';         path='BepInEx\仙友助手\version.json' },
     @{ label='config.json（查询工具配置）';          path=(Join-Path $here 'config.json') }
 )
 $failed = @()
@@ -264,13 +292,20 @@ Write-Host ''
 Write-Host '────────────────── 接下来 3 步 ──────────────────' -ForegroundColor Cyan
 Write-Host '  1) 启动游戏，停在主菜单约 20 秒，让插件导出存档副本' -ForegroundColor Green
 Write-Host '     首次启动会生成适配文件，可能慢 1~3 分钟且窗口没反应，属正常，请勿关闭' -ForegroundColor Yellow
-Write-Host '  2) 双击 仙友助手.exe，会打开一个网页显示进度' -ForegroundColor Green
+Write-Host '  2) 进游戏后按 F3 呼出查询面板，再按 F3 收起（不用再双击 仙友助手.exe）' -ForegroundColor Green
+Write-Host '     面板不抢焦点，游戏声音不会中断；点搜索框打字时才接管键盘' -ForegroundColor Green
 Write-Host '  3) 平时每 60 秒自动同步；保存游戏后按 F8 立即刷新' -ForegroundColor Green
+Write-Host ''
+Write-Host '────────────────── 以后更新 ──────────────────' -ForegroundColor Cyan
+Write-Host '  v2.3.0 起全自动：Steam 更新创意工坊内容后，下次启动游戏会自动同步' -ForegroundColor Green
+Write-Host '  新版 仙友助手.exe 和插件 DLL，不用再运行一键安装。' -ForegroundColor Green
+Write-Host '  （v2.2.0 及更早版本没有更新逻辑，这是最后一次手动安装）' -ForegroundColor DarkGray
 Write-Host ''
 Write-Host '────────────────── 其他说明 ──────────────────' -ForegroundColor DarkGray
 Write-Host '游戏内已关闭 BepInEx 控制台黑窗，日志仍写在 BepInEx\LogOutput.log。' -ForegroundColor DarkGray
 Write-Host '需要看插件日志时，把 BepInEx\config\BepInEx.cfg 里 [Logging.Console] 的 Enabled 改成 true。' -ForegroundColor DarkGray
-Write-Host '可用「功能设置.bat」单独开关各模块；查进度直接双击 仙友助手.exe。' -ForegroundColor DarkGray
-Write-Host '卸载：删掉 游戏目录\BepInEx\plugins\SaveDecryptProbe 文件夹即可。' -ForegroundColor DarkGray
+Write-Host '可用「功能设置.bat」单独开关各模块；也可以双击本目录的 仙友助手.exe 用浏览器查看。' -ForegroundColor DarkGray
+Write-Host '卸载：先退出游戏，再删除 游戏目录\BepInEx\plugins\SaveDecryptProbe 和 BepInEx\仙友助手，' -ForegroundColor DarkGray
+Write-Host '      取消订阅创意工坊物品；BepInEx\decrypted 与 %LOCALAPPDATA%\WorldApartTouchProgress 可选删除。' -ForegroundColor DarkGray
 
 

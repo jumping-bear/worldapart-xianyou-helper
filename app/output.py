@@ -334,10 +334,18 @@ def build_html(payload):
     body = body.replace("</", "<\\/").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
     css, js = _plugin_assets()
     # 只有打包后的 exe 才有那个黑色控制台窗口；关掉它就没有自动刷新了。
-    console_note = (""
-                    if not common.FROZEN else
-                    '<div class="notice">使用期间请留着那个黑色小窗口（可以最小化）——'
-                    '<b>它负责每 3 秒检查数据，关掉后本页就不再自动刷新。</b></div>')
+    if common.OVERLAY_MODE:
+        console_note = ('<div class="notice">按顶部显示的快捷键收起或再次呼出（默认为 <b>F3</b>，'
+                        '可在「功能设置.bat」里修改），<b>ESC</b> 快速隐藏，右上角可退出工具。</div>')
+    else:
+        console_note = (""
+                        if not common.FROZEN else
+                        '<div class="notice">使用期间请留着那个黑色小窗口（可以最小化）——'
+                        '<b>它负责每 3 秒检查数据，关掉后本页就不再自动刷新。</b></div>')
+    short_ver = "v" + ".".join(common.APP_VERSION.split(".")[:2])
+    console_note = ('<div class="notice">从 <b>%s</b> 起，进游戏后按 <b>F3</b> 即可呼出本页面，'
+                    '不再需要手动双击 仙友助手.exe。老用户重新运行一次「一键安装.bat」即可更新。</div>'
+                    % short_ver) + console_note
     return (HTML_TEMPLATE.replace("__CSS__", CSS)
             .replace("__PLUGIN_CSS__", css)
             .replace("__PANELS__", _panels(tabs))

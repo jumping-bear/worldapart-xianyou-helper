@@ -11,6 +11,8 @@ from . import version
 
 APP_VERSION = version.VERSION
 FROZEN = getattr(sys, "frozen", False)
+# 覆盖窗口模式（游戏内 F3 呼出）下，页面提示与双击启动的网页版不同。
+OVERLAY_MODE = False
 if FROZEN:
     HERE = os.path.dirname(sys.executable)
     BUILTIN_DIR = getattr(sys, "_MEIPASS", HERE)
@@ -82,13 +84,23 @@ def _module_defaults():
     return defaults
 
 
+HOTKEY_DEFAULT = "F3"
+HOTKEY_CHOICES = ["F%d" % i for i in range(1, 13)]
+
+
 def load_cfg():
     raw = meta_update._read_json(CFG, {}) or {}
     modules = raw.get("modules") if isinstance(raw.get("modules"), dict) else {}
+    hotkey = str(raw.get("overlay_hotkey") or HOTKEY_DEFAULT).upper()
+    if hotkey not in HOTKEY_CHOICES:
+        hotkey = HOTKEY_DEFAULT
     return {
         "decrypted_dir": str(raw.get("decrypted_dir") or ""),
         "game_dir": str(raw.get("game_dir") or ""),
         "save_file": str(raw.get("save_file") or ""),
+        "overlay_hotkey": hotkey,
+        "overlay_size": int(raw.get("overlay_size") or 2),
+        "overlay_pos": raw.get("overlay_pos") or None,
         "modules": {name: bool(modules.get(name, default))
                     for name, default in _module_defaults().items()},
     }
@@ -102,7 +114,11 @@ def save_cfg(cfg):
         modules[name] = bool((cfg.get("modules") or {}).get(name, default))
     data = {
         "decrypted_dir": cfg.get("decrypted_dir", ""), "game_dir": cfg.get("game_dir", ""),
-        "save_file": cfg.get("save_file", ""), "modules": modules,
+        "save_file": cfg.get("save_file", ""),
+        "overlay_hotkey": cfg.get("overlay_hotkey", HOTKEY_DEFAULT),
+        "overlay_size": cfg.get("overlay_size", 2),
+        "overlay_pos": cfg.get("overlay_pos") or None,
+        "modules": modules,
     }
     try:
         meta_update._atomic_json(CFG, data)
