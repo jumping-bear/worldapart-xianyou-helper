@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
@@ -12,7 +14,7 @@ using UnityEngine;
 
 namespace SaveDecryptProbe
 {
-    [BepInPlugin("a1.save.decryptprobe", "SaveDecryptProbe", "1.4.0")]
+    [BepInPlugin("a1.save.decryptprobe", "SaveDecryptProbe", "1.5.0")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -25,7 +27,7 @@ namespace SaveDecryptProbe
             OutDir = Path.Combine(BepInEx.Paths.BepInExRootPath, "decrypted");
             try { Directory.CreateDirectory(OutDir); } catch { }
             AddComponent<Boot>();
-            Log.LogInfo("SaveDecryptProbe loaded (F8 = 立即刷新存档副本)");
+            Log.LogInfo("SaveDecryptProbe loaded (页面「立即同步」= 立即刷新存档副本)");
             // 浮窗抢焦点会让游戏失焦；后台继续运行可避免游戏暂停或静音。
             try { Application.runInBackground = true; } catch { }
             // 创意工坊只更新工坊目录，不会覆盖游戏目录里的副本，这里负责把新版同步过来。
@@ -122,16 +124,50 @@ namespace SaveDecryptProbe
                 var local = ReadVersion(Path.Combine(localDir, VersionFile));
                 if (Compare(local, remote) >= 0)
                 {
+                    // 版本号相同也要检查本地 EXE：上一次更新可能被旧插件复制成了半个文件。
+                    if (!ExeMatches(Path.Combine(localDir, ExeName),
+                                    Path.Combine(localDir, VersionFile)))
+                    {
+                        if (SourceReady(source))
+                        {
+                            Plugin.L.LogWarning("[update] 本地 EXE 校验失败，从工坊重新复制");
+                            SyncExe(source, localDir);
+                            ClearUpdateError(Plugin.OutDir);
+                        }
+                        else
+                        {
+                            var broken = "本地程序校验失败，且工坊文件也不完整。请在 Steam 里验证文件完整性，"
+                                + "或取消订阅后重新订阅。";
+                            Plugin.L.LogWarning("[update] " + broken);
+                            WriteUpdateError(Plugin.OutDir, broken);
+                        }
+                        return;
+                    }
                     Plugin.L.LogInfo("[update] 已是最新 v" + local);
+                    ClearUpdateError(Plugin.OutDir);
                     return;
                 }
                 Plugin.L.LogInfo("[update] 发现新版 v" + remote + "（本地 " + (local ?? "未知") + "），开始同步");
+                // Steam 下载可能不完整：先按 version.json 里的大小与 SHA-256 校验工坊里的 EXE，
+                // 校验失败就保留旧版，避免把截断的 EXE 复制过来后整个工具打不开。
+                if (!SourceReady(source))
+                {
+                    var reason = "工坊文件未下载完整（v" + remote + "），已保留本地 "
+                        + (local ?? "旧版") + "。请退出游戏后在 Steam 里验证文件完整性，或取消订阅后重新订阅。";
+                    Plugin.L.LogWarning("[update] " + reason);
+                    WriteUpdateError(Plugin.OutDir, reason);
+                    return;
+                }
                 SyncExe(source, localDir);
                 SyncPluginDll(source);
+                ClearUpdateError(Plugin.OutDir);
             }
             catch (Exception e)
             {
                 Plugin.L.LogWarning("[update] 自动更新失败：" + e.GetType().Name + " " + e.Message);
+                WriteUpdateError(Plugin.OutDir,
+                    "自动更新失败，已保留旧版，可继续使用。请完全退出游戏后让 Steam 重新更新；"
+                    + "仍失败可在 Steam 里验证文件完整性或重新订阅。错误：" + e.Message);
             }
         }
 
@@ -297,6 +333,89 @@ namespace SaveDecryptProbe
             catch { return null; }
         }
 
+        /// <summary>从 version.json 里读一个字符串字段（不引入 JSON 依赖）。</summary>
+        private static string ReadField(string path, string field)
+        {
+            try
+            {
+                if (!File.Exists(path)) return null;
+                var text = File.ReadAllText(path);
+                var key = text.IndexOf("\"" + field + "\"", StringComparison.OrdinalIgnoreCase);
+                if (key < 0) return null;
+                var start = text.IndexOf('"', key + field.Length + 2);
+                if (start < 0) return null;
+                var end = text.IndexOf('"', start + 1);
+                if (end < 0) return null;
+                return text.Substring(start + 1, end - start - 1).Trim();
+            }
+            catch { return null; }
+        }
+
+        /// <summary>校验工坊里的 EXE 是否完整；旧版工坊没有校验字段时按可用处理。</summary>
+        private static bool SourceReady(string source)
+        {
+            return ExeMatches(Path.Combine(source, ExeName),
+                              Path.Combine(source, VersionFile));
+        }
+
+        /// <summary>按 version.json 里的大小与 SHA-256 校验指定 EXE。</summary>
+        private static bool ExeMatches(string exe, string versionFile)
+        {
+            if (!File.Exists(exe)) return false;
+            long size;
+            if (!long.TryParse(ReadField(versionFile, "exe_size"), out size) || size <= 0) return true;
+            if (new FileInfo(exe).Length != size)
+            {
+                Plugin.L.LogWarning("[update] EXE 大小不符：" + new FileInfo(exe).Length + " / " + size);
+                return false;
+            }
+            var expected = ReadField(versionFile, "exe_sha256");
+            if (string.IsNullOrEmpty(expected)) return true;
+            try
+            {
+                using (var sha = SHA256.Create())
+                using (var stream = File.OpenRead(exe))
+                {
+                    var actual = BitConverter.ToString(sha.ComputeHash(stream))
+                        .Replace("-", "").ToLowerInvariant();
+                    if (!string.Equals(actual, expected.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        Plugin.L.LogWarning("[update] EXE 校验值不符，工坊文件可能未下载完整");
+                        return false;
+                    }
+                }
+                return true;
+            }
+            catch (Exception e)
+            {
+                Plugin.L.LogWarning("[update] 校验 EXE 失败：" + e.Message);
+                return false;
+            }
+        }
+
+        private const string UpdateErrorFile = "_update_error.txt";
+
+        private static void WriteUpdateError(string localDir, string message)
+        {
+            try
+            {
+                Directory.CreateDirectory(localDir);
+                File.WriteAllText(Path.Combine(localDir, UpdateErrorFile), message,
+                    new System.Text.UTF8Encoding(false));
+            }
+            catch { }
+        }
+
+        private static void ClearUpdateError(string localDir)
+        {
+            try
+            {
+                var path = Path.Combine(localDir, UpdateErrorFile);
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch { }
+        }
+
         private static int Compare(string left, string right)
         {
             var a = Split(left);
@@ -361,23 +480,20 @@ namespace SaveDecryptProbe
 
     public class Boot : MonoBehaviour
     {
-        private static readonly Dictionary<string, long> Seen = new Dictionary<string, long>();
         private float _next;
-        private int _f8Check;
+        private float _nextProbe;
+        private float _lastForced;
+        // 浮窗「立即同步」按钮写这个文件，插件发现后立刻导出一次，不用等下一轮轮询。
+        private const string RefreshFlag = "_refresh.flag";
 
-        private static bool Hotkey()
+        private static bool Requested()
         {
-            try { if (Input.GetKeyDown(KeyCode.F8)) return true; } catch { }
             try
             {
-                var asm = AppDomain.CurrentDomain.GetAssemblies()
-                    .FirstOrDefault(a => a.GetName().Name == "Unity.InputSystem");
-                var kb = asm?.GetType("UnityEngine.InputSystem.Keyboard");
-                var cur = kb?.GetProperty("current", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
-                if (cur == null) return false;
-                var key = cur.GetType().GetProperty("f8Key")?.GetValue(cur);
-                if (key == null) return false;
-                return (bool)(key.GetType().GetProperty("wasPressedThisFrame")?.GetValue(key) ?? false);
+                var flag = Path.Combine(Plugin.OutDir, RefreshFlag);
+                if (!File.Exists(flag)) return false;
+                try { File.Delete(flag); } catch { }
+                return true;
             }
             catch { return false; }
         }
@@ -456,48 +572,89 @@ namespace SaveDecryptProbe
             if (Plugin.Assistant != null && !Application.isFocused && AudioListener.pause)
                 AudioListener.pause = false;
 
-            bool hot = Hotkey();
+            string why = null;
             var now = Time.unscaledTime;
-            if (!hot && now < _next) return;
+            // 进游戏头 5 秒先不扫，等存档目录就绪，也避免启动瞬间和加载抢 IO。
             if (now < 5f) return;
-            _next = hot ? now + 5f : now + 60f;
-            if (hot)
+            // 外部同步请求每 0.25 秒探一次；File.Exists 很轻，比每帧检查更省。
+            if (now >= _nextProbe)
             {
-                Seen.Clear();
-                Plugin.L.LogInfo("[f8] 强制刷新存档副本");
+                _nextProbe = now + 0.25f;
+                if (Requested()) why = "sync";
             }
+            if (why != null && now - _lastForced < 1f) why = null;
+            if (why == null && now < _next) return;
+            if (why != null) { Plugin.L.LogInfo("[" + why + "] 立即检查存档更新"); _lastForced = now; }
+            // 平时 5 秒扫一轮：只对存档做文件 stat，不读内容；需要即时刷新时点浮窗「立即同步」。
+            _next = now + (why != null ? 1f : 5f);
             Work();
         }
 
-        private void Work()
+        /// <summary>导出所有变更过的存档副本；返回 true 表示有文件正在写入，需要稍后重试。</summary>
+        private bool Work()
         {
             try
             {
                 var asm = AppDomain.CurrentDomain.GetAssemblies()
                     .FirstOrDefault(a => a.GetName().Name == "SimpleSave.Runtime");
                 var t = asm?.GetTypes().FirstOrDefault(x => x != null && x.Name == "SaveFileEnvelope");
-                if (t == null) return;
+                if (t == null) return false;
 
                 var m = t.GetMethods().FirstOrDefault(x => x.Name == "DecryptOrPassThrough");
-                if (m == null) { Plugin.L.LogError("[err] DecryptOrPassThrough missing"); enabled = false; return; }
+                if (m == null) { Plugin.L.LogError("[err] DecryptOrPassThrough missing"); enabled = false; return false; }
 
                 var root = Path.Combine(Application.persistentDataPath, "StorageV1", "1.0");
-                if (!Directory.Exists(root)) return;
+                if (!Directory.Exists(root)) return false;
 
-                int ok = 0, skip = 0;
+                int ok = 0, skip = 0, busy = 0, done = 0;
+                // 单次最多解密 1 份，把主线程占用压到最短，剩下的下一轮接着做。
+                const int limit = 1;
                 foreach (var f in FindTargets(root))
                 {
-                    long stamp;
-                    try { stamp = File.GetLastWriteTimeUtc(f).Ticks ^ new FileInfo(f).Length; } catch { continue; }
-                    if (Seen.TryGetValue(f, out var old) && old == stamp) { skip++; continue; }
+                    DateTime written;
+                    try { written = File.GetLastWriteTimeUtc(f); } catch { continue; }
+                    var rel = f.Substring(root.Length + 1).Replace('\\', '_').Replace('/', '_');
+                    var dst = Path.Combine(Plugin.OutDir, rel + ".bin");
+                    // 已导出的副本不早于源文件，说明上次已经处理过，直接跳过（跨重启也有效）。
+                    try
+                    {
+                        var di = new FileInfo(dst);
+                        if (di.Exists && di.Length > 0 && di.LastWriteTimeUtc >= written) { skip++; continue; }
+                    }
+                    catch { }
+                    if (done >= limit) { busy++; continue; }
 
-                    var data = File.ReadAllBytes(f);
+                    // 游戏写盘时会以独占方式打开文件；能独占打开说明已经落盘，读不到就下一轮再取。
+                    byte[] data;
+                    try
+                    {
+                        using (var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        {
+                            long len = fs.Length;
+                            if (len <= 0 || len > 512L * 1024 * 1024) { busy++; continue; }
+                            data = new byte[(int)len];
+                            int off = 0;
+                            while (off < data.Length)
+                            {
+                                int n = fs.Read(data, off, data.Length - off);
+                                if (n <= 0) break;
+                                off += n;
+                            }
+                            if (off != data.Length) { busy++; continue; }
+                        }
+                    }
+                    catch (IOException) { busy++; continue; }
+                    catch (UnauthorizedAccessException) { busy++; continue; }
+                    if (DateTime.UtcNow - written < TimeSpan.FromSeconds(1)) { busy++; continue; }
+
                     var res = Decrypt(m, data);
                     if (res == null) continue;
-                    var rel = f.Substring(root.Length + 1).Replace('\\', '_').Replace('/', '_');
-                    File.WriteAllBytes(Path.Combine(Plugin.OutDir, rel + ".bin"), res);
-                    Seen[f] = stamp;
+                    // 先写 .tmp 再原子替换：助手端永远读不到写了一半的副本。
+                    var tmp = dst + ".tmp";
+                    File.WriteAllBytes(tmp, res);
+                    File.Move(tmp, dst, true);
                     ok++;
+                    done++;
                 }
                 if (ok > 0) Plugin.L.LogInfo("[done] 更新 " + ok + " 份存档副本（跳过未变化 " + skip + "）");
                 try
@@ -505,13 +662,15 @@ namespace SaveDecryptProbe
                     File.WriteAllText(Path.Combine(Plugin.OutDir, "_status.txt"),
                         "lastSync=" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
                         + "  updated=" + ok + "  unchanged=" + skip
-                        + "  （按 F8 可强制刷新）");
+                        + "  （点浮窗「立即同步」可强制刷新）");
                 }
                 catch { }
+                return busy > 0;
             }
             catch (Exception e)
             {
                 Plugin.L.LogError("[err] " + e.GetType().Name + " " + e.Message);
+                return false;
             }
         }
 
@@ -522,7 +681,16 @@ namespace SaveDecryptProbe
             object r;
             try { r = m.Invoke(null, new object[] { arr }); }
             catch (Exception e) { Plugin.L.LogWarning("[skip] " + e.GetType().Name + " " + (e.InnerException?.Message ?? e.Message)); return null; }
-            if (r is Il2CppStructArray<byte> outArr) return outArr.ToArray();
+            if (r is Il2CppStructArray<byte> outArr)
+            {
+                long len = outArr.Length;
+                // 正常存档解密后与原文件同量级；长度异常说明传入数据不完整或调用失败，
+                // 直接丢弃，避免把垃圾数据写成副本。
+                if (len <= 0 || len > data.Length * 8L) return null;
+                var result = new byte[(int)len];
+                for (int i = 0; i < result.Length; i++) result[i] = outArr[i];
+                return result;
+            }
             return null;
         }
 

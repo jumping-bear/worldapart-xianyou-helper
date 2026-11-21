@@ -89,6 +89,58 @@ def score(rows):
     return sum(row["total"] for row in rows)
 
 
+def merge_rows(rows_list):
+    """跨槽位合并同一角色「曾经获得过」的段：每个仙友、每个部位取并集。
+
+    成就「十八摸」按历史累计判定，旧槽位里拿到过的段不能因为换档就消失；
+    合并后进度只增不减，新互动会立刻反映出来。
+    """
+    merged = {}
+    for rows in rows_list:
+        for row in rows:
+            cfg = row.get("cfg")
+            if cfg is None:
+                continue
+            item = merged.get(cfg)
+            if item is None:
+                item = {"cfg": cfg, "who": "", "bed": "", "labels": {}, "order": [],
+                        "got": {}, "resident": False, "avatar": ""}
+                merged[cfg] = item
+            if row.get("who"):
+                item["who"] = row["who"]
+            if row.get("bed"):
+                item["bed"] = row["bed"]
+            if row.get("avatar"):
+                item["avatar"] = row["avatar"]
+            item["resident"] = item["resident"] or bool(row.get("resident"))
+            order = []
+            for part in row.get("parts") or []:
+                action_id = part.get("id")
+                if action_id is None:
+                    continue
+                order.append(action_id)
+                item["labels"][action_id] = (part.get("label")
+                                             or item["labels"].get(action_id, str(action_id)))
+                item["got"].setdefault(action_id, set()).update(
+                    value for value in (part.get("got") or [])
+                    if isinstance(value, int) and 0 <= value <= 5)
+            if order:
+                item["order"] = order
+    out = []
+    for item in merged.values():
+        parts, total = [], 0
+        for action_id in (item["order"] or sorted(item["got"])):
+            got = sorted(item["got"].get(action_id, ()))
+            total += len(got)
+            parts.append({"id": action_id, "label": item["labels"].get(action_id, str(action_id)),
+                          "got": got, "miss": [i for i in range(6) if i not in got]})
+        out.append({"cfg": item["cfg"], "who": item["who"] or ("#%s" % item["cfg"]),
+                    "bed": item["bed"], "total": total, "parts": parts,
+                    "resident": item["resident"], "avatar": item["avatar"]})
+    out.sort(key=lambda row: (-row["total"], str(row["who"])))
+    return out
+
+
 def enrich(module, meta_obj, state=None):
     return module
 

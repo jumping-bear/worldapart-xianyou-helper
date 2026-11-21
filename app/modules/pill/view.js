@@ -336,7 +336,9 @@ function initPill(){
  // 筛选：①显示对象 ②筛选条件（仅丹方/丹方属性） ③视图 ④搜索
  const mapbox=cv.parentElement,side=host.querySelector('.pill-side');
  const chips=$('pillchips'),elems=$('pillelems'),tierBox=$('pilltiers'),keys=$('pillkeys'),viewBox=$('pillview');
- const allElems=['1','2','3','4','5'];
+ // 元素从盘面数据里取：游戏新增五行/异种元素时自动出现在筛选里，不用改代码。
+ const allElems=[...new Set(mp.pois.filter(p=>p[1]===1||p[1]===2).map(p=>p[2]).filter(Boolean).map(String))].sort((a,b)=>a-b);
+ if(!allElems.length)allElems.push('1','2','3','4','5');
  const tierValues=[...new Set(mp.pois.filter(p=>p[1]===1||p[1]===2).map(p=>p[3]).filter(t=>t>0))].sort((a,b)=>a-b);
  const allTypes=()=>Object.keys(PILL_GROUPS);
  // 还原上次的筛选条件，按当前盘面能力裁剪
@@ -419,7 +421,7 @@ function initPill(){
   const counts=countsByElement();
   elems.innerHTML=allElems.map(v=>{
    const n=counts[v]||0;
-   return `<button class="chip${pillFilter.elements.includes(v)?' on':''}${n?'':' zero'}" data-elem="${v}">${PILL_ELEMENT[+v]}<i>${n}</i></button>`;
+   return `<button class="chip${pillFilter.elements.includes(v)?' on':''}${n?'':' zero'}" data-elem="${v}">${PILL_ELEMENT[+v]||('元素'+v)}<i>${n}</i></button>`;
   }).join('');
  }
  function renderTiers(){
@@ -452,7 +454,7 @@ function initPill(){
   if(pillFilter.types.length!==allTypes().length)
    pillFilter.types.forEach(k=>tags.push(['types',k,PILL_LABELS[k]]));
   if(pillFilter.elements.length!==5)
-   pillFilter.elements.forEach(v=>tags.push(['elements',v,PILL_ELEMENT[+v]+'行']));
+   pillFilter.elements.forEach(v=>tags.push(['elements',v,(PILL_ELEMENT[+v]||('元素'+v))+'行']));
   if(pillFilter.tiers.length!==tierValues.length)
    pillFilter.tiers.forEach(t=>tags.push(['tiers',t,t+' 阶']));
   pillFilter.keywords.forEach(k=>tags.push(['keywords',k,k]));

@@ -10,14 +10,18 @@ DOING_STATES = (1, 6)
 STATUS_DONE = "已完成"
 STATUS_DOING = "进行中"
 STATUS_READY = "可接取"
+STATUS_OPENED = "已开启"
 STATUS_COND = "条件不足"
 STATUS_WAIT = "未触发（需满足条件）"
 STATUS_UNPICKED = "未选分支"
+STATUS_LEGACY = "已废弃（旧版任务）"
 
 STATUS_KEYS = {
+    STATUS_LEGACY: "legacy",
     STATUS_DONE: "done",
     STATUS_DOING: "doing",
     STATUS_READY: "ready",
+    STATUS_OPENED: "opened",
     STATUS_COND: "cond",
     STATUS_WAIT: "wait",
     STATUS_UNPICKED: "unpicked",
@@ -248,6 +252,23 @@ def _realm_for_layer(phases, layer):
     return _int((phases or {}).get(str(best)))
 
 
+def _money(player, meta_obj):
+    """灵石存在背包里（不是 player.money）：按快照里的货币物品 id 累加。"""
+    bag = player.get("bag") or {}
+    items = bag.get("items") or []
+    wanted = {_int(value) for value in (meta_obj.get("currency") or []) if _int(value)}
+    if not wanted:
+        return 0
+    total = 0
+    for entry in items:
+        if not isinstance(entry, list) or len(entry) < 2 or not isinstance(entry[1], dict):
+            continue
+        info = entry[1]
+        if _int(info.get("item_id")) in wanted:
+            total += _int(info.get("count"))
+    return total
+
+
 def _fallback_storylines(rows):
     """旧快照没有 storylines 时，按 chain 兜底聚成线，保证页面不空白。"""
     clusters = {}
@@ -303,7 +324,7 @@ def scan(obj, meta_obj, state=None):
         "favor": favor, "city_rep": city_rep,
         "sect_rep": max([_int(v) for v in sect_rep.values()] or [0]),
         "player_realm": player_realm, "layer": _int(layer),
-        "money": _int(player.get("money")),
+        "money": _money(player, meta_obj),
         "quests": {quest_id: _int((value or {}).get("state"), 0)
                    for quest_id, value in saved.items()},
         "attr_exp": player.get("interact_attributes") or {},
@@ -363,6 +384,9 @@ def scan(obj, meta_obj, state=None):
             "hidden": bool(quest.get("hidden")),
             "type_name": quest.get("type_name") or "支线",
             "acq_source": _int(quest.get("acq_source")),
+            "acq_option": quest.get("acq_option") or "",
+            "retry_of": _int(quest.get("retry_of")),
+            "retry_ids": quest.get("retry_ids") or [],
             "one_off": bool(quest.get("one_off")),
             "branch": bool(quest.get("branch")),
             "branch_key": quest.get("branch_key") or "",
@@ -413,6 +437,7 @@ def scan(obj, meta_obj, state=None):
             "done": code in DONE_STATES,
             "doing": code in DOING_STATES,
             "same_name": quest.get("same_name") or [],
+            "legacy_entry": bool(quest.get("legacy_entry")),
         })
 
     by_id = {row["id"]: row for row in rows}
@@ -457,6 +482,8 @@ def scan(obj, meta_obj, state=None):
 
     layer_phases = meta_obj.get("layer_phases") or {}
     phase_names = meta_obj.get("phase_names") or {}
+    phase_order = meta_obj.get("phase_order") or {}
+    layer_phase = meta_obj.get("layer_phase") or {}
 
     def _realm_text(layer_value):
         realm_name = str(realms.get(str(_realm_for_layer(phases, _int(layer_value)))) or "").strip()
@@ -492,13 +519,17 @@ def scan(obj, meta_obj, state=None):
         row["gate_npc"] = _int(gate.get("npc"))
         row["gate_favor"] = _int(gate.get("favor"))
         ready, hint, check = True, "", None
+        gate_known = bool(ids or row["gate_layer"] or row["gate_space"] or row["gate_npc"])
         if ids:
             ready = done
             hint = "完成「%s」后自动触发" % row["gate_names"]
         elif row["gate_layer"]:
             need_name = _gate_phase(row["gate_layer"])
             cur_name = _current_phase(layer)
-            ready = _int(layer) >= row["gate_layer"]
+            # 「修炼阶段达到」给的是阶段 id，必须按阶段先后比较，不能和层号比大小。
+            cur_phase = layer_phase.get(str(_int(layer))) or ""
+            ready = (phase_order.get(cur_phase, -1)
+                     >= phase_order.get(str(row["gate_layer"]), 10 ** 6))
             text = "修炼到「%s」后自动出现" % need_name
             hint = text if ready else "%s（当前 %s）" % (text, cur_name)
             check = {"kind": "realm", "text": text, "cur_text": cur_name, "ok": ready}
@@ -520,6 +551,7 @@ def scan(obj, meta_obj, state=None):
         elif row["gate_event"]:
             hint = detail.get("label") or ("%s后自动触发" % row["gate_event"])
         row["gate_ready"] = ready
+        row["gate_known"] = gate_known
         row["gate_hint"] = hint
         if check:
             cond_eval = row.get("cond_eval")
@@ -607,6 +639,22 @@ def scan(obj, meta_obj, state=None):
             if len(missed_names) > 1:
                 row["branch_path"] = " › ".join(reversed(missed_names))
 
+    # 旧版任务：配置里只剩一个死签名（有接取选项、无触发、无条件），且同名新版本已替代它。
+    # 它在游戏里没有入口，由它触发/接续的后续环同样走不到，一起标成已废弃。
+    for row in rows:
+        row["legacy"] = bool(row.get("legacy_entry"))
+    for row in rows:
+        if row["legacy"] or row["done"] or row["doing"]:
+            continue
+        seen, cur = {row["id"]}, row
+        while cur["prev"] in by_id and cur["prev"] not in seen:
+            seen.add(cur["id"])
+            cur = by_id[cur["prev"]]
+            if cur["legacy"]:
+                row["legacy"] = True
+                row["legacy_via"] = cur["name"]
+                break
+
     # 剧情线信息（章节/线名）：同名任务与前置按钮要标清“哪一个”，不能只给任务名。
     quest_index = meta_obj.get("quest_index") or {}
     line_of, chapter_of = {}, {}
@@ -631,17 +679,33 @@ def scan(obj, meta_obj, state=None):
     for row in rows:
         exclusive_failed = any(check.get("kind") == "quest_none" and check.get("ok") is False
                                for check in ((row.get("cond_eval") or {}).get("checks") or []))
+        # 旧版入口：同名任务有两个版本、配置里还留着接取选项，但当前对话/流程里已经找不到入口。
+        # 只标“待确认”，不直接判取消；玩家在游戏里确认看不到后再当已错过。
+        peers = [_int(x) for x in (row.get("same_name") or [])
+                 if _int(x) and _int(x) != row["id"]]
+        row["entry_unverified"] = bool(
+            peers and row.get("acq_option") and not row.get("acq_dialogue")
+            and not row.get("trigger_text") and not row["done"] and not row["doing"]
+            and not row["branch_missed"])
+        # 纯自动触发、又没有任何入口线索的任务，不能算“可接取”：玩家在游戏里没有可点的入口。
+        row["auto_only"] = bool(
+            row["acq_source"] == 2 and not row.get("trigger_text") and not row.get("acq_option")
+            and not row.get("acq_dialogue") and not row.get("prev")
+            and not row["done"] and not row["doing"])
         if row["done"]:
             label = STATUS_DONE
         elif row["doing"]:
             label = STATUS_DOING
+        elif row["legacy"]:
+            label = STATUS_LEGACY
         elif row["branch_missed"] or row["same_flow_done"] or exclusive_failed:
             label = STATUS_UNPICKED
+        elif row["prev"] and not row["prev_done"]:
+            # 上一环没做完时，后面的属性/境界条件还没轮到，不能显示成“条件不足已解锁”。
+            label = STATUS_WAIT
         elif row["cond_ok"] is False:
             label = STATUS_WAIT if row["trigger_text"] else STATUS_COND
         elif row["unreachable"]:
-            label = STATUS_WAIT
-        elif row["prev"] and not row["prev_done"]:
             label = STATUS_WAIT
         elif row["record_gap"]:
             label = STATUS_WAIT
@@ -653,6 +717,12 @@ def scan(obj, meta_obj, state=None):
             label = STATUS_WAIT
         elif row["accepted"] and row["state"] in (4, 5):
             label = STATUS_WAIT
+        elif not row["accepted"] and row.get("option_gates"):
+            # 对话/交互入口：门槛都满足就是“已开启”，只是还没在游戏里点那一下。
+            label = STATUS_OPENED if row.get("gate_ready") else STATUS_WAIT
+        elif row["auto_only"] and not (row["gate_known"] and row["gate_ready"]):
+            # 纯自动任务：只有存在明确触发门槛且已满足时才可接取；否则就是未触发。
+            label = STATUS_WAIT
         else:
             label = STATUS_READY
         row["status_label"] = label
@@ -662,6 +732,17 @@ def scan(obj, meta_obj, state=None):
 
         if row["done"] or row["doing"]:
             hint = ""
+        elif row["legacy"]:
+            if row.get("legacy_entry"):
+                peers = [by_id[_int(x)] for x in (row.get("same_name") or [])
+                         if _int(x) in by_id]
+                replaced = peers[0] if peers else None
+                hint = ("旧版任务：同名的%s已经替代它，当前版本里没有接取入口"
+                        % (_ref_label(replaced["name"], replaced["id"])
+                           if replaced else "新版任务"))
+            else:
+                hint = "前置%s是旧版废弃任务，这一环在游戏里走不到" % _ref_label(
+                    row.get("legacy_via") or row.get("prev_name"), row.get("prev"))
         elif row["branch_missed"]:
             if row.get("branch_path"):
                 hint = "前面的「%s」只能选一条，你走的是「%s」" % (
@@ -677,8 +758,14 @@ def scan(obj, meta_obj, state=None):
             hint = "与「%s」出自同一段剧情，只能走其中一条" % row["same_flow_done"]
         elif exclusive_failed:
             hint = "这处只能二选一，你已经走了另一条"
+        elif row["entry_unverified"]:
+            hint = "配置里仍有这个任务和接取选项，但当前版本的对话/流程里没找到实际入口，可能是旧版遗留；游戏里也确认看不到时可当作已错过"
         elif row["unreachable"]:
             hint = row["unreachable_text"]
+        elif row["cond_ok"] is False and row["prev"] and not row["prev_done"]:
+            hint = "先完成%s；还差：%s" % (
+                _ref_label(row["prev_name"], row.get("prev")),
+                row["cond_fail_text"] or row["cond_text"])
         elif row["cond_ok"] is False:
             hint = "还差：%s" % (row["cond_fail_text"] or row["cond_text"])
         elif row["record_gap"]:
@@ -693,6 +780,11 @@ def scan(obj, meta_obj, state=None):
             hint = row["trigger_text"]
         elif row["accepted"] and row["state"] in (4, 5):
             hint = "任务已%s，回委托人处可以重接" % row["state_name"]
+        elif row.get("acq_option") and (row.get("giver") or {}).get("name"):
+            home = npc_homes.get(str(_int((row.get("giver") or {}).get("id")))) or ""
+            hint = "%s与「%s」对话，选择「%s」接取" % (
+                ("在%s" % home) if home else "",
+                (row.get("giver") or {}).get("name"), row["acq_option"])
         elif row["acq_source"] == 1:
             giver_name = (row.get("giver") or {}).get("name") or "委托人"
             hint = "与%s对话接取" % giver_name
@@ -706,12 +798,30 @@ def scan(obj, meta_obj, state=None):
             hint = "剧情推进到这里时自动出现"
         else:
             hint = "与委托人对话后出现"
+        if not row.get("acq_option") and not row.get("cond_text") and not row.get("trigger_text") \
+                and not row.get("gate_hint") and not row.get("prev") and row.get("desc"):
+            # 这些是配置里没有触发表达式的特殊支线（试炼/祭炼/介绍宗门），
+            # 用任务说明代替机器味儿的“自动出现”，至少告诉玩家该做什么。
+            hint = "说明：%s" % row["desc"][:80]
         row["status_hint"] = hint
         # 折叠行也要有一句“怎么触发”，已完成的任务同样能回看。
+        option_line = ""
+        if row.get("acq_option") and (row.get("giver") or {}).get("name"):
+            home = npc_homes.get(str(_int((row.get("giver") or {}).get("id")))) or ""
+            option_line = "%s与「%s」对话，选择「%s」接取" % (
+                ("在%s" % home) if home else "",
+                (row.get("giver") or {}).get("name"), row["acq_option"])
+        row["option_line"] = option_line
         if row["trigger_text"]:
             trigger_line = row["trigger_text"]
+            if option_line and "对话" not in trigger_line:
+                # 有接取条件、又要找 NPC 选选项时，两句都要说全。
+                trigger_line = trigger_line.replace("后自动触发", "后").rstrip("。") \
+                    + "，" + option_line
         elif row["gate_hint"] and not row["gate_ready"]:
             trigger_line = row["gate_hint"]
+        elif row["cond_text"] and option_line:
+            trigger_line = "条件：%s；%s" % (row["cond_text"], option_line)
         elif row["cond_text"]:
             trigger_line = "条件：%s" % row["cond_text"]
         elif row["gate_hint"]:
@@ -720,10 +830,15 @@ def scan(obj, meta_obj, state=None):
             trigger_line = "完成%s后自动出现" % _ref_label(row["prev_name"], row.get("prev"))
         elif row["prev_name"]:
             trigger_line = "完成%s后出现" % _ref_label(row["prev_name"], row.get("prev"))
+        elif option_line:
+            # 配置里确实没有接取条件：直接告诉玩家“无门槛”，而不是含糊的“自动出现”。
+            trigger_line = "无接取门槛，" + option_line
         elif row["acq_source"] == 1:
             trigger_line = "与%s对话接取" % ((row.get("giver") or {}).get("name") or "委托人")
         elif row.get("acq_dialogue"):
             trigger_line = "在剧情对话中接取"
+        elif row.get("desc"):
+            trigger_line = "说明：%s" % row["desc"][:80]
         else:
             trigger_line = "剧情推进到这里时自动出现"
         # 折叠行引用了同名任务时补章节，避免「完成小蝶所托后」让人以为是另一个。
@@ -788,18 +903,37 @@ def scan(obj, meta_obj, state=None):
         # 接取方式：1 = 找 NPC，2 = 自动触发（QuestAcqSource）
         giver = row.get("giver") or {}
         auto = _int(row.get("acq_source")) == 2
-        how = {"auto": auto,
-               "text": "自动触发（条件满足时出现）" if auto else "找「%s」接取" % (giver.get("name") or "委托人")}
+        detail = row.get("trigger_detail") or {}
+        if detail.get("kind") == "dialogue" and row.get("trigger_text"):
+            # 对话选项目标：触发说明里已经写了「条件 + 地点 + 对话人 + 选项」，这里不再重复。
+            how = {"auto": False, "text": row["trigger_text"]}
+            if detail.get("npc"):
+                how["giver"] = detail["npc"]
+        elif detail.get("kind") == "interaction" and row.get("trigger_text"):
+            how = {"auto": False, "text": row["trigger_text"]}
+        elif row.get("acq_option") and giver.get("name"):
+            # 找 NPC 对话后出现的接取选项（如「[支线]花花的偶像」），
+            # acqSource=2 并不等于“自动触发”，不能写成条件满足就出现。
+            how = {"auto": False,
+                   "text": ("%s；%s" % (row["cond_text"], row.get("option_line"))
+                            if row.get("cond_text") else row.get("option_line")
+                            or "与「%s」对话，选择「%s」接取" % (giver["name"], row["acq_option"]))}
+        else:
+            how = {"auto": auto,
+                   "text": row.get("trigger_line")
+                   or ("自动触发（条件满足时出现）" if auto else "找「%s」接取" % (giver.get("name") or "委托人"))}
         if giver.get("name"):
-            how["giver"] = giver["name"]
-            home = npc_homes.get(str(_int(giver.get("id")))) or ""
-            if home:
-                how["giver_home"] = home
+            how.setdefault("giver", giver["name"])
+            if detail.get("kind") != "dialogue":
+                home = npc_homes.get(str(_int(giver.get("id")))) or ""
+                if home:
+                    how["giver_home"] = home
         place = row.get("location") or {}
-        if place.get("path"):
-            how["place"] = " / ".join(place["path"])
-        elif row.get("place_text"):
-            how["place"] = row["place_text"]
+        if not how.get("place"):
+            if place.get("path"):
+                how["place"] = " / ".join(place["path"])
+            elif row.get("place_text"):
+                how["place"] = row["place_text"]
         row["how"] = how
 
         refs, seen = [], set()
@@ -837,20 +971,69 @@ def scan(obj, meta_obj, state=None):
         if not ids:
             continue
         nodes = [by_id[quest_id] for quest_id in ids]
+        # 整条线的开启条件：交互点用交互点门槛，普通线用根任务（最浅一环）的接取说明。
+        depths = line.get("depths") or {}
+        root_node = min(nodes, key=lambda node: _int(depths.get(str(node["id"]))) or 1)
+        line_open = ((line.get("trigger") or {}).get("open")
+                     or root_node.get("trigger_line") or "")
+        if root_node.get("legacy"):
+            # 根任务是旧版废弃任务时，不能再把它那句“无接取门槛…对话接取”当成整条线的开启条件。
+            line_open = "旧版内容：已被同名新版本替代，当前版本里没有接取入口"
+        for node in nodes:
+            pieces = []
+            own = node.get("trigger_text") or ""
+            if line_open and line_open not in own:
+                pieces.append(line_open)
+            if node.get("prev_name") and node["prev_name"] not in line_open \
+                    and not node.get("legacy"):
+                pieces.append("先完成「%s」" % node["prev_name"])
+            if own and own not in line_open:
+                pieces.append(own)
+            elif not pieces:
+                pieces.append(line_open or root_node.get("option_line")
+                              or "无额外开启条件")
+            deduped = []
+            for piece in pieces:
+                if piece and all(piece not in seen for seen in deduped):
+                    deduped.append(piece)
+            node["open_text"] = "；".join(deduped)
         done = sum(1 for node in nodes if node["done"])
         unpicked = sum(1 for node in nodes if node["status_key"] == "unpicked")
         reachable = [node for node in nodes if node["status_key"] != "unpicked"]
         stones_left = sum(node["reward_stone"] for node in reachable if not node["done"])
         next_node = next((node for node in nodes
                           if not node["done"] and node["status_key"] in ("ready", "cond", "wait")), None)
+        # 未选分支不算漏做：只剩“选了另一条”的任务时，这条线应显示已完成。
+        remaining = [node for node in nodes
+                     if not node["done"] and node["status_key"] != "unpicked"]
+        if any(node["status_key"] == "doing" for node in nodes):
+            line_status, line_label = "doing", "进行中"
+        elif any(node["status_key"] in ("ready", "opened") for node in nodes):
+            line_status, line_label = "ready", ("已开启" if any(
+                node["status_key"] == "opened" for node in nodes) else "可接取")
+        elif not remaining:
+            line_status = "done"
+            line_label = "已完成（部分分支未选）" if any(
+                node["status_key"] == "unpicked" for node in nodes) else "已完成"
+        elif any(node["status_key"] in ("cond", "wait") for node in nodes):
+            line_status, line_label = "cond", "未开启"
+        elif any(node["status_key"] == "legacy" for node in nodes):
+            # 整条线只剩旧版废弃任务：说明这一版内容已被新版本替代，不是玩家漏做。
+            line_status, line_label = "legacy", "已废弃"
+        else:
+            line_status, line_label = "wait", "未开启"
         storylines.append({
             "id": line.get("id") or ("s%d" % ids[0]),
             "name": line.get("name") or nodes[0]["name"],
             "chapter": line.get("chapter") or "支线",
             "region": line.get("region") or "",
             "group": line.get("group") or "",
+            "status_key": line_status,
+            "status_label": line_label,
             "quests": ids,
             "depths": line.get("depths") or {},
+            "trigger": line.get("trigger") or None,
+            "open": line_open,
             "npc": line.get("npc") or [],
             "size": len(ids),
             "done": done,
@@ -866,7 +1049,7 @@ def scan(obj, meta_obj, state=None):
         "total": total,
         "done": sum(1 for r in rows if r["done"]),
         "doing": sum(1 for r in rows if r["doing"]),
-        "todo": sum(1 for r in rows if not r["accepted"]),
+        "todo": sum(1 for r in rows if not r["accepted"] and r["status_key"] != "legacy"),
         "failed": sum(1 for r in rows if r["state"] == 4),
         "with_rewards": len(reward_rows),
         "rewards_done": sum(1 for r in reward_rows if r["done"]),
@@ -885,6 +1068,7 @@ def scan(obj, meta_obj, state=None):
         "cond_fail": sum(1 for r in rows if r["status_key"] == "cond"),
         "waiting": sum(1 for r in rows if r["status_key"] == "wait"),
         "missed": sum(1 for r in rows if r["status_key"] == "unpicked"),
+        "legacy": sum(1 for r in rows if r["status_key"] == "legacy"),
         "player_layer": _int(layer),
         "player_realm": player_realm,
         "player_realm_name": realms.get(str(player_realm)) or "",

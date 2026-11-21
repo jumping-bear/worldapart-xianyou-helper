@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """心法与功法：配装体检与获取路线。
 
 模块契约见 docs/心法功法模块设计.md；只新增本目录与根目录 martial_meta.json。
@@ -9,7 +9,8 @@ from .build import build
 from .scan import enrich, meta, scan, summary
 
 KEY, LABEL = "martial", "心法与功法"
-ORDER, SELECT, SCHEMA = 75, "latest", 1  # 模块自有缓存版本，改数据结构时只递增这里
+KEY, LABEL_EN = "martial", "Arts & Manuals"
+ORDER, SELECT, SCHEMA = 70, "latest", 1  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "martial_meta.json"
 TABLES = frozenset({
     "tbpassiveskill", "tbskill", "tbskilllevel", "tbitem", "tbsect",

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """NPC 天赋。"""
 from meta_update import SCHEMA as DATA_SCHEMA
 
@@ -6,7 +6,8 @@ from .build import build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "talent", "NPC天赋"
-ORDER, SELECT, SCHEMA = 20, "latest", 23  # 模块自有缓存版本，改数据结构时只递增这里
+KEY, LABEL_EN = "talent", "NPC Talents"
+ORDER, SELECT, SCHEMA = 50, "latest", 23  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "talent_meta.json"
 TABLES = frozenset({"tbnpcbasecfg", "tbspace", "tbnpctalent", "tbcultivaterealm"})
 

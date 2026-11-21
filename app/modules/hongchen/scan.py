@@ -87,14 +87,16 @@ def _realm_for_layer(phases, layer):
     return _int((phases or {}).get(str(best)))
 
 
-def _money(player):
+def _money(player, meta_obj):
+    """灵石存在背包里：按快照里的货币物品 id 累加，避免写死某个版本的道具 id。"""
     bag = player.get("bag") or {}
+    wanted = {_int(value) for value in (meta_obj.get("currency") or [50000])}
     total = 0
     for entry in bag.get("items") or []:
         if not isinstance(entry, list) or len(entry) < 2 or not isinstance(entry[1], dict):
             continue
         info = entry[1]
-        if _int(info.get("item_id")) == 50000:
+        if _int(info.get("item_id")) in wanted:
             total += _int(info.get("count"))
     return total
 
@@ -114,12 +116,15 @@ def _context(obj, meta_obj, npc_id):
         attrs[str(_int(key))] = _int(value)
     layer = _realm_layer(player)
     return {"favor": favor, "attrs": attrs, "name2attr": name2attr,
-            "money": _money(player), "layer": layer,
+            "money": _money(player, meta_obj), "layer": layer,
             "player_realm": _realm_for_layer(meta_obj.get("phases") or {}, layer),
             "realms": meta_obj.get("realms") or {},
             "phases": meta_obj.get("phases") or {},
             "phase_names": meta_obj.get("phase_names") or {},
             "layer_phases": meta_obj.get("layer_phases") or {},
+            "phase_order": meta_obj.get("phase_order") or {},
+            "layer_phase": meta_obj.get("layer_phase") or {},
+            "attr_levels": meta_obj.get("attr_levels") or {},
             "npc_id": _int(npc_id)}
 
 
@@ -140,6 +145,18 @@ def _eval_gate(gate, ctx):
         attr_id = ctx["name2attr"].get(name)
         if attr_id:
             cur = ctx["attrs"].get(str(attr_id), 0)
+            # 条件读的是「探索属性等级」时（或门槛文案写明“级”），比较等级；
+            # 存档里的原始属性值可能是几百点经验，不能直接当等级显示。
+            if gate.get("level") or "级" in str(gate.get("text") or ""):
+                caps = (ctx.get("attr_levels") or {}).get(str(attr_id)) or []
+                level = 0
+                for index, cap in enumerate(caps):
+                    if cap > 0 and cur >= cap:
+                        level = index + 1
+                    else:
+                        break
+                if caps:
+                    cur = level
             return cur >= need, "%s %d/%d" % (name, cur, need), cur, need
         return None, "", 0, need
     if kind == "money":
@@ -151,8 +168,19 @@ def _eval_gate(gate, ctx):
         need_name = (ctx.get("realms") or {}).get(str(need)) or ("境界%d" % need)
         cur_name = (ctx.get("realms") or {}).get(str(cur)) or ("境界%d" % cur)
         return cur >= need, "境界 %s/%s" % (cur_name, need_name), cur_name, need_name
-    if kind in ("phase", "layer"):
-        # need 是层数/阶段 id（10 = 炼气后期），按阶段表翻成人话，不写死数字。
+    if kind == "phase":
+        # need 是阶段 id（2 = 炼气中期），按阶段先后比较，不能拿层号直接比大小。
+        cur_layer = _int(ctx.get("layer"))
+        cur_phase = (ctx.get("layer_phase") or {}).get(str(cur_layer)) or ""
+        order = ctx.get("phase_order") or {}
+        ok = order.get(cur_phase, -1) >= order.get(str(need), 10 ** 6)
+        need_name = (ctx.get("phase_names") or {}).get(str(need)) or ("第 %d 阶" % need)
+        cur_name = ((ctx.get("layer_phases") or {}).get(str(cur_layer))
+                    or (ctx.get("phase_names") or {}).get(cur_phase)
+                    or ("第 %d 层" % cur_layer))
+        return ok, "境界 %s/%s" % (cur_name, need_name), cur_name, need_name
+    if kind == "layer":
+        # need 是层数 id（10 = 炼气后期），按层号比较。
         cur = _int(ctx.get("layer"))
         need_name = ((ctx.get("layer_phases") or {}).get(str(need))
                      or (ctx.get("phase_names") or {}).get(str(need))
@@ -220,6 +248,62 @@ def _is_doing(code):
     return code in DOING_STATES
 
 
+def _apply_alt_routes(quests, ctx):
+    """分叉后只能走一条的平行后续：把没走的那条整条线标成「另一条路」。
+
+    依据快照里的 member_next：同一分支组的不同成员各自解锁不同后续
+    （如「殿檐暗路」直接接「虚火侵脉」，「当众驳斥」接「焰下交锋」）。
+    只有本线剧情已经越过分叉点（后面已有完成任务）时才判定，
+    避免玩家刚走到这里、还没做完就被误报。
+    """
+    links = ctx.get("_alt_links") or {}
+    by_id = {q["id"]: q for q in quests}
+    if not links or not by_id:
+        return
+    done_depth = max([q["depth"] for q in quests if q["done"]] or [0])
+    routes, marked = {}, False
+    for target, info in links.items():
+        quest = by_id.get(target)
+        if not quest or quest["done"] or quest["doing"]:
+            continue
+        members = [m for m in info.get("all") or [] if m in by_id]
+        chosen = [m for m in members if by_id[m]["done"] or by_id[m]["doing"]]
+        if not chosen or set(chosen) & set(info.get("allowed") or []):
+            continue
+        if done_depth <= _int(quest.get("depth"), 1):
+            continue
+        quest["status_cls"] = "unpicked"
+        quest["status"] = "未选此分支"
+        quest["fail_text"] = "当时选了另一条路"
+        quest["alt_key"] = info.get("key") or ""
+        route = routes.setdefault(quest["alt_key"], {
+            "parent": _int(info.get("parent")), "members": members, "skipped": []})
+        route["skipped"].append(target)
+        marked = True
+    if not marked:
+        return
+    # 被放弃路线上的后续任务同样再也接不到。
+    changed = True
+    while changed:
+        changed = False
+        for quest in quests:
+            if quest["status_cls"] in ("done", "doing", "unpicked", "skipped"):
+                continue
+            prev = by_id.get(_int(quest.get("prev")))
+            if not prev or prev["status_cls"] != "unpicked":
+                continue
+            quest["status_cls"] = "unpicked"
+            quest["status"] = "未选此分支"
+            quest["fail_text"] = "前置「%s」没有走" % prev["name"]
+            quest["alt_key"] = prev.get("alt_key") or ""
+            routes.setdefault(quest["alt_key"], {
+                "parent": 0, "members": [], "skipped": []})["skipped"].append(quest["id"])
+            changed = True
+    for route in routes.values():
+        route["skipped"] = sorted(set(route["skipped"]))
+    ctx["_alt_routes"] = routes
+
+
 def _status_of(quest, code, ctx):
     """返回 (文案, 状态类, 备注, 提示)。
 
@@ -242,7 +326,7 @@ def _status_of(quest, code, ctx):
     # 已跳过：与线内任何任务都没有边（孤立的互斥变体），没接没做，
     # 而本线已有更深的已完成任务 —— 说明剧情早越过它了，永远不会再出现。
     # 不写死任务 id，纯结构判定。
-    if (not code
+    if (code < 0
             and not is_branch
             and qid not in (ctx.get("_edge_nodes") or set())
             and _int(ctx.get("_done_max_depth")) > _int(quest.get("depth"), 1)):
@@ -281,7 +365,7 @@ def _status_of(quest, code, ctx):
         for sid in siblings:
             if sid == qid:
                 continue
-            scode = codes.get(sid, 0)
+            scode = codes.get(sid, -1)
             if _is_done(scode) or _is_doing(scode):
                 chosen.append(sid)
         fork = _int(ctx.get("_branch_parent", {}).get(key, 0)) or prev
@@ -297,9 +381,12 @@ def _status_of(quest, code, ctx):
             return "可接取", "ready", "分叉点已到达，可选择此分支", hints
         return "未解锁", "locked", "；".join(fails) or "条件不足", hints
 
-    # 普通任务。
+    # 普通任务。存档里没有接取记录（code < 0）的根任务不能报“可接取”：
+    # 缺省状态 0 只表示“没查到”，游戏里这类节点通常要等剧情或结识后才会出现。
     if prev_done and gate_ok:
-        return "可接取", "ready", "", hints
+        if code >= 0 or prev:
+            return "可接取", "ready", "", hints
+        return "未开始", "notstarted", "等待剧情触发（尚未结识或剧情未到）", hints
     if not prev_done:
         return "未开始", "notstarted", "；".join(fails), hints
     return "未解锁", "locked", "；".join(fails) or "条件不足", hints
@@ -319,16 +406,21 @@ def _remaining(quests, ctx, base, done):
 
     def entry(quest):
         reason = ""
-        if quest["status_cls"] in ("notstarted", "locked"):
+        if quest["status_cls"] == "notstarted":
+            prev = quest["prev"]
+            # 未开始大多是“前置还没走到”，只留一句最短原因，避免长清单全是重复文案。
+            reason = ("前置「%s」" % qname(prev)) if prev and prev not in active else ""
+        elif quest["status_cls"] == "locked":
             parts = []
             prev = quest["prev"]
             if prev and prev not in active:
-                parts.append("前置「%s」未完成" % qname(prev))
+                parts.append("前置「%s」" % qname(prev))
             for check in quest.get("gate_checks") or []:
                 if check.get("ok") is False:
                     text = check.get("text") or check.get("desc") or "附加条件"
-                    parts.append("条件：%s（当前 %s）" % (text, check.get("cur")))
-            reason = "；".join(parts) or quest.get("fail_text") or "继续推进前置剧情"
+                    parts.append("%s（当前 %s）" % (text, check.get("cur")))
+            # 最多两条，超出的条件留给节点详情。
+            reason = "；".join(parts[:2]) or quest.get("fail_text") or "条件不足"
         return {"id": quest["id"], "name": quest["name"], "depth": quest["depth"],
                 "status_cls": quest["status_cls"], "status": quest["status"], "reason": reason}
 
@@ -382,19 +474,56 @@ def _remaining(quests, ctx, base, done):
             "note": "选了另一条路，这条不会再出现，也不算漏做",
         })
 
+    # 分叉后没走的那条整条路线（例如绕过项焘 → 焰下交锋 / 刀火援手都不会再出现）。
+    for key, info in (ctx.get("_alt_routes") or {}).items():
+        members = [by_id[i] for i in info.get("members") or [] if i in by_id]
+        chosen = [m for m in members if m["status_cls"] in ("done", "doing")]
+        skipped = [by_id[i] for i in info.get("skipped") or [] if i in by_id]
+        if not chosen or not skipped:
+            continue
+        parent = _int(info.get("parent")) or (members[0]["prev"] if members else 0)
+        label = (ctx.get("_option_by_target") or {}).get((parent, chosen[0]["id"])) or chosen[0]["name"]
+        parent_name = qname(parent) if parent else ""
+        where = ("在「%s」选了「%s」后" % (parent_name, label)) if parent_name else ("选了「%s」后" % label)
+        choices.append({
+            "key": "r:" + key, "parent_id": parent,
+            "parent_name": parent_name or "同一段剧情",
+            "member_count": len(members),
+            "chosen": [{"id": m["id"], "name": m["name"], "label": m["name"]} for m in chosen],
+            "skipped": [{"id": m["id"], "name": m["name"], "label": m["name"]} for m in skipped],
+            "depth": by_id[parent]["depth"] if parent in by_id
+                     else (members[0]["depth"] if members else 1),
+            "text": "%s，未走%s" % (where, "".join("「%s」" % m["name"] for m in skipped)),
+            "note": "走了另一条路，这条路线不会再出现，也不算漏做",
+        })
+
+    started = done > 0 or bool(buckets["doing"])
     if left:
-        brief = "还差 " + "、".join(
-            "%d 个%s" % (len(buckets[cls]), label)
-            for cls, label in (("ready", "可接取"), ("doing", "进行中"),
-                               ("notstarted", "未开始"), ("locked", "差条件"))
-            if buckets[cls])
+        if not started and not buckets["ready"]:
+            # 一条线还没有任何进度：不要用“还差 N 个”制造焦虑，直接说明尚未开启。
+            brief = "尚未开启 · 共 %d 个节点" % base
+        else:
+            brief = "还差 " + "、".join(
+                "%d 个%s" % (len(buckets[cls]), label)
+                for cls, label in (("ready", "可接取"), ("doing", "进行中"),
+                                   ("notstarted", "未开始"), ("locked", "差条件"))
+                if buckets[cls])
     else:
         brief = "已走完"
+    # 下一步：优先可接取，其次差条件（离得最近），最后未开始。
+    next_item = None
+    for cls in ("ready", "locked", "notstarted"):
+        if buckets[cls]:
+            first = buckets[cls][0]
+            next_item = {"id": first["id"], "name": first["name"], "depth": first["depth"],
+                         "why": first["reason"] or first["status"]}
+            break
     return {
         "left": left, "done": left == 0, "brief": brief,
-        "headline": "已完成 %d/%d · %s" % (done, base, brief),
+        "headline": ("已完成 %d/%d · %s" % (done, base, brief)) if started else brief,
         "ready": buckets["ready"], "doing": buckets["doing"],
         "notstarted": buckets["notstarted"], "locked": buckets["locked"],
+        "next": next_item,
         "choices": choices,
         "choice_note": "这些是当时选了另一条路的分支，不会再出现，也不算漏做。",
     }
@@ -431,7 +560,7 @@ def scan(obj, meta_obj, state=None):
     codes, names = {}, {}
     for quest in meta_obj.get("quests") or []:
         qid = _int(quest.get("id"))
-        codes[qid] = _int((saved.get(qid) or {}).get("state"), 0)
+        codes[qid] = _int((saved.get(qid) or {}).get("state"), -1) if qid in saved else -1
         names[qid] = quest.get("name") or ("红尘 %s" % qid)
     branch_members, branch_parent, option_by_target = {}, {}, {}
     for quest in meta_obj.get("quests") or []:
@@ -440,6 +569,23 @@ def scan(obj, meta_obj, state=None):
             for target in option.get("to") or []:
                 if option.get("text"):
                     option_by_target[(qid, _int(target))] = option["text"]
+    # 同一分支组的不同成员可能各自解锁不同的后续任务（member_next），
+    # 玩家没走的那条整条线应算「另一条路」，不能计入未完成。
+    alt_links = {}
+    for line in meta_obj.get("lines") or []:
+        for branch in line.get("branches") or []:
+            member_next = branch.get("member_next") or {}
+            if not isinstance(member_next, dict):
+                continue
+            bkey = branch.get("key") or ""
+            all_members = [_int(m) for m in branch.get("members") or []]
+            for member, targets in member_next.items():
+                for target in targets or []:
+                    slot = alt_links.setdefault(_int(target), {
+                        "key": bkey, "parent": _int(branch.get("parent")),
+                        "all": all_members, "allowed": []})
+                    if _int(member) not in slot["allowed"]:
+                        slot["allowed"].append(_int(member))
     for line in meta_obj.get("lines") or []:
         for branch in line.get("branches") or []:
             bkey = branch.get("key") or ""
@@ -460,16 +606,17 @@ def scan(obj, meta_obj, state=None):
         ctx["_branch_members"] = branch_members
         ctx["_branch_parent"] = branch_parent
         ctx["_option_by_target"] = option_by_target
+        ctx["_alt_links"] = alt_links
         ctx["_edge_nodes"] = _edge_nodes(line)
         ctx["_done_max_depth"] = max(
             [_int(q.get("depth"), 1) for q in line.get("quests") or []
-             if _is_done(codes.get(_int(q.get("id")), 0))] or [0])
+             if _is_done(codes.get(_int(q.get("id")), -1))] or [0])
 
         quests = []
         for quest in line.get("quests") or []:
             qid = _int(quest.get("id"))
             item = saved.get(qid) or {}
-            code = _int(item.get("state"), 0)
+            code = _int(item.get("state"), -1) if item else -1
             label, cls, fail_text, hints = _status_of(quest, code, ctx)
             # 门槛对比（当前值 / 需求值），供节点详情直接告诉玩家"差多少"。
             gate_checks = []
@@ -517,6 +664,22 @@ def scan(obj, meta_obj, state=None):
                 "hints": hints,
             })
 
+        # 分叉后没走的那条平行路线（如「殿檐暗路」跳过焰下交锋），整条都算另一条路。
+        _apply_alt_routes(quests, ctx)
+
+        # 情缘线是串行推进的：更早的环还有没走完的任务时，后面的环不该同时显示「可接取」，
+        # 否则玩家会以为能一次接好几个。纯按环序判定，不写死任何任务 id。
+        for quest in quests:
+            if quest["status_cls"] != "ready":
+                continue
+            depth = quest["depth"]
+            if any(other["depth"] < depth
+                   and other["status_cls"] not in ("done", "skipped", "unpicked")
+                   for other in quests):
+                quest["status_cls"] = "notstarted"
+                quest["status"] = "未开始"
+                quest["fail_text"] = "前面的环还没走完"
+
         total = len(quests)
         done = sum(1 for q in quests if q["done"])
         doing = sum(1 for q in quests if q["doing"])
@@ -529,6 +692,11 @@ def scan(obj, meta_obj, state=None):
         base = total - unpicked - skipped
         pct = int(round(done * 100 / base)) if base else 0
         remaining = _remaining(quests, ctx, base, done)
+        # 整条线的开启条件也做一次当前值判定，页面才能显示“还差多少”。
+        open_info = dict(line.get("open") or {})
+        if open_info.get("kind"):
+            ok, desc, cur, need = _eval_gate(open_info, ctx)
+            open_info["check"] = {"ok": ok, "desc": desc, "cur": cur, "need": need}
         lines.append({
             "group": line.get("group") or "",
             "name": line.get("name") or "",
@@ -536,6 +704,7 @@ def scan(obj, meta_obj, state=None):
             "portrait": line.get("portrait") or "",
             "color": line.get("color") or "#c9866b",
             "location": _location(obj, _int(line.get("npc_id")), spaces),
+            "open": open_info,
             "quests": quests,
             "roots": line.get("roots") or [],
             "edges": line.get("edges") or [],

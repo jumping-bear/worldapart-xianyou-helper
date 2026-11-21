@@ -18,9 +18,17 @@
 .sq-npc{font-size:11px;color:#8fa2b8}
 .sq-prog{font-size:12px;color:#c9d6e5;font-variant-numeric:tabular-nums}
 .sq-prog:before{content:"·";margin-right:5px;color:#5d6875}
+.sq-lineopen{max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#d8b26a;background:#2a2417;border:1px solid #4a3d1e;border-radius:6px;padding:1px 6px}
 .sq-caret{margin-left:auto;color:#6f9fd0;font-size:16px;transition:.15s}
 .sq-line[open] .sq-caret{transform:rotate(90deg)}
 .sq-stone{font-size:11px;color:#e8c76d;white-space:nowrap}
+/* 剧情线摘要里的高品质待拿奖励（替代原来的“可拿灵石”） */
+.sq-hiwrap{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap}
+.sq-hi{font-size:10px;line-height:1.6;padding:1px 6px;border-radius:5px;white-space:nowrap;
+  background:#241f14;border:1px solid #5a4c2a;color:#f0d38a}
+.sq-hi.f3{background:#1e1a29;border-color:#453a5c;color:#cbb2ee}
+.sq-hi.f5{background:#251818;border-color:#5c3535;color:#f0a6a6}
+.sq-hi-more{font-size:10px;color:#7d8593}
 
 /* 脊柱 */
 .sq-spine{padding:12px 13px 8px}
@@ -28,6 +36,15 @@
 .sq-rail{flex:0 0 24px;display:flex;flex-direction:column;align-items:center;padding-top:7px}
 .sq-dot{flex:none;width:22px;height:22px;border-radius:50%;background:#1a222c;border:1px solid #34465c;color:#9fb0c4;font-size:11px;font-variant-numeric:tabular-nums;display:flex;align-items:center;justify-content:center}
 .sq-bar{flex:1;width:2px;background:#26313f;margin:4px 0 0}
+/* 场景交互点：作为剧情线的根节点，选项各自接一条支线 */
+.sq-ring-int .sq-dot{background:#2b2416;border-color:#8a6a33;color:#e0b562}
+.sq-int{border-left-color:#8a6a33;background:#1b1810}
+.sq-int-opts{display:flex;flex-direction:column;gap:6px}
+.sq-int-opt{display:flex;flex-wrap:wrap;gap:6px;align-items:center;text-align:left;width:100%;padding:7px 9px;border:1px solid #3a3320;border-radius:8px;background:#171410;color:#d8d2c4;cursor:pointer}
+.sq-int-opt:hover{background:#221d15;border-color:#8a6a33}
+.sq-int-optn{color:#f0d9a8}
+.sq-int-opt em{font-style:normal;font-size:11px;color:#c98a4a;background:#2a2114;border:1px solid #4a3a1e;border-radius:6px;padding:1px 6px}
+.sq-int-to{margin-left:auto;font-size:11px;color:#8fa3b8}
 .sq-nodes{flex:1;min-width:0;padding-bottom:11px}
 .sq-nodes:last-child{padding-bottom:0}
 
@@ -43,6 +60,7 @@
 .sq-node.k-cond{border-left-color:#c98a4a;background:#1c1812}
 .sq-node.k-wait{border-left-color:#4a5566}
 .sq-node.k-unpicked{border-left-color:#6a5a95;background:#181522}
+.sq-node.k-legacy{border-left-color:#5a4a2a;background:#191510;opacity:.86}
 .sq-node.hidden{border-style:dashed;border-left-style:dashed;border-color:#6b5a2e;background:#1b1810}
 .sq-node.hit{box-shadow:0 0 0 1px #3d735b inset}
 .sq-step{flex:none;min-width:18px;color:#6f7d8f;font-size:11px;font-variant-numeric:tabular-nums;text-align:center}
@@ -51,12 +69,15 @@
 .sq-badge.b-done{background:#1d3a2c;color:#8ee6b3}
 .sq-badge.b-doing{background:#1c2f42;color:#a6cff0}
 .sq-badge.b-ready{background:#1b3a2b;color:#8ee6b3}
+.sq-badge.b-opened{background:#1f3346;color:#9cc7e6}
 .sq-badge.b-cond{background:#3a2a17;color:#ffc987}
 .sq-badge.b-wait{background:#262c36;color:#a6b2c0}
 .sq-badge.b-unpicked{background:#2a2440;color:#cbb2ee}
+.sq-badge.b-legacy{background:#2a2416;color:#cbb488}
 .sq-tag{flex:none;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:5px;border:1px solid #33465c;background:#141d29;color:#9fb0c4;white-space:nowrap}
 .sq-tag.hid{border-color:#6b5a2e;background:#231d12;color:#f0d38a}
 .sq-tag.egg{border-color:#7a4a2a;background:#2a1c12;color:#ffc987}
+.sq-tag.retry{border-color:#3d5a73;background:#141f2b;color:#9cc7e6}
 .sq-tag.sel{border-color:#3d735b;background:#1b3a2b;color:#8ee6b3}
 .sq-tag.unsel{border-color:#4a4458;background:#211d2c;color:#b9aed4}
 .sq-tag.risk{border-color:#7a4a2a;background:#2a1c12;color:#ffc987}
@@ -68,6 +89,12 @@
 .sq-rw i{font-style:normal;color:#7d8593;margin-left:4px}
 .sq-loc{font-size:11px;color:#8b93a1;min-width:0;overflow-wrap:anywhere}
 .sq-one{flex-basis:100%;color:#8fa2b8;font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.sq-opts-inline{flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.sq-opt-tag{display:inline-flex;gap:5px;align-items:baseline;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:5px;border:1px solid #3a4a5e;background:#151d27;color:#a9bccf;max-width:100%;overflow-wrap:anywhere}
+.sq-opt-tag em{font-style:normal;color:#d5a86c;white-space:nowrap}
+.sq-opt-tag.ok{border-color:#3d735b;background:#17281f;color:#9fe0b8}
+.sq-opt-tag.no{border-color:#6b3a3a;background:#291718;color:#e6a3a3}
+.sq-opt-tag.more{color:#7d8593}
 
 /* 节点详情 */
 .sq-body{padding:2px 11px 10px;background:#121821}
@@ -116,11 +143,23 @@
 .sq-sibs span{border:1px solid #33465c;background:#121a24;color:#9fb0c4;border-radius:11px;padding:2px 8px;font-size:11px}
 .sq-sibs span.cur{border-color:#7a6a3a;background:#2a2113;color:#ffd98a;font-weight:600}
 
-/* 二选一分支 */
-.sq-pair{border:1px dashed #4a4060;border-radius:10px;padding:8px;margin-bottom:7px;background:#151320}
-.sq-pair-h{font-size:11px;color:#cbb2ee;margin-bottom:6px}
-.sq-pair-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
-.sq-pair-grid .sq-node{margin-bottom:0}
+/* 分叉：并列路线（分叉后各走各的，不再按层号竖着堆） */
+.sq-fork{border:1px dashed #4a4060;border-radius:10px;padding:8px;margin:2px 0 8px;background:#141320}
+.sq-fork.nest{margin:6px 0;padding:7px;background:#121220}
+.sq-fork-h{display:flex;gap:7px;flex-wrap:wrap;align-items:center;font-size:11px;color:#cbb2ee;margin-bottom:7px}
+.sq-fork-h em{font-style:normal;color:#8b93a1}
+.sq-lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:8px;align-items:start}
+.sq-lanes.nest{grid-template-columns:1fr;gap:6px}
+.sq-lane{min-width:0;border:1px solid #2c3442;border-radius:9px;background:#131922;padding:7px 8px 2px}
+.sq-lane.sel{border-color:#3d735b;background:#121d17}
+.sq-lane-h{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;color:#c9d6e5;margin:0 0 3px}
+.sq-lane-h b{color:#e6edf5;font-weight:600;font-size:12px}
+.sq-lane-step{color:#778292}
+.sq-lane .sq-rail{flex:0 0 20px}
+.sq-lane .sq-dot{width:20px;height:20px;font-size:10px}
+.sq-lane .sq-node{margin-bottom:6px}
+.sq-fork.roots{border-color:#33465c;background:#121821}
+.sq-fork.roots .sq-fork-h{color:#9fb0c4}
 
 /* 彩蛋 */
 .sq-egg{margin-top:11px;border:1px dashed #7a4a2a;background:#1a140e;border-radius:8px;overflow:hidden}
@@ -148,7 +187,9 @@
  .sq-ring{gap:6px}
  .sq-rail{flex:0 0 20px}
  .sq-dot{width:20px;height:20px;font-size:10px}
- .sq-pair-grid{grid-template-columns:1fr}
+ .sq-lanes{grid-template-columns:1fr}
+ .sq-fork{padding:7px}
+ .sq-lane{padding:6px 6px 2px}
  .sq-node>summary{padding:7px 8px}
  .sq-body{padding:2px 9px 9px}
  .sq-loc{flex-basis:100%}
@@ -189,6 +230,9 @@
 
 /* 同名任务（2.1 第四轮）：两个「小蝶所托」不是同一个任务，必须按章节区分 */
 .sq-tag.dup{border-color:#7a4a2a;background:#2a1c12;color:#ffc987;cursor:help}
+.sq-tag.legacy{border-color:#6b5a34;background:#241f14;color:#e8cf94;cursor:help}
+#qstatus .chip i{font-style:normal;color:#8b93a1;margin-left:5px;font-size:10px}
+#qstatus .chip.on i{color:#c9f5dd}
 .sq-pre .sq-chap{font-size:9px;padding:0 5px;line-height:1.5}
 .sq-chap-sfx{font-size:10px;color:#8fa2b8;margin-left:2px}
 .sq-same{margin:2px 0 10px;border:1px solid #2f3d4f;border-radius:8px;background:#111923;padding:8px 10px}

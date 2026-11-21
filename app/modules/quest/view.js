@@ -1,9 +1,9 @@
 /* 支线：剧情线任务脊柱。默认按玩家进度排序，节点内联展开，不弹窗、不另开面板。 */
 (function(){
 const KEY='worldapart.quest.story.v4';
-const STATUS={done:'已完成',doing:'进行中',ready:'可接取',cond:'条件不足',wait:'未触发（需满足条件）',unpicked:'未选分支'};
-const FILTERS=[['all','全部'],['ready','可接取'],['doing','进行中'],['wait','未触发'],
-  ['cond','条件不足'],['unpicked','未选分支'],['done','已完成']];
+const STATUS={done:'已完成',doing:'进行中',ready:'可接取',opened:'已开启',cond:'条件不足',wait:'未触发（需满足条件）',unpicked:'未选分支',legacy:'已废弃'};
+const FILTERS=[['all','全部'],['ready','可接取'],['opened','已开启'],['doing','进行中'],
+  ['wait','未触发'],['cond','条件不足'],['unverified','旧版任务'],['unpicked','未选分支'],['done','已完成']];
 // 章节顺序与配色来自配置表（境界表），新增境界不用改代码
 const CHAP_TONE=(()=>{ try{ return DATA.modules.quest.rows.chapter_tones||{}; }catch(e){ return {}; } })();
 const CHAP_ORDER=(()=>{ try{ return DATA.modules.quest.rows.chapter_order||{}; }catch(e){ return {}; } })();
@@ -56,13 +56,26 @@ function initQuest(){
    if(stone)out.push(`<span class="sq-stone">灵石 ${stone}</span>`);
    return out.join('');
  };
+ const isStone=x=>x&&x.name==='灵石';
+ // 未完成任务里的高品质奖励：支线首页优先展示这些，而不是“还能拿多少灵石”。
+ const hiReward=x=>!isStone(x)&&(Number(x.quality)||0)>=4;
+ const hiOfQuest=r=>r&&!r.done&&sk(r)!=='unpicked'?(r.rewards||[]).filter(hiReward):[];
+ const hiOfLine=line=>{
+   const seen={},out=[];
+   (line.quests||[]).forEach(id=>hiOfQuest(byId[id]).forEach(x=>{
+     if(seen[x.name])return;seen[x.name]=1;out.push(x);
+   }));
+   return out.sort((a,b)=>(b.quality||0)-(a.quality||0)||String(a.name).localeCompare(String(b.name),'zh-CN'));
+ };
+ const hiChip=(x,extra)=>`<span class="sq-hi f${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)}${extra||''}</span>`;
  const hay=(r)=>[r.name,r.desc,r.group,(r.giver||{}).name,locText(r),
    (r.objectives||[]).map(o=>o.text).join(' '),
    (r.rewards||[]).map(x=>x.name).join(' '),
    (r.option_gates||[]).map(g=>(g.option||'')+' '+(g.text||'')).join(' ')].join(' ').toLowerCase();
  const query=()=>(state.q||'').trim().toLowerCase();
  const match=r=>!query()||hay(r).includes(query());
- const passStatus=r=>state.status==='all'||sk(r)===state.status;
+ const passStatus=r=>state.status==='all'
+   ||(state.status==='unverified'?!!(r.entry_unverified||r.legacy):sk(r)===state.status);
 
  function checkRow(c){
    const ok=c.ok===true,bad=c.ok===false;
@@ -148,7 +161,7 @@ function initQuest(){
    const cond=checks.length
      ? `<div class="sq-checks">${logic?`<div class="sq-logic">${esc(logic)}</div>`:''}${checks.map(checkRow).join('')}</div>`+
        (gaps.length?`<div class="sq-gap"><b>还差</b>${gaps.map(g=>`<span>${esc(g)}</span>`).join('')}</div>`:'')
-     : `<div class="sq-muted">${esc(r.cond_text||r.trigger_text||((r.prereq||[]).length?'完成上面的前置后自动出现':'剧情到这里自动出现，不需要额外条件'))}</div>`;
+     : `<div class="sq-muted">${esc(r.open_text||r.cond_text||r.trigger_text||r.trigger_line||((r.prereq||[]).length?'完成上面的前置后自动出现':'剧情到这里自动出现，不需要额外条件'))}</div>`;
    const rewards=(r.rewards||[]).length
      ? `<div class="sq-rwlist">${r.rewards.map(x=>`<span class="sq-rw f${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}<i>${esc((x.sources||[]).join('/'))}</i></span>`).join('')}</div>`
      : `<div class="sq-muted">剧情向，无固定奖励</div>`;
@@ -173,36 +186,161 @@ function initQuest(){
    return `<details class="sq-node k-${key}${r.hidden?' hidden':''}${hit?' hit':''}" data-q="${r.id}"${open}>`+
      `<summary><span class="sq-step">${index}</span><span class="sq-nm">${esc(r.name)}</span>`+
      (dupNameOf[r.id]?'<span class="sq-tag dup" title="游戏里有多个同名任务，注意区分">同名</span>':'')+
+     (r.legacy?'<span class="sq-tag legacy" title="配置里只剩这条任务和接取选项，但既没有触发表达式也没有接取条件，且同名新版本已替代它；游戏里没有入口，后续环节也走不到">旧版任务 · 已废弃</span>':(r.entry_unverified?'<span class="sq-tag legacy" title="配置里仍有任务和接取选项，但当前版本没找到实际入口，可能是旧版遗留；游戏里确认看不到后可当作已错过">旧版入口 · 待确认</span>':''))+
      `<span class="sq-badge b-${key}">${esc(statusText(r))}</span>`+
      (r.hidden?'<span class="sq-tag hid">不显示在任务面板</span>':'')+
+     (r.retry_of?'<span class="sq-tag retry" title="失败后的重试记录，跟随宿主任务展示，不单独成线">重试</span>':'')+
+     ((r.retry_ids||[]).length?'<span class="sq-tag retry" title="小游戏失败后会生成重试任务，不单独占线">失败可重试</span>':'')+
      (r.egg_note?'<span class="sq-tag egg">含隐藏结局</span>':'')+branchTag+
      `<span class="sq-rwline">${rewardChips(r,2)||'<span class="sq-rw more">剧情向</span>'}</span><span class="sq-loc">${esc(locText(r))}</span>`+
      (!r.done&&r.how?`<span class="sq-mode ${r.how.auto?'auto':'npc'}">${r.how.auto?'自动触发':'找人接取'}</span>`:'')+
-     `<span class="sq-one">${linkify(one||'')}</span></summary>`+
+     `<span class="sq-one">${linkify(one||'')}</span>${optPreview(r)}</summary>`+
      `<div class="sq-body">${bodyHtml(r)}</div></details>`;
  }
- function groupBranches(items){
-   const out=[],seen={};
-   items.forEach(r=>{
-     if(r.branch_key&&seen[r.branch_key])return;
-     if(r.branch_key){
-       const group=items.filter(x=>x.branch_key===r.branch_key);
-       seen[r.branch_key]=1;
-       if(group.length>1){out.push(group);return}
-     }
-     out.push([r]);
+ function optPreview(r){
+   // 选项和门槛直接铺在卡片上：玩家在游戏里看到的是「震慑。」，不是任务名。
+   const list=(r.gate_eval||[]).filter(g=>g&&g.option);
+   if(!list.length)return '';
+   return `<span class="sq-opts-inline">`+
+     list.slice(0,3).map(g=>{
+       const ev=g.eval||{},cls=ev.ok===true?' ok':(ev.ok===false?' no':'');
+       const need=g.text&&g.text!=='无额外条件'?`<em>需 ${esc(g.text)}</em>`:'';
+       return `<span class="sq-opt-tag${cls}" title="${esc('选项「'+g.option+'」 · 需 '+(g.text||'无额外条件'))}">${esc(g.option)}${need}</span>`;
+     }).join('')+
+     (list.length>3?`<span class="sq-opt-tag more">等 ${list.length} 个选项</span>`:'')+
+     `</span>`;
+ }
+ // ---- 剧情线结构：按 next 边建图，分叉用并列路线渲染，不再按层号从上往下堆 ----
+ function lineGraph(line){
+   const ids=(line.quests||[]).filter(id=>byId[id]);
+   const set=new Set(ids),children={},parents={};
+   ids.forEach(id=>{children[id]=[];parents[id]=[]});
+   ids.forEach(id=>{
+     (byId[id].next||[]).forEach(x=>{
+       if(set.has(x)&&children[id].indexOf(x)<0){children[id].push(x);parents[x].push(id)}
+     });
    });
+   return {set:set,children:children,parents:parents,roots:ids.filter(id=>!parents[id].length)};
+ }
+ // 从起点沿唯一后继走到底；遇到分叉停下（分叉交给 forkHtml 渲染）。
+ function laneWalk(start,g){
+   const out=[],seen=new Set();let cur=start;
+   while(cur&&g.set.has(cur)&&!seen.has(cur)){
+     seen.add(cur);out.push(byId[cur]);
+     const nx=g.children[cur]||[];
+     if(nx.length!==1)break;
+     cur=nx[0];
+   }
    return out;
  }
+ const laneRank=nodes=>{
+   if(nodes.some(r=>r.done||r.doing))return 0;
+   if(nodes.some(r=>{const k=sk(r);return k==='ready'||k==='opened'}))return 1;
+   if(nodes.some(r=>sk(r)==='cond'))return 2;
+   if(nodes.length&&nodes.every(r=>r.done))return 4;
+   return 3;
+ };
+ const depthOf=(line,r)=>Number((line.depths||{})[String(r.id)]||r.chain_index||1);
+ function ringHtml(line,r){
+   if(!passStatus(r)||!match(r))return '';
+   const d=depthOf(line,r);
+   return `<div class="sq-ring"><div class="sq-rail"><span class="sq-dot">${d}</span><i class="sq-bar"></i></div>`+
+     `<div class="sq-nodes">${nodeHtml(r,d)}</div></div>`;
+ }
+ function laneTag(nodes,peerNodes,exclusive){
+   if(nodes.some(r=>r.done||r.doing))return '<span class="sq-tag sel">已选</span>';
+   if(exclusive&&peerNodes.some(r=>r.done||r.doing))return '<span class="sq-tag unsel">未选</span>';
+   const keys=nodes.map(sk);
+   if(keys.some(k=>k==='ready'||k==='opened'))return '<span class="sq-tag">可接取</span>';
+   if(keys.length&&keys.every(k=>k==='done'))return '<span class="sq-tag">已完成</span>';
+   return '';
+ }
+ function forkMeta(ids){
+   const keys=ids.map(id=>(byId[id]||{}).branch_key||'');
+   const exclusive=keys.every(k=>k===keys[0]);
+   return {exclusive:exclusive,
+     label:(ids.length>2?'多选一':'二选一')+(exclusive?' · 只能走一条':' · 可以都做')};
+ }
+ function laneHtml(line,start,g,ctx,seen){
+   const walked=laneWalk(start,g);
+   const fresh=walked.filter(r=>!seen.has(r.id));
+   if(!fresh.length)return '';
+   const last=fresh[fresh.length-1];
+   const nx=g.children[last.id]||[];
+   const visible=fresh.filter(r=>passStatus(r)&&match(r));
+   if(!visible.length&&nx.length<2)return '';
+   fresh.forEach(r=>seen.add(r.id));
+   const tag=laneTag(walked,ctx.peerNodes||[],ctx.exclusive);
+   let inner=visible.map(r=>ringHtml(line,r)).join('');
+   if(nx.length>1)inner+=forkHtml(line,nx,g,ctx,seen,true);
+   return `<div class="sq-lane${tag.indexOf('sq-tag sel')>=0?' sel':''}">`+
+     `<div class="sq-lane-h"><b>${esc((walked[0]||{}).name||'路线')}</b>`+
+     `<span class="sq-lane-step">${walked.length} 步</span>${tag}</div>${inner}</div>`;
+ }
+ function forkHtml(line,ids,g,ctx,seen,nested){
+   const meta=forkMeta(ids);
+   const walked=ids.map(id=>laneWalk(id,g));
+   const peerNodes=[].concat.apply([],walked);
+   // 路线按“已选 → 可接取 → 未开启”排前排，但路线内部的步骤永远保持真实先后。
+   const ordered=ids.map((id,i)=>({id:id,nodes:walked[i]}))
+     .sort((a,b)=>laneRank(a.nodes)-laneRank(b.nodes));
+   const lanes=[];
+   ordered.forEach(o=>{
+     const html=laneHtml(line,o.id,g,{peerNodes:peerNodes,exclusive:meta.exclusive},seen);
+     if(html)lanes.push(html);
+   });
+   if(!lanes.length)return '';
+   return `<div class="sq-fork${nested?' nest':''}"><div class="sq-fork-h">${esc(meta.label)}`+
+     `<em>${meta.exclusive?'已选一条后，另一条不再计入未完成':'各条路互不影响'}</em></div>`+
+     `<div class="sq-lanes${nested?' nest':''}">${lanes.join('')}</div></div>`;
+ }
  function lineNodes(line){return (line.quests||[]).map(id=>byId[id]).filter(Boolean)}
+ function lineBody(line){
+   const g=lineGraph(line),seen=new Set();
+   let out=triggerHtml(line);
+   if(g.roots.length>1){
+     // 多个独立起点：各自成列，不再混在同一层里按顺序排。
+     const peerNodes=[].concat.apply([],g.roots.map(id=>laneWalk(id,g)));
+     const lanes=g.roots.slice().sort((a,b)=>laneRank(laneWalk(a,g))-laneRank(laneWalk(b,g)))
+       .map(id=>laneHtml(line,id,g,{peerNodes:peerNodes,exclusive:false},seen)).filter(Boolean);
+     if(lanes.length){
+       out+=`<div class="sq-fork roots"><div class="sq-fork-h">${g.roots.length} 个独立起点`+
+         `<em>每条路各自独立，不需要按顺序做</em></div><div class="sq-lanes">${lanes.join('')}</div></div>`;
+     }
+   }else{
+     let cur=g.roots[0],prefix='',fork='';
+     while(cur&&g.set.has(cur)&&!seen.has(cur)){
+       seen.add(cur);
+       prefix+=ringHtml(line,byId[cur]);
+       const nx=g.children[cur]||[];
+       if(nx.length===1){cur=nx[0];continue}
+       if(nx.length>1)fork=forkHtml(line,nx,g,{},seen,false);
+       break;
+     }
+     out+=prefix+fork;
+   }
+   // 兜底：万一以后配置里出现环或断链，没画到的节点单独收在最后，不能丢。
+   const left=(line.quests||[]).map(id=>byId[id]).filter(r=>r&&!seen.has(r.id)&&passStatus(r)&&match(r));
+   if(left.length)out+=`<div class="sq-fork"><div class="sq-fork-h">未接上主线<em>配置里的后继关系断了</em></div>`+
+     `<div class="sq-lanes nest">${left.map(r=>ringHtml(line,r)).join('')}</div></div>`;
+   return out;
+ }
  const lineText=line=>`${line.name||''} ${line.chapter||''} ${line.region||''}`.toLowerCase();
  function lineVisible(line){
    const nodes=lineNodes(line);
    if(query()&&!nodes.some(match)&&!lineText(line).includes(query()))return false;
-   if(state.status!=='all'&&!nodes.some(r=>sk(r)===state.status))return false;
+   if(state.status!=='all'&&!nodes.some(passStatus))return false;
    return true;
  }
  function lineRank(line){
+   if(line.status_key==='doing')return 0;
+   if(line.status_key==='ready'){
+     // 入口待确认的线排在真正可接取的线后面，但不能排到未开启之后。
+     return lineNodes(line).some(r=>sk(r)==='ready'&&!r.entry_unverified)?1:1.5;
+   }
+   if(line.status_key==='cond'||line.status_key==='wait')return 2;
+   if(line.status_key==='legacy')return 7.5;
+   if(line.status_key==='done')return 9;
    const nodes=lineNodes(line);
    if(!line.total)return nodes.every(r=>r.done)?9:8;
    if(nodes.some(r=>!r.done&&r.doing))return 0;
@@ -212,24 +350,33 @@ function initQuest(){
    if(nodes.every(r=>r.done))return 9;
    return 5;
  }
+ function triggerHtml(line){
+   // 场景交互点和任务节点同构：交互点本身 + 它给出的选项，每个选项接一条支线。
+   const t=line.trigger||{};
+   if(!t.spot&&!t.place&&!(t.options||[]).length)return '';
+   const place=t.place||'';
+   const opts=(t.options||[]).map(o=>{
+     const q=byId[o.quest]||{};
+     return `<button type="button" class="sq-int-opt" data-jump="${o.quest}" title="点这里跳到「${esc(q.name||'后续任务')}」">`+
+       `<span class="sq-int-optn">选择「${esc(o.text||'调查')}」</span>`+
+       (o.gate&&o.gate!=='无额外条件'?`<em>需 ${esc(o.gate)}</em>`:'')+
+       `<span class="sq-int-to">→ ${esc(q.name||'后续任务')}${q.id?' · '+esc(statusText(q)):''}</span></button>`;
+   }).join('');
+   return `<div class="sq-ring sq-ring-int"><div class="sq-rail"><span class="sq-dot">起</span><i class="sq-bar"></i></div>`+
+     `<div class="sq-nodes"><details class="sq-node sq-int" open>`+
+       `<summary><span class="sq-step">起</span><span class="sq-nm">${esc(t.spot||'场景交互')}</span>`+
+       `<span class="sq-badge b-ready">交互点</span>`+
+       (place?`<span class="sq-loc">${esc(place)}</span>`:'')+
+       `<span class="sq-one">${esc(t.open?('开启：'+t.open):'')}</span></summary>`+
+       `<div class="sq-body"><div class="sq-sec">这里的选项 · 各接一条支线</div>`+
+       `<div class="sq-int-opts">${opts||'<span class="sq-note">交互后接取后续任务</span>'}</div></div>`+
+     `</details></div></div>`;
+ }
  function lineHtml(line){
    const nodes=lineNodes(line),visible=nodes.filter(passStatus);
    if(!nodes.length||(!visible.length&&state.status!=='all'))return '';
    if(query()&&!nodes.some(match)&&!lineText(line).includes(query()))return '';
-   const depths=line.depths||{},rings={};
-   nodes.forEach(r=>{const d=Number(depths[String(r.id)]||r.chain_index||1);(rings[d]=rings[d]||[]).push(r)});
-   const body=Object.keys(rings).map(Number).sort((a,b)=>a-b).map((d,idx,arr)=>{
-     const items=rings[d].filter(passStatus);
-     if(!items.length)return '';
-     const groups=groupBranches(items).map(group=>{
-       if(group.length>1){
-         return `<div class="sq-pair"><div class="sq-pair-h">${group.length>2?'多选一':'二选一'} · 只能选一条</div><div class="sq-pair-grid">`+
-           group.map(r=>nodeHtml(r,d)).join('')+`</div></div>`;
-       }
-       return nodeHtml(group[0],d);
-     }).join('');
-     return `<div class="sq-ring"><div class="sq-rail"><span class="sq-dot">${d}</span>${idx<arr.length-1?'<i class="sq-bar"></i>':''}</div><div class="sq-nodes">${groups}</div></div>`;
-   }).join('');
+   const body=lineBody(line);
    if(!body)return '';
    const stored=state.open[line.id];
    const nextRow=line.next?byId[line.next]:null;
@@ -239,9 +386,10 @@ function initQuest(){
      `<summary class="sq-line-h"><span class="sq-chap ${chapCls(line.chapter)}">${esc(line.chapter)}</span>`+
      (line.region?`<span class="sq-region">${esc(line.region)}</span>`:'')+
      `<span class="sq-lname">${esc(line.name)}</span>`+
+     `<span class="sq-badge b-${esc(line.status_key||'wait')}">${esc(line.status_label||'')}</span>`+
      (npcs.length?`<span class="sq-npc">${esc(npcs.slice(0,3).join('、'))}</span>`:'')+
      `<span class="sq-prog" title="已走环数 / 可走环数（不含未选分支）">${line.total?('已走 '+line.done+'/'+line.total):'已选另一条路'}</span>`+
-     (line.stones_left?`<span class="sq-stone">可拿灵石 ${line.stones_left}</span>`:'')+
+     (()=>{const hi=hiOfLine(line);return hi.length?`<span class="sq-hiwrap" title="未完成支线里品质 ≥4 的奖励">${hi.slice(0,2).map(x=>hiChip(x)).join('')}${hi.length>2?`<span class="sq-hi-more">+${hi.length-2}</span>`:''}</span>`:''})()+
      `<span class="sq-caret">›</span></summary>`+
      `<div class="sq-spine">${body}</div></details>`;
  }
@@ -250,9 +398,12 @@ function initQuest(){
    return `<details class="sq-flat${r.hidden?' hidden':''}" data-q="${r.id}">`+
      `<summary><span class="sq-nm">${esc(r.name)}</span><span class="sq-badge b-${key}">${esc(statusText(r))}</span>`+
      (r.hidden?'<span class="sq-tag hid">不显示在任务面板</span>':'')+
+     (r.retry_of?'<span class="sq-tag retry" title="失败后的重试记录，跟随宿主任务展示，不单独成线">重试</span>':'')+
+     ((r.retry_ids||[]).length?'<span class="sq-tag retry" title="小游戏失败后会生成重试任务，不单独占线">失败可重试</span>':'')+
      `<span class="sq-rwline">${rewardChips(r,2)}</span><span class="sq-loc">${esc(locText(r))}</span></summary>`+
      `<div class="sq-body">`+
        (checks.length?`<div class="sq-checks">${checks.map(checkRow).join('')}</div>`:'')+
+       (!checks.length&&r.open_text?`<div class="sq-muted">开启：${esc(r.open_text)}</div>`:'')+
        (r.status_hint?`<div class="sq-hint"><b>怎么走</b>${esc(r.status_hint)}</div>`:'')+
        (r.desc?`<div class="sq-muted">${esc(r.desc)}</div>`:'')+
        gatesHtml(r)+eggHtml(r.egg_note)+`</div></details>`;
@@ -261,6 +412,7 @@ function initQuest(){
    const list=rows.filter(r=>passStatus(r)&&match(r));
    if(!list.length)return '';
    const lineOf={};lines.forEach(line=>(line.quests||[]).forEach(id=>{lineOf[id]=line.name}));
+   rows.forEach(r=>{if(r.retry_of&&lineOf[r.retry_of])lineOf[r.id]=lineOf[r.retry_of]});
    const groups={};
    list.forEach(r=>{const name=lineOf[r.id]||r.chain_name||'其他支线';(groups[name]=groups[name]||[]).push(r)});
    return Object.keys(groups).sort((a,b)=>a.localeCompare(b,'zh-CN')).map(name=>{
@@ -295,19 +447,25 @@ function initQuest(){
      if(hit&&hit.scrollIntoView)hit.scrollIntoView({block:'center'});
    }
  }
+ const hiPending=(()=>{const seen={};rows.forEach(r=>hiOfQuest(r).forEach(x=>{seen[x.name]=x}));
+   return Object.keys(seen).map(k=>seen[k]).sort((a,b)=>(b.quality||0)-(a.quality||0));})();
  const cards=`<div class="cards">`+
    `<div class="card"><div class="k">支线完成</div><div class="v">${stats.done||0} <span>/ ${stats.total||0}</span></div><div class="s">进行中 ${stats.doing||0}</div></div>`+
    `<div class="card"><div class="k">剧情线</div><div class="v">${stats.storylines||lines.length} <span>条</span></div><div class="s">按委托人 / 章节归拢</div></div>`+
-   `<div class="card"><div class="k">还能拿的灵石</div><div class="v">${stats.stones_todo||0}</div><div class="s">未完成支线的奖励</div></div>`+
+   `<div class="card"><div class="k">未拿高品质</div><div class="v">${hiPending.length} <span>种</span></div><div class="s">${hiPending.length?('最值：'+esc(hiPending[0].name)):'暂无品质 ≥4 的奖励'}</div></div>`+
    `<div class="card"><div class="k">隐藏任务</div><div class="v">${stats.hidden||0} <span>个</span></div><div class="s">不会显示在游戏任务面板</div></div>`+
    `</div>`;
  const legend=`<div class="legend"><span>物品品质(0-5)：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span></div>`;
+ const chipCount=v=>v==='all'?rows.length
+   :(v==='unverified'?rows.filter(r=>(r.entry_unverified||r.legacy)&&!r.done).length
+     :v==='ready'?rows.filter(r=>sk(r)==='ready'&&!r.entry_unverified).length
+     :rows.filter(r=>sk(r)===v).length);
  host.innerHTML=sourceHtml(m)+cards+
    `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找任务 / 剧情线 / 委托人 / 地点 / 奖励</span><input id="qs" placeholder="输入任务名、剧情线、委托人、地点或奖励"></label></div></div>`+
    `<div class="chips" id="qview"><span class="chip-label">视图</span>`+
    `<button class="chip" data-view="story">剧情线</button><button class="chip" data-view="flat">逐条</button></div>`+
    `<div class="chips" id="qstatus"><span class="chip-label">状态</span>`+
-   FILTERS.map(([value,label])=>`<button class="chip" data-st="${value}">${label}</button>`).join('')+`</div>`+
+   FILTERS.map(([value,label])=>`<button class="chip" data-st="${value}">${label}<i>${chipCount(value)}</i></button>`).join('')+`</div>`+
    `<div id="qcount" class="result-info"></div><div id="qlist"></div>`+
    legend+
    `<div class="tip">「剧情线」按委托人 / 章节把支线串成一条路：点剧情线展开脊柱，点任务看触发条件、选项门槛与奖励。`+

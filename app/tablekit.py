@@ -22,8 +22,23 @@ def _rows(value):
     return []
 
 
+# 配置表文本列：游戏里同一字段会同时给出简中/繁中/英文，按玩家游戏内语言取用。
+TEXT_LANGUAGES = ("zh-Hans", "zh-Hant", "en-US")
+TEXT_LANGUAGE = "zh-Hans"
+# 文本清洗逻辑变更时递增，让已缓存的模块快照重新构建（不必逐个模块改 SCHEMA）。
+TEXT_REVISION = 1
+
+
+def set_text_language(code):
+    """切换配置表取值语言；未知语言回退简中。"""
+    global TEXT_LANGUAGE
+    TEXT_LANGUAGE = code if code in TEXT_LANGUAGES else "zh-Hans"
+
+
 def _text(value):
     if isinstance(value, dict):
+        if TEXT_LANGUAGE != "zh-Hans" and value.get(TEXT_LANGUAGE):
+            return str(value[TEXT_LANGUAGE])
         for key in ("zh-Hans", "zh-Hant", "en-US"):
             if value.get(key):
                 return str(value[key])
@@ -33,7 +48,8 @@ def _text(value):
 
 def _plain(value):
     """去掉富文本标签，供列表展示。"""
-    return re.sub(r"<[^>]+>", "", _text(value)).strip()
+    text = re.sub(r"<[^>]+>", "", _text(value))
+    return re.sub(r"\s{2,}", " ", text).strip()
 
 
 def build_realms(tables):

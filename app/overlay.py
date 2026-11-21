@@ -20,6 +20,19 @@ import webview
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
+_OVERLAY_MUTEX = None
+
+
+def _acquire_overlay_mutex():
+    """同一时间只允许一个浮窗实例，避免插件重复启动叠加多个 WebView2。"""
+    global _OVERLAY_MUTEX
+    ctypes.set_last_error(0)
+    handle = kernel32.CreateMutexW(None, False, "Local\\XianYouAssistantOverlay")
+    if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+        return False
+    _OVERLAY_MUTEX = handle
+    return True
+
 WM_HOTKEY = 0x0312
 WM_NCLBUTTONDOWN = 0x00A1
 HTCAPTION = 2
@@ -244,7 +257,7 @@ def _force_foreground(hwnd):
         pass
 
 
-def _make_api(window_ref, controller):
+def _make_api(window_ref, controller, on_sync=None):
     """暴露给页面的 JS 接口：window.pywebview.api.hide() / quit()。
 
     pywebview 会递归遍历 js_api 对象的属性并序列化，所以 controller 和 window
@@ -274,6 +287,19 @@ def _make_api(window_ref, controller):
 
         def set_size(self, level):
             return controller.set_size(level)
+
+        def sync(self):
+            if on_sync is None:
+                return {"requested": False, "plugin": ""}
+            try:
+                return on_sync()
+            except Exception as exc:
+                print("[overlay] 立即同步失败：%s" % exc)
+                return {"requested": False, "plugin": ""}
+
+        def state(self):
+            # 页面据此判断浮窗是否收起：收起时暂停整页刷新，避免在游戏里重建大页面。
+            return {"visible": bool(controller.visible())}
 
         def quit(self):
             window = window_ref()
@@ -313,6 +339,9 @@ class Controller:
 
     def hwnd(self):
         return self._get_hwnd()
+
+    def visible(self):
+        return bool(self._visible)
 
     def show(self):
         hwnd = self.hwnd()
@@ -445,14 +474,23 @@ class Hotkey(threading.Thread):
 INJECT_JS = r"""
 (function(){
   if (document.getElementById('xy-bar')) return;
+  // 让各模块 CSS 能识别覆盖模式（例如详情抽屉要避开 46px 高顶栏）。
+  try { document.body.classList.add('xy-overlay'); } catch (err) {}
   var css = document.createElement('style');
   css.textContent = [
     'body{padding-top:60px!important;box-shadow:inset 0 0 0 1px #2a3341}',
+    'body.xy-overlay .webbar{display:none!important}',
+    'body.xy-overlay #xy-refresh{top:46px}',
+    // 覆盖模式优先稳定：关掉模糊、动画和大阴影，减少 WebView2 的合成压力（AMD 驱动更容易被拖挂）。
+    'body.xy-overlay *{animation:none!important;transition:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
+    'body.xy-overlay .wrap,body.xy-overlay .card,body.xy-overlay .webbar,body.xy-overlay .tabbar{box-shadow:none!important}',
     '.wrap{max-width:1560px}',
     '#xy-bar{position:fixed;left:0;right:0;top:0;height:46px;display:flex;align-items:center;gap:10px;',
     'padding:0 16px;background:rgba(14,17,22,.97);border-bottom:1px solid #29303c;z-index:99999;',
-    'font:12px/1.4 "Microsoft YaHei",system-ui,sans-serif;color:#8b93a1}',
-    '#xy-bar .t{color:#c9f5dd;font-weight:600;font-size:13px}',
+    'font:12px/1.4 "Microsoft YaHei",system-ui,sans-serif;color:#8b93a1;overflow:hidden}',
+    '#xy-bar .t{color:#c9f5dd;font-weight:600;font-size:13px;white-space:nowrap}',
+    '#xy-bar .hint{white-space:nowrap}',
+    '@media (max-width:1040px){#xy-bar .hint{display:none}}',
     '#xy-bar .h{margin-left:auto;display:flex;gap:8px}',
     '#xy-bar button{background:#1b222c;border:1px solid #35404f;color:#c6cfda;border-radius:7px;',
     'padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit}',
@@ -463,24 +501,75 @@ INJECT_JS = r"""
     '#xy-bar .zoom span{min-width:44px;text-align:center;color:#c6cfda;cursor:pointer}',
     '#xy-bar .sizes{display:flex;gap:4px;margin-left:8px}',
     '#xy-bar .sizes button{padding:4px 8px;min-width:30px}',
-    '#xy-bar .sizes button.on{background:#1f3b30;border-color:#3f6d57;color:#bff0d5}'
+    '#xy-bar .sizes button.on{background:#1f3b30;border-color:#3f6d57;color:#bff0d5}',
+    '#xy-bar .sync{display:flex;align-items:center;gap:6px;margin-left:8px}',
+    '#xy-bar .sync button{min-width:72px;background:#1c2a24;border-color:#36604c;color:#bfe9d2}',
+    '#xy-bar .sync button:hover{background:#243a30}',
+    '#xy-bar .sync button:disabled{opacity:.7;cursor:default}',
+    '#xy-bar .sync span{color:#7f8b9c;font-size:11px;white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis}'
   ].join('');
   document.head.appendChild(css);
   var bar = document.createElement('div');
   bar.id = 'xy-bar';
   bar.innerHTML = '<span class="t">仙友助手 · 覆盖模式</span>' +
-    '<span>__HOTKEY__ 收起 / 呼出 · ESC 隐藏</span>' +
+    '<span class="hint">__HOTKEY__ 收起 / 呼出 · ESC 隐藏</span>' +
     '<span class="zoom"><button id="xy-zoom-out" title="缩小">A−</button>' +
     '<span id="xy-zoom-val">100%</span>' +
     '<button id="xy-zoom-in" title="放大">A+</button></span>' +
     '<span class="sizes"><button data-size="0" title="小窗">小</button>' +
     '<button data-size="1" title="中窗">中</button>' +
     '<button data-size="2" title="大窗">大</button></span>' +
+    '<span class="sync"><button id="xy-sync" title="让插件立刻导出一次最新存档副本">立即同步</button>' +
+    '<span id="xy-sync-tip"></span></span>' +
     '<span class="h"><button id="xy-hide">收起</button>' +
     '<button class="quit" id="xy-quit">退出工具</button></span>';
   document.body.appendChild(bar);
   document.getElementById('xy-hide').onclick = function(){ window.pywebview.api.hide(); };
   document.getElementById('xy-quit').onclick = function(){ window.pywebview.api.quit(); };
+  // 立即同步：让插件马上导出一次存档副本，页面随后由版本轮询自动刷新。
+  var syncBtn = document.getElementById('xy-sync');
+  var syncTip = document.getElementById('xy-sync-tip');
+  var syncTimer = null;
+  function showSyncTip(text){
+    if (!syncTip) return;
+    syncTip.textContent = text || '';
+    if (syncTimer) clearTimeout(syncTimer);
+    if (text) syncTimer = setTimeout(function(){ syncTip.textContent = ''; }, 9000);
+  }
+  syncBtn.onclick = function(){
+    if (syncBtn.disabled) return;
+    try { if (window.PROGRESS_MANUAL_SYNC) window.PROGRESS_MANUAL_SYNC(); } catch (err) {}
+    syncBtn.disabled = true;
+    syncBtn.textContent = '同步中…';
+    var done = function(res){
+      if (res && res.requested) {
+        // 插件已收到请求：按钮保持“等待数据”，等页面真正刷新时一起消失。
+        syncBtn.textContent = '等待数据…';
+        var at = res.plugin ? String(res.plugin).slice(11) : '';
+        showSyncTip(at ? '已请求 · 插件上次导出 ' + at : '已请求，等待插件导出');
+        setTimeout(function(){
+          if (syncBtn) { syncBtn.disabled = false; syncBtn.textContent = '立即同步'; }
+        }, 15000);
+      } else {
+        syncBtn.disabled = false;
+        syncBtn.textContent = '立即同步';
+        showSyncTip('存档目录未就绪');
+      }
+    };
+    try {
+      var call = window.pywebview && window.pywebview.api && window.pywebview.api.sync;
+      if (!call) { done(null); return; }
+      Promise.resolve(call()).then(done, function(){ done(null); });
+    } catch (err) { done(null); }
+  };
+  // 覆盖窗口隐藏时 WebView 会节流定时器，重新呼出时先主动检查一次版本，
+  // 避免“存档后等半天才刷新”甚至看起来像没同步。
+  function refreshOnShow(){
+    try { if (window.XY_SHOW) window.XY_SHOW(); } catch (err) {}
+    try { if (window.PROGRESS_CHECK_FAST) window.PROGRESS_CHECK_FAST(); } catch (err) {}
+  }
+  window.addEventListener('focus', refreshOnShow);
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) refreshOnShow(); });
   // 缩放：50%~250%，步进 10%，点百分比回到 100%，比例记在本机。
   // 部分环境下 WebView2 的 devicePixelRatio 为 1，视口会按物理像素计算；
   // 用系统缩放补偿，保证布局宽度与设计基准一致。
@@ -543,28 +632,43 @@ INJECT_JS = r"""
   function activeTab(){
     try { return localStorage.getItem('worldapart.active.tab.v2') || ''; } catch (err) { return ''; }
   }
+  // 按页签分别记录滚动位置，切换页签和刷新数据都不会互相覆盖。
+  function scrollMap(){
+    try { return JSON.parse(localStorage.getItem('xy-scroll-map') || '{}'); } catch (err) { return {}; }
+  }
+  function saveScroll(){
+    try {
+      var all = scrollMap();
+      all[activeTab()] = scrollBox().scrollTop || 0;
+      localStorage.setItem('xy-scroll-map', JSON.stringify(all));
+    } catch (err) {}
+  }
   var scrollTimer = null;
   document.addEventListener('scroll', function(){
     if (scrollTimer) return;
-    scrollTimer = setTimeout(function(){
-      scrollTimer = null;
-      try {
-        localStorage.setItem('xy-scroll', JSON.stringify({
-          tab: activeTab(), top: scrollBox().scrollTop || 0
-        }));
-      } catch (err) {}
-    }, 300);
+    scrollTimer = setTimeout(function(){ scrollTimer = null; saveScroll(); }, 300);
+  }, true);
+  // 刷新前再存一次，避免滚动后 300 毫秒内就因数据更新触发重新加载而丢失位置。
+  window.addEventListener('beforeunload', saveScroll);
+  // 捕获阶段先保存：此时页签还没切换，位置能记在正确的页签上。
+  document.addEventListener('click', function(e){
+    var btn = e.target && e.target.closest ? e.target.closest('.tab') : null;
+    if (btn) saveScroll();
   }, true);
   function restoreScroll(){
-    var data = {}, box = scrollBox();
-    try { data = JSON.parse(localStorage.getItem('xy-scroll') || '{}'); } catch (err) {}
-    if (data.tab !== activeTab() || !data.top) return;
-    box.scrollTop = Math.min(data.top, Math.max(0, box.scrollHeight - box.clientHeight));
+    var all = scrollMap(), box = scrollBox();
+    var top = all[activeTab()] || 0;
+    if (!top) return;
+    box.scrollTop = Math.min(top, Math.max(0, box.scrollHeight - box.clientHeight));
   }
-  window.addEventListener('load', function(){
+  // 注入脚本可能晚于 load 事件（每次刷新后模板都会重新注入），所以先看文档是否已就绪。
+  function scheduleRestore(){
     setTimeout(restoreScroll, 80);
     setTimeout(restoreScroll, 500);
-  });
+    setTimeout(restoreScroll, 1200);
+  }
+  if (document.readyState === 'complete') scheduleRestore();
+  else window.addEventListener('load', scheduleRestore);
   document.addEventListener('wheel', function(e){
     if (!e.ctrlKey) return;
     e.preventDefault();
@@ -622,9 +726,28 @@ def _save_overlay_state(html_path, x, y, level):
         pass
 
 
-def run(html_path, title=WINDOW_TITLE, start_hidden=False, hotkey="F3"):
+def run(html_path, title=WINDOW_TITLE, start_hidden=False, hotkey="F3", on_sync=None,
+        compat=True):
+    if not _acquire_overlay_mutex():
+        print("[overlay] 已有浮窗实例在运行，本次启动退出", flush=True)
+        return
     """阻塞运行覆盖窗口，直到用户点击「退出工具」。"""
     _dpi_aware()
+    # 上次没有正常退出（显卡挂起/断电）时，这次强制走兼容模式，避免同样的问题再发生。
+    crash_flag = os.path.join(tempfile.gettempdir(), "xianyou_overlay_running.flag")
+    unclean = False
+    try:
+        unclean = time.time() - os.path.getmtime(crash_flag) < 86400
+    except OSError:
+        unclean = False
+    if unclean and not compat:
+        print("[overlay] 上次浮窗未正常退出，本次强制启用兼容模式", flush=True)
+        compat = True
+    try:
+        with open(crash_flag, "w", encoding="utf-8") as flag:
+            flag.write(str(time.time()))
+    except OSError:
+        crash_flag = ""
     hotkey = str(hotkey or "F3").upper()
     vk = HOTKEYS.get(hotkey)
     if vk is None:
@@ -643,7 +766,7 @@ def run(html_path, title=WINDOW_TITLE, start_hidden=False, hotkey="F3"):
         size_level=size_level,
         on_geometry=lambda x, y, level: _save_overlay_state(html_path, x, y, level),
     )
-    api = _make_api(lambda: window_holder.get("window"), controller)
+    api = _make_api(lambda: window_holder.get("window"), controller, on_sync)
     window = webview.create_window(
         title, url, js_api=api,
         width=1000, height=700, hidden=start_hidden,
@@ -723,8 +846,20 @@ def run(html_path, title=WINDOW_TITLE, start_hidden=False, hotkey="F3"):
     window.events.shown += on_shown
     window.events.closed += on_closed
 
-    # 窗口隐藏时不让 Chromium 降级渲染/释放合成资源，减少再次呼出时的重绘开销。
-    os.environ.setdefault("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-                          "--disable-backgrounding-occluded-windows --disable-renderer-backgrounding")
-    webview.start(gui="edgechromium")
+    # 兼容模式：部分 AMD 显卡在“游戏全屏 + 置顶 WebView2”下会黑屏/驱动挂起。
+    # 关闭 GPU 合成改用软件渲染，优先保证能正常呼出；默认开启，可在功能设置里关掉。
+    if compat:
+        # 软件渲染 + 关掉合成/视频解码/遮挡计算：把 WebView2 对显卡的占用压到最低。
+        os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
+            "--disable-gpu --disable-gpu-compositing --disable-accelerated-2d-canvas "
+            "--disable-accelerated-video-decode --disable-zero-copy "
+            "--disable-features=CalculateNativeWinOcclusion")
+    try:
+        webview.start(gui="edgechromium")
+    finally:
+        if crash_flag:
+            try:
+                os.remove(crash_flag)
+            except OSError:
+                pass
     print("[overlay] 主循环结束")

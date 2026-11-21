@@ -53,6 +53,11 @@
   max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hongchen-panel-place.is-gone{color:#c6aeb8;background:#241c22;border-color:#4a3a44}
 .hongchen-panel-place.is-away{color:#7c8492;border-style:dashed}
+/* 整条线的开启条件：卡面与面板头各一行，长句截断，悬停看全 */
+.hongchen-panel-open{display:inline-block;margin-left:8px;padding:2px 9px;border-radius:20px;vertical-align:middle;
+  font-size:11px;color:#d8c7a6;background:#241f16;border:1px solid #4a3c22;
+  max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hongchen-cardopen{color:#cbb68f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hongchen-close{border:1px solid #2c333f;background:#181c23;color:#9aa3b2;border-radius:7px;width:27px;height:27px;
   line-height:1;cursor:pointer;font-size:17px;transition:.15s}
 .hongchen-close:hover{background:#242a34;color:#e8eaed;border-color:#3c4552}
@@ -114,6 +119,32 @@
 .hongchen-remain-fork:hover{color:#f0d9c8;border-bottom-color:#c9866b}
 .hongchen-remain-fork.is-plain{cursor:default;border-bottom:0;color:#a99a92}
 
+/* 「还差什么」v2：计数筛选 + 下一步 + 折叠小节 */
+.hongchen-remain-counts{display:flex;flex-wrap:wrap;gap:6px}
+.hongchen-remain-count{display:inline-flex;align-items:center;gap:6px;border:1px solid #2a303b;background:#171b22;
+  color:#a8b0be;border-radius:20px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;transition:.15s}
+.hongchen-remain-count em{font-style:normal;font-weight:700;color:#e8eaed;font-variant-numeric:tabular-nums}
+.hongchen-remain-count.s-ready{border-color:rgba(213,173,99,.5);color:#f0dcae}
+.hongchen-remain-count.s-ready em{color:#f7e8c4}
+.hongchen-remain-count:hover{background:#1d222b;border-color:#4a5362}
+.hongchen-remain-next{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:1px dashed rgba(213,173,99,.45);
+  background:rgba(213,173,99,.07);border-radius:8px;padding:6px 10px;color:#dfe4ec;font-size:11.5px;cursor:pointer;
+  font-family:inherit;transition:.15s}
+.hongchen-remain-next span{font-size:10px;color:#d5ad63;font-weight:700;letter-spacing:.5px;white-space:nowrap}
+.hongchen-remain-next b{font-weight:600;color:#f3e7c9}
+.hongchen-remain-next em{font-style:normal;font-size:10.5px;color:#8b93a1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hongchen-remain-next:hover{background:rgba(213,173,99,.13);border-color:#d5ad63}
+.hongchen-remain-sec.hongchen-remain-fold{display:block;flex:1 1 100%}
+.hongchen-remain-fold>summary{list-style:none;cursor:pointer;padding:2px 0;color:#9aa3b2}
+.hongchen-remain-fold>summary::-webkit-details-marker{display:none}
+.hongchen-remain-fold>summary::before{content:'▸';font-size:9px;color:#6f7787;margin-right:3px}
+.hongchen-remain-fold[open]>summary::before{content:'▾'}
+/* 折叠时必须真正隐藏子项：列表的 display:flex 会覆盖浏览器默认的 details 收起规则 */
+.hongchen-remain-fold:not([open])>*:not(summary){display:none}
+.hongchen-remain-fold>summary:hover{color:#dfe4ec}
+.hongchen-remain-fold .hongchen-remain-list{margin-top:6px}
+.hongchen-remain-fold .hongchen-remain-tip{margin-left:0}
+
 /* 环进度轴上的"这一环还剩几个"角标（挂在圆点右下外侧，不压住环号） */
 .hongchen-axis-left{position:absolute;right:-8px;bottom:-7px;min-width:15px;height:15px;line-height:15px;
   border-radius:8px;background:#d5ad63;color:#1a1512;font-size:9px;font-style:normal;font-weight:700;
@@ -121,11 +152,22 @@
 
 /* 交互说明 */
 .hongchen-guide{font-size:11px;color:#7d8593;line-height:1.7;margin:2px 0 10px}
-.hongchen-guide-key{display:inline-flex;align-items:center;gap:4px;margin-left:12px;white-space:nowrap}
-.hongchen-guide-key i{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid var(--hongchen-accent,#c9866b)}
-.hongchen-guide-key i.is-current{border-color:#e6c98a;border-width:3px}
-.hongchen-guide-key i.is-focus{background:var(--hongchen-accent,#c9866b);border-color:var(--hongchen-accent,#c9866b)}
-.hongchen-guide-key i.rs-branch{border:none;width:auto;height:auto;color:#c9a184;font-style:normal;font-size:12px}
+
+/* 故事线分组：每条线从根任务开始，第 N 步表示相对位置，取代抽象的第 N 环 */
+.hongchen-stories{display:flex;flex-direction:column;gap:9px;margin:2px 0 12px}
+.hongchen-story{background:#15181f;border:1px solid #293140;border-radius:10px;overflow:hidden}
+.hongchen-story>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:11px 13px;flex-wrap:wrap}
+.hongchen-story>summary::-webkit-details-marker{display:none}
+.hongchen-story>summary:before{content:"›";color:#6f7787;font-size:18px;line-height:1;transition:.15s;display:inline-block}
+.hongchen-story[open]>summary:before{transform:rotate(90deg)}
+.hongchen-story-name{font-size:14px;font-weight:600}
+.hongchen-story-meta{margin-left:auto;color:#8b93a1;font-size:11px}
+.hongchen-story-body{border-top:1px solid #232833;padding:10px 12px 12px}
+.hongchen-story-next{color:#8fc7a5;font-size:11.5px;line-height:1.7;margin:0 0 8px}
+.hongchen-story-next b{color:#c9f5dd;font-weight:600}
+.hongchen-story.is-branch>summary .hongchen-story-name{color:#c7a1ef}
+.hongchen-story-branchbox{margin:0 0 10px}
+.hongchen-story-branchbox:last-child{margin-bottom:0}
 
 /* 环进度轴：紧凑圆点，可横向滚动但不铺长列 */
 .hongchen-axis{display:flex;flex-wrap:wrap;gap:11px 12px;padding:13px 11px;background:#0f1318;border:1px solid #232932;border-radius:10px}
@@ -144,6 +186,16 @@
   color:#1a1512;transform:scale(1.12);box-shadow:0 0 0 3px rgba(201,134,107,.22)}
 .hongchen-axis-branch{position:absolute;top:-6px;right:-5px;font-size:9px;font-style:normal;color:#d5a98a;
   background:#12161c;border-radius:50%;width:13px;height:13px;line-height:13px;text-align:center}
+
+/* 带任务名的环标签：数字只做序号，玩家先看到的是这一环从哪个任务开始 */
+.hongchen-axis-dot.has-name{flex:0 0 auto;width:auto;min-width:34px;max-width:200px;height:30px;
+  border-radius:9px;padding:0 9px;gap:6px;justify-content:flex-start}
+.hongchen-axis-idx{font-size:9.5px;font-weight:700;opacity:.62;line-height:1;flex:0 0 auto}
+.hongchen-axis-name{font-size:10.5px;font-weight:500;max-width:150px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.hongchen-axis-dot.has-name .hongchen-axis-left{position:static;margin-left:auto;right:auto;bottom:auto}
+.hongchen-line-notice{background:#141a21;border:1px dashed #39424f;border-radius:9px;color:#9aa6b5;
+  font-size:11.5px;line-height:1.75;margin:0 0 11px;padding:10px 12px}
 
 /* 聚焦环导航 */
 .hongchen-focus-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:13px 0 4px}
@@ -194,10 +246,23 @@
 .s-locked .hongchen-status{background:#3a2c1c;color:#d8a06d}.s-notstarted .hongchen-status{background:#232a33;color:#9aa6b5}
 .s-skipped .hongchen-status{background:#22262d;color:#98a1ad}
 .hongchen-nname{font-size:12.5px;font-weight:600;color:#eceff4;margin:4px 0 2px;line-height:1.35}
+.hongchen-ringtag{flex:none;font-size:9px;line-height:1.5;color:#8d97a6;background:#1d232c;border:1px solid #2c3540;border-radius:4px;padding:0 4px}
+.hongchen-node.ring-flash{outline:2px solid #d5ad63;outline-offset:1px;background:#221d14}
+.hongchen-ring-toast{position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:60;
+ background:#2a2215;border:1px solid #6b5a2e;color:#f0d38a;font-size:12px;padding:6px 14px;
+ border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.5);opacity:1;transition:opacity .3s;pointer-events:none}
+.hongchen-ring-toast.out{opacity:0}
 .hongchen-desc{font-size:10.5px;line-height:1.5;color:#838c9a;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hongchen-node-note{font-size:10px;line-height:1.45;color:#b9aacd;margin-top:4px;background:#241f2e;border-radius:5px;padding:3px 6px}
 .hongchen-node.s-skipped .hongchen-node-note{color:#939caa;background:#1a1f26}
 .hongchen-badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.hongchen-node-opts{display:flex;flex-direction:column;gap:2px;margin-top:5px;padding:4px 6px;background:#12161d;border:1px solid #262d38;border-radius:6px}
+.hongchen-node-opt{display:flex;gap:6px;align-items:baseline;font-size:10px;line-height:1.45;color:#a7b3c2;overflow-wrap:anywhere}
+.hongchen-node-opt span{flex:1;min-width:0}
+.hongchen-node-opt em{flex:none;font-style:normal;font-size:9px;color:#d5a86c}
+.hongchen-node-opt.ok span{color:#9edcb6}
+.hongchen-node-opt.no span{color:#d9a09a}
+.hongchen-node-opt.more{color:#6f7887;font-size:9.5px}
 .hongchen-badge{display:inline-block;font-size:9.5px;line-height:1.3;padding:2px 6px;border-radius:5px;white-space:normal;cursor:help;overflow-wrap:anywhere}
 .hongchen-badge.gate{background:#3a2d20;color:#e3b57e;border:1px solid #5a4330}
 .hongchen-badge.gate.ok{background:#1e2d26;color:#a8dfc0;border-color:#3d6b53}
@@ -249,3 +314,31 @@
   .hongchen-inspect-grid{grid-template-columns:1fr}
   .hongchen-node-grid{grid-template-columns:1fr}
   .hongchen-context{flex-direction:column}}
+
+/* 纵向时间线：整条情缘线一次读完，不必来回切环 */
+.hongchen-timeline{margin-top:12px;position:relative;padding-left:18px}
+.hongchen-timeline:before{content:"";position:absolute;left:6px;top:8px;bottom:8px;width:2px;background:#2b3546}
+.hongchen-sec{position:relative;padding:10px 0 14px;border-top:1px dashed #232b38}
+.hongchen-sec:first-child{border-top:0;padding-top:2px}
+.hongchen-sec:before{content:"";position:absolute;left:-15px;top:17px;width:9px;height:9px;border-radius:50%;background:#39465a;border:2px solid #12161e}
+.hongchen-sec.is-current:before{background:var(--hongchen-accent,#c9866b);box-shadow:0 0 0 4px rgba(201,134,107,.18)}
+.hongchen-sec-head{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.hongchen-sec-no{font-size:12.5px;color:#dfe6ef;font-weight:600}
+.hongchen-sec-meta{font-size:11.5px;color:#7f8b9c}
+.hongchen-sec.is-current .hongchen-sec-meta{color:#c9866b}
+
+/* 树形任务线：缩进表示后续关系，左侧竖线连接父子 */
+.hongchen-tree{margin-top:12px}
+.hongchen-tree-lv{position:relative;padding-left:calc(var(--lv,0) * 18px);margin:0 0 8px}
+.hongchen-tree-lv:before{content:"";position:absolute;left:calc(var(--lv,0) * 18px - 10px);top:-8px;bottom:-8px;width:1px;background:#2b3546}
+.hongchen-tree-lv:after{content:"";position:absolute;left:calc(var(--lv,0) * 18px - 10px);top:24px;width:9px;height:1px;background:#2b3546}
+.hongchen-tree-lv[style*="--lv:0"]:before,.hongchen-tree-lv[style*="--lv:0"]:after{display:none}
+.hongchen-tree-branch{position:relative;padding-left:calc(var(--lv,0) * 18px);margin:6px 0 10px}
+.hongchen-tree-fork{display:inline-block;font-size:11.5px;color:#c9866b;margin:2px 0 6px}
+.hongchen-tree-loose{margin-top:14px;border-top:1px dashed #232b38;padding-top:10px}
+.hongchen-inspect-inline{margin:6px 0 10px}
+.hongchen-node.sel{outline:1px solid var(--hongchen-accent,#c9866b)}
+
+/* 展开的任务详情：独立卡片 + 顶部小标签，和下一个任务明显分开 */
+.hongchen-inspect-inline{border:1px solid #3a4456;background:#151b25;border-radius:10px;padding:12px 14px;box-shadow:0 6px 18px rgba(0,0,0,.28)}
+.hongchen-inspect-inline .hongchen-inspect{background:transparent;border:0;padding:0}

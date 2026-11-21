@@ -1,10 +1,10 @@
 /* 人物图鉴：以"现在在哪、他和我什么关系、能对他做什么"为主线的 NPC 档案墙。 */
 (function () {
   'use strict';
-  var STORE_KEY = 'worldapart.rolebook.filters.v6';
+  var STORE_KEY = 'worldapart.rolebook.filters.v8';
   var DEFAULTS = {
-    q: '', rel: '', evil: '', realm: '', sect: '', personality: '',
-    present: 1, met: 0, dao: 0, friend: 0, housed: 0, evilneg: 0,
+    q: '', state: 'alive', rel: '', evil: '', realm: '', sect: '', personality: '', region: '', loc: '',
+    met: 0, dao: 0, friend: 0, housed: 0, evilneg: 0,
     safe: 0, spar: 0, steal: 0, merchant: 0, attackable: 0, memoria: 0, talent: 0,
     mortal: 0,
     sort: 'relevance'
@@ -19,8 +19,9 @@
   function pad(v) { return String(v == null ? '' : v); }
 
   // 真实头像：来自头像快照的 dataURI；无头像回退首字母圆牌
-  function avatarHtml(c, cls, map) {
-    var uri = (map || {})[String(c.id)];
+  function avatarHtml(c, cls, map, pics) {
+    var ref = (map || {})[String(c.id)] || '';
+    var uri = ref.indexOf('data:') === 0 ? ref : ((pics || {})[ref] || '');
     var ch = (c.name || '?').slice(0, 1);
     if (uri) {
       return '<span class="rolebook-avatar has-img ' + (cls || '') + '">' +
@@ -32,14 +33,16 @@
   }
 
   // 卡片只保留玩家做决策会用到的能力标记
+  // 在世 = 当前世界可交互；已寿终/已退隐/尚未登场都不能再攻击、切磋或交易。
+  function isAlive(c) { return !!(c.present && !c.gone); }
   function abilityIcons(c) {
-    var out = [];
+    var alive = isAlive(c), out = [];
     if (c.met) out.push('<span class="rolebook-ico rolebook-ico-met" title="有交情">识</span>');
     if (c.housed) out.push('<span class="rolebook-ico rolebook-ico-house" title="已入住仙居">宅</span>');
     if (c.dao) out.push('<span class="rolebook-ico rolebook-ico-dao" title="道侣">道</span>');
-    if (c.spar) out.push('<span class="rolebook-ico rolebook-ico-spar" title="可切磋">切</span>');
-    if (c.steal) out.push('<span class="rolebook-ico rolebook-ico-steal" title="可偷窃">窃</span>');
-    if (c.merchant) out.push('<span class="rolebook-ico rolebook-ico-mer" title="商人">商</span>');
+    if (alive && c.spar) out.push('<span class="rolebook-ico rolebook-ico-spar" title="可切磋">切</span>');
+    if (alive && c.steal) out.push('<span class="rolebook-ico rolebook-ico-steal" title="可偷窃">窃</span>');
+    if (alive && c.merchant) out.push('<span class="rolebook-ico rolebook-ico-mer" title="商人">商</span>');
     if (c.memoria) out.push('<span class="rolebook-ico rolebook-ico-mem" title="留有影像">影</span>');
     return out.join('');
   }
@@ -65,8 +68,9 @@
     if (c.remaining_years == null) return '凡人';
     return c.remaining_years < 0 ? '凡人 · 已超寿元' : '凡人 · 余寿 ' + c.remaining_years + ' 年';
   }
+  // 凡人寿命徽标：剧情保护 > 已超寿元 > 余寿若干年；修士与已退隐的人不显示
   function lifespanHtml(c) {
-    if (!c.mortal) return '';
+    if (!c.mortal || c.gone) return '';
     var cls = c.lifespan_protected ? ' rolebook-lifespan-prot'
       : (c.remaining_years != null && c.remaining_years < 0 ? ' rolebook-lifespan-over' : '');
     return '<span class="rolebook-lifespan' + cls + '">' + esc(lifespanText(c)) + '</span>';
@@ -77,6 +81,26 @@
     values.forEach(function (v) {
       html += '<option value="' + esc(v) + '"' + (String(selected) === String(v) ? ' selected' : '') +
         '>' + esc(v) + '</option>';
+    });
+    return html;
+  }
+
+  // 地点按地区分组：新增地图/子地点直接从存档数据派生，不需要改代码。
+  function locOptions(npcs, selected) {
+    var groups = {};
+    npcs.forEach(function (c) {
+      if (!c.loc_name) return;
+      var region = c.region || '其他';
+      groups[region] = groups[region] || {};
+      groups[region][c.loc_name] = 1;
+    });
+    var html = '<option value="">全部地点</option>';
+    Object.keys(groups).sort().forEach(function (region) {
+      html += '<optgroup label="' + esc(region) + '">' +
+        Object.keys(groups[region]).sort().map(function (name) {
+          return '<option value="' + esc(name) + '"' +
+            (selected === name ? ' selected' : '') + '>' + esc(name) + '</option>';
+        }).join('') + '</optgroup>';
     });
     return html;
   }
@@ -96,9 +120,11 @@
       return { main: c.loc_name || c.loc, sub: c.loc, off: false };
     }
     if (c.present && c.gone) {
-      return { main: '已退隐', sub: '不在当前世界', off: true };
+      return c.gone_reason === 'dead'
+        ? { main: '已寿终', sub: '寿元已尽 · 不在当前世界', off: true }
+        : { main: '已退隐', sub: '不在当前世界（境界突破 / 剧情清退）', off: true };
     }
-    return { main: '尚未出现在此世界', sub: '无实时位置（未生成或已退隐）', off: true };
+    return { main: '尚未登场', sub: '存档里还没有这个人', off: true };
   }
   function placeText(c) { return placeLines(c).main; }
 
@@ -108,6 +134,7 @@
     if (c.roles && c.roles.length) w += 10 + c.roles.length;
     if (c.dao) w += 6;
     if (c.housed) w += 5;
+    if (c.special_name) w += 8;
     if (c.met) w += 4;
     if (c.memoria) w += 2;
     return w;
@@ -125,25 +152,30 @@
     if (filters.evil === 'good' && !(c.evil > 0)) return false;
     if (filters.realm && c.realm_short !== filters.realm && c.realm !== filters.realm) return false;
     if (filters.sect && c.sect !== filters.sect) return false;
+    if (filters.region && c.region !== filters.region) return false;
+    if (filters.loc && c.loc_name !== filters.loc) return false;
     if (filters.personality && c.personality !== filters.personality) return false;
-    if (filters.present && !c.present) return false;
+    if (filters.state === 'alive' && !isAlive(c)) return false;
+    if (filters.state === 'dead' && c.gone_reason !== 'dead') return false;
+    if (filters.state === 'retired' && c.gone_reason !== 'retired') return false;
+    if (filters.state === 'absent' && c.gone_reason !== 'absent') return false;
     if (filters.met && !c.met) return false;
+    if (filters.special && !c.special_name) return false;
     if (filters.dao && !c.dao) return false;
     if (filters.friend && (c.roles || []).indexOf('朋友') < 0) return false;
     if (filters.housed && !c.housed) return false;
     if (filters.evilneg && !(c.evil < 0)) return false;
-    // 安全击杀默认给"在世视角"：图鉴口径 185 位，玩家真正能去杀的只有在世的
-    if (filters.safe && !(c.safe_target && c.present)) return false;
-    if (filters.spar && !c.spar) return false;
-    if (filters.steal && !c.steal) return false;
-    if (filters.merchant && !c.merchant) return false;
-    if (filters.attackable && !c.killable) return false;
+    // 攻击/切磋/偷窃/交易都只对“在世”的人生效：寿终、退隐、未登场的人已无法交互。
+    if (filters.safe && !(c.safe_target && isAlive(c))) return false;
+    if (filters.spar && !(c.spar && isAlive(c))) return false;
+    if (filters.steal && !(c.steal && isAlive(c))) return false;
+    if (filters.merchant && !(c.merchant && isAlive(c))) return false;
+    if (filters.attackable && !(c.killable && isAlive(c))) return false;
     if (filters.memoria && !c.memoria) return false;
     if (filters.talent && !(c.talents || []).length) return false;
     if (filters.mortal && !c.mortal) return false;
     if (filters.rel) {
-      if (filters.rel === 'present') { if (!c.present) return false; }
-      else if (filters.rel === 'met') { if (!c.met) return false; }
+      if (filters.rel === 'met') { if (!c.met) return false; }
       else if ((c.roles || []).indexOf(filters.rel) < 0) return false;
     }
     return true;
@@ -163,6 +195,10 @@
       });
     }
     rows.sort(function (a, b) {
+      if (by === 'special') {
+        return (b.special_name ? 1 : 0) - (a.special_name ? 1 : 0) ||
+          String(a.name).localeCompare(String(b.name), 'zh-CN');
+      }
       if (by === 'relevance') return relevance(b) - relevance(a) || a.id - b.id;
       if (by === 'id') return a.id - b.id;
       if (by === 'name') return String(a.name).localeCompare(String(b.name), 'zh-CN');
@@ -204,21 +240,70 @@
     }).join(' · ');
   }
 
-  function cardHtml(c, meta, map) {
+  // 天赋品质色：按数值顺序取色板，新增更高品质时自动落到最亮一档，不用改代码。
+  var QUALITY_COLORS = ['#8b93a1', '#9fb0c6', '#6fbf8f', '#5b9bd5', '#b07fd0', '#e0a34a', '#e5533d'];
+  function qualityColor(q) {
+    var n = Number(q) || 0;
+    return QUALITY_COLORS[Math.max(0, Math.min(n, QUALITY_COLORS.length - 1))];
+  }
+
+  // 卡片上列出全部天赋：只给名称 + 品质颜色，是否值得洗髓交给玩家自己判断。
+  function talentStrip(c, meta) {
+    var list = (c.talents || []).filter(Boolean);
+    if (!list.length) return '';
+    var tmeta = (meta && meta.talents) || {};
+    var chips = list.map(function (t) {
+      var id = (t && typeof t === 'object') ? String(t.id) : '';
+      var info = tmeta[id] || {};
+      var name = typeof t === 'string' ? t : (t.name || info.name || ('天赋 ' + (t.id || '')));
+      var locked = (t && typeof t === 'object') ? t.unlocked === false : false;
+      return '<span class="rolebook-talent-chip' + (locked ? ' is-locked' : '') +
+        '" style="--qcolor:' + qualityColor(info.quality) + '"' +
+        (info.desc ? ' title="' + esc(info.desc) + '"' : '') + '>' + esc(name) + '</span>';
+    }).join('');
+    return '<div class="rolebook-card-talents"><span class="rolebook-talent-ico">✦</span>' + chips + '</div>';
+  }
+
+  function talentListHtml(c, meta) {
+    var list = (c.talents || []).filter(Boolean);
+    if (!list.length) return '<p class="rolebook-note">这个角色没有配置天赋。</p>';
+    var tmeta = (meta && meta.talents) || {};
+    return '<div class="rolebook-talents">' + list.map(function (t) {
+      var id = (t && typeof t === 'object') ? String(t.id) : '';
+      var info = tmeta[id] || {};
+      var name = (t && typeof t === 'object') ? (t.name || info.name || ('天赋 ' + id)) : t;
+      var desc = info.desc || '';
+      var locked = (t && typeof t === 'object') ? t.unlocked === false : false;
+      return '<div class="rolebook-talent' + (locked ? ' is-locked' : '') +
+        '" style="--qcolor:' + qualityColor(info.quality) + '">' +
+        '<div class="rolebook-talent-head"><b>' + esc(name) + '</b>' +
+        (locked ? '<span class="rolebook-talent-lock">未解锁</span>' : '') + '</div>' +
+        (desc ? '<p>' + esc(desc) + '</p>' : '') +
+        '</div>';
+    }).join('') + '</div>';
+  }
+
+  function cardHtml(c, meta, map, pics) {
     var cls = evilClass(c.evil);
     var badges = roleTags(c);
-    if (c.safe_target) {
+    // 本月特殊互动入口：留影/切磋/说服等，一张卡只有一个。
+    var special = c.special_name
+      ? '<span class="rolebook-special" title="' + esc(c.special_desc || '本月特殊互动入口') + '">本月 · ' + esc(c.special_name) + '</span>'
+      : '';
+    if (c.safe_target && isAlive(c)) {
       badges = '<span class="rolebook-safe" title="击杀此人：' + esc(killSummary(c, meta)) +
         '">安全击杀</span>' + badges;
     }
     if (!badges) {
-      badges = c.met ? '<span class="rolebook-role-none">有交情 · 暂无关系</span>'
-        : (c.present ? '<span class="rolebook-role-none">在世 · 尚未结识</span>'
-                     : '<span class="rolebook-role-none">未在当前世界</span>');
+      badges = c.gone
+        ? '<span class="rolebook-role-none">' + (c.gone_reason === 'dead' ? '已寿终' : '已退隐') + '</span>'
+        : (c.met ? '<span class="rolebook-role-none">有交情 · 暂无关系</span>'
+          : (c.present ? '<span class="rolebook-role-none">在世 · 尚未结识</span>'
+                       : '<span class="rolebook-role-none">尚未登场</span>'));
     }
     var place = placeLines(c);
     return '<article class="rolebook-card rolebook-card-' + cls + '" data-npc="' + c.id + '" tabindex="0">' +
-      '<div class="rolebook-card-top">' + avatarHtml(c, '', map) +
+      '<div class="rolebook-card-top">' + avatarHtml(c, '', map, pics) +
         '<div class="rolebook-card-id">' +
           '<div class="rolebook-card-name">' + esc(c.name) + '</div>' +
           '<div class="rolebook-card-title">' + esc(c.title || c.sect) + '</div>' +
@@ -228,7 +313,8 @@
         '<span class="rolebook-pin">⌖</span>' +
         '<span class="rolebook-place-box"><span class="rolebook-place-main">' + esc(place.main) + '</span>' +
         '<span class="rolebook-place-sub">' + esc(place.sub) + '</span></span></div>' +
-      '<div class="rolebook-card-badges">' + lifespanHtml(c) + badges + '</div>' +
+      '<div class="rolebook-card-badges">' + special + lifespanHtml(c) + badges + '</div>' +
+      talentStrip(c, meta) +
       evilBand(c) +
       '<div class="rolebook-card-meta">' +
         '<span class="rolebook-evil-label rolebook-evil-' + cls + '">' +
@@ -241,7 +327,7 @@
   }
 
   var CHIPS = [
-    ['present', '在世'], ['met', '有交情'], ['mortal', '凡人'], ['dao', '道侣'], ['friend', '朋友'], ['housed', '已入住'],
+    ['special', '本月可互动'], ['met', '有交情'], ['mortal', '凡人'], ['dao', '道侣'], ['friend', '朋友'], ['housed', '已入住'],
     ['evilneg', '负善恶'], ['safe', '可安全击杀'], ['spar', '可切磋'], ['steal', '可偷窃'],
     ['merchant', '商人'], ['attackable', '可攻击'], ['memoria', '有留影'], ['talent', '固定天赋']
   ];
@@ -249,17 +335,17 @@
   function updateCount(rows, total) {
     var info = $('rolebook-count');
     if (!info) return;
-    var present = rows.filter(function (c) { return c.present; }).length;
+    var alive = rows.filter(isAlive).length;
     var met = rows.filter(function (c) { return c.met; }).length;
-    var safe = rows.filter(function (c) { return c.safe_target; }).length;
     var safeNow = rows.filter(function (c) { return c.safe_now; }).length;
-    info.innerHTML = '命中 <b>' + rows.length + '</b> / ' + total + ' 位 · 在世 <b>' + present +
-      '</b> 位 · 有交情 <b>' + met + '</b> 位' +
-      (filters.safe ? ' · 可安全击杀 <b>' + safe + '</b> 位（可现在动手 <b>' + safeNow + '</b> 位）' : '');
+    var STATE_LABEL = { alive: '在世', dead: '已寿终', retired: '已退隐', absent: '尚未登场', '': '全部' };
+    info.innerHTML = '状态 <b>' + esc(STATE_LABEL[filters.state || '']) + '</b> · 命中 <b>' + rows.length +
+      '</b> / ' + total + ' 位 · 其中在世 <b>' + alive + '</b> 位 · 有交情 <b>' + met + '</b> 位' +
+      (filters.safe ? ' · 现在可动手 <b>' + safeNow + '</b> 位' : '');
   }
 
   function renderCards(m, reset) {
-    var meta = m.meta || {}, map = m.avatar_map || {};
+    var meta = m.meta || {}, map = m.avatar_map || {}, pics = m.avatars || {};
     if (reset) shown = PAGE;
     currentMeta = meta;
     currentRows = sortRows((m.npcs || []).filter(match));
@@ -273,7 +359,7 @@
       return;
     }
     var slice = currentRows.slice(0, shown);
-    box.innerHTML = slice.map(function (c) { return cardHtml(c, meta, map); }).join('');
+    box.innerHTML = slice.map(function (c) { return cardHtml(c, meta, map, pics); }).join('');
     if (more) {
       more.style.display = currentRows.length > shown ? '' : 'none';
       var btn = $('rolebook-more');
@@ -336,6 +422,12 @@
 
   // 击杀后果：用玩家语言写清"杀了他我会怎样"，安全目标连 0 都摆出来
   function killHtml(c, meta) {
+    if (!isAlive(c)) {
+      return '<p class="rolebook-note">' +
+        (c.gone_reason === 'dead' ? '已寿终，无法再攻击。'
+          : c.gone_reason === 'retired' ? '已退隐，不在当前世界，无法攻击。'
+            : '尚未登场，无法攻击。') + '</p>';
+    }
     if (!c.killable) {
       return '<p class="rolebook-note">配置上不可击杀（剧情或寿元保护角色）。' +
         (c.dao ? '对方与你有道侣关系，动手也会直接破坏关系。' : '') + '</p>';
@@ -408,25 +500,41 @@
       '<span class="rolebook-tag' + (c.housed ? ' rolebook-tag-gold' : '') + '">' + esc(text) + '</span></div>';
   }
 
+  function specialHtml(c) {
+    if (!c.special_name) {
+      return '<p class="rolebook-note">本月没有激活的特殊互动入口；这些入口每月刷新一次。</p>';
+    }
+    return '<div class="rolebook-inline"><span>本月互动</span>' +
+      '<span class="rolebook-tag rolebook-tag-green">' + esc(c.special_name) +
+      (c.special_tag ? ' · ' + esc(c.special_tag) : '') + '</span></div>' +
+      (c.special_desc ? '<p class="rolebook-note">' + esc(c.special_desc) + '</p>' : '') +
+      (c.special_type === 1
+        ? '<p class="rolebook-note">留影石：完成当前段后入口会清空，要等下一次每月刷新重新抽取，不是立刻出下一段。</p>'
+        : '');
+  }
+
   function actsHtml(c) {
+    var alive = isAlive(c);
     var items = [
-      ['可结道侣', c.dao_capable], ['可切磋', c.spar],
-      ['可偷窃', c.steal], ['商人', c.merchant]
+      ['可结道侣', alive && c.dao_capable], ['可切磋', alive && c.spar],
+      ['可偷窃', alive && c.steal], ['商人', alive && c.merchant]
     ];
+    var note = !alive
+      ? '<p class="rolebook-note">已不在当前世界，无法切磋、偷窃、交易或攻击。</p>'
+      : (!c.killable ? '<p class="rolebook-note">配置上不可攻击（剧情或寿元保护角色）。</p>' : '');
     return '<div class="rolebook-acts">' + items.map(function (p) {
       return '<span class="rolebook-act' + (p[1] ? ' on' : ' off') + '">' +
         p[0] + ' ' + (p[1] ? '✓' : '×') + '</span>';
-    }).join('') + '</div>' +
-      (!c.killable ? '<p class="rolebook-note">配置上不可攻击（剧情或寿元保护角色）。</p>' : '');
+    }).join('') + '</div>' + note;
   }
 
-  function openDrawer(c, meta, map) {
+  function openDrawer(c, meta, map, pics) {
     if (!drawer) return;
     var cls = evilClass(c.evil);
     var persona = (meta.personalities || {})[c.personality_id] || {};
     var html = '';
     html += '<div class="rolebook-drawer-head rolebook-head-' + cls + '">' +
-      avatarHtml(c, 'rolebook-avatar-lg', map) +
+      avatarHtml(c, 'rolebook-avatar-lg', map, pics) +
       '<div class="rolebook-drawer-id"><h3>' + esc(c.name) + '</h3>' +
         '<div>' + esc(c.title || '无称号') + ' · ' + esc(c.sect) + '</div>' +
         '<div class="rolebook-drawer-sub">' + esc(c.realm) + '<span class="rolebook-id">ID ' + esc(c.id) + '</span></div>' +
@@ -444,12 +552,10 @@
       kv('性别', c.sex) + kv('种族', c.race) +
       kv('性格', c.personality || '未知') + kv('五行', (c.element || []).join('、') || '—') +
       '</div>' +
-      (persona.desc ? '<p class="rolebook-note">' + esc(persona.desc) + '</p>' : '') +
-      ((c.talents || []).length ? '<div class="rolebook-inline"><span>固定天赋</span>' +
-        c.talents.map(function (t) { return '<span class="rolebook-tag rolebook-tag-gold">' + esc(t) + '</span>'; }).join('') +
-        '</div>' : ''));
+      (persona.desc ? '<p class="rolebook-note">' + esc(persona.desc) + '</p>' : ''));
+    html += section('天赋', talentListHtml(c, meta));
     html += section('我和他', relationHtml(c, meta) + favorHtml(c, meta) + housingHtml(c));
-    html += section('能做什么', actsHtml(c));
+    html += section('能做什么', specialHtml(c) + actsHtml(c));
     html += section('善恶与后果',
       '<div class="rolebook-duo">' +
         '<div class="rolebook-duo-item rolebook-duo-' + cls + '"><span>善恶值</span><b>' + esc(c.evil) + '</b>' +
@@ -483,54 +589,6 @@
     if (mask) mask.classList.remove('show');
   }
 
-  function statsHtml(m) {
-    var live = m.live_stats || {}, counts = (m.player || {}).counts || {}, stats = m.stats || {};
-    var items = [
-      ['道侣', counts.dao || 0], ['朋友', counts.friend || 0], ['敌仇', counts.enemy || 0],
-      ['已入住', counts.housed || 0], ['负善恶', live.evil_met || 0]
-    ];
-    return '<div class="rolebook-player"><div class="rolebook-player-stats">' +
-      items.map(function (x) {
-        return '<div class="rolebook-pstat"><b>' + esc(x[1]) + '</b><span>' + esc(x[0]) + '</span></div>';
-      }).join('') + '</div>' +
-      '<div class="rolebook-player-note">共收录 <b>' + esc(stats.total || 0) + '</b> 位 NPC · ' +
-      '安全击杀 <b>' + esc(live.safe_target || 0) + '</b> 位（在世 <b>' +
-        esc(live.safe_target_present || 0) + '</b> 位）· ' +
-      '你的善恶值 <b>' + esc((m.player || {}).evil || 0) + '</b>' +
-      ((m.player || {}).demonic ? ' · <span class="rolebook-demon">魔修气 ' + esc(m.player.demon_qi) + '</span>' : '') +
-      '</div></div>';
-  }
-
-  // 闭关寿元面板：突破到某境界要闭关多少年，期间会寿终的凡人名单
-  function breakthroughHtml(m) {
-    var list = m.death_risk || [];
-    if (!list.length) {
-      return '<div class="rolebook-breakthrough" id="rolebook-breakthrough">' +
-        '<button type="button" class="rolebook-breakthrough-toggle" id="rolebook-bt-toggle">' +
-        '闭关寿元 <span class="rolebook-bt-caret">▾</span></button>' +
-        '<div class="rolebook-breakthrough-body" id="rolebook-bt-body">' +
-        '<p class="rolebook-note">暂无闭关寿元数据。</p></div></div>';
-    }
-    var rows = list.map(function (e) {
-      var mortals = e.mortals || [];
-      var names = mortals.slice(0, 6).map(function (x) {
-        return esc(x.name) + '(余 ' + (x.remaining < 0 ? '已超寿' : x.remaining + ' 年') + ')';
-      }).join('、');
-      var tail = mortals.length > 6 ? '…' : '';
-      var who = mortals.length
-        ? '会寿终 <b>' + mortals.length + '</b> 人：' + names + tail
-        : '无凡人会因此寿终';
-      return '<div class="rolebook-bt-entry">' +
-        '<span class="rolebook-bt-head">突破' + esc(e.realm) + ' · 闭关 ' + esc(e.years) + ' 年</span>' +
-        '<span class="rolebook-bt-deaths' + (mortals.length ? ' rolebook-bt-deaths-has' : '') + '">' + who + '</span>' +
-        '</div>';
-    }).join('');
-    return '<div class="rolebook-breakthrough" id="rolebook-breakthrough">' +
-      '<button type="button" class="rolebook-breakthrough-toggle" id="rolebook-bt-toggle">' +
-      '闭关寿元 <span class="rolebook-bt-caret">▾</span></button>' +
-      '<div class="rolebook-breakthrough-body" id="rolebook-bt-body">' + rows + '</div></div>';
-  }
-
   function bindEvents(m) {
     function bind(id, key) {
       var el = $(id);
@@ -542,34 +600,43 @@
     bind('rolebook-evil', 'evil');
     bind('rolebook-realm', 'realm');
     bind('rolebook-sect', 'sect');
+    bind('rolebook-region', 'region');
+    bind('rolebook-loc', 'loc');
     bind('rolebook-personality', 'personality');
     bind('rolebook-rel', 'rel');
     bind('rolebook-sort', 'sort');
+    // 状态与攻击类快捷筛选互斥：看寿终/退隐/未登场时，自动关掉“可攻击/切磋/偷窃/交易”。
+    var stateEl = $('rolebook-state');
+    if (stateEl) stateEl.onchange = function () {
+      filters.state = stateEl.value;
+      if (filters.state !== 'alive') {
+        ['safe', 'spar', 'steal', 'merchant', 'attackable'].forEach(function (k) { filters[k] = 0; });
+      }
+      persist(); syncChips(); renderCards(m, true);
+    };
     CHIPS.forEach(function (p) {
       var el = $('rolebook-f-' + p[0]);
       if (!el) return;
       el.onclick = function () {
         filters[p[0]] = filters[p[0]] ? 0 : 1;
+        // 攻击类筛选只对在世的人有意义，勾选时自动切回“在世”状态。
+        if (filters[p[0]] && ['safe', 'spar', 'steal', 'merchant', 'attackable'].indexOf(p[0]) >= 0) {
+          filters.state = 'alive';
+          var se = $('rolebook-state'); if (se) se.value = 'alive';
+        }
         persist(); syncChips(); renderCards(m, true);
       };
     });
     var more = $('rolebook-more');
     if (more) more.onclick = loadMore;
-    var btToggle = $('rolebook-bt-toggle');
-    if (btToggle) btToggle.onclick = function () {
-      var body = $('rolebook-bt-body');
-      if (!body) return;
-      var collapsed = body.style.display === 'none';
-      body.style.display = collapsed ? '' : 'none';
-      btToggle.classList.toggle('on', collapsed);
-    };
     var reset = $('rolebook-reset');
     if (reset) reset.onclick = function () {
       filters = Object.assign({}, DEFAULTS); persist();
       ['rolebook-evil', 'rolebook-realm', 'rolebook-sect', 'rolebook-personality',
-       'rolebook-rel', 'rolebook-sort'].forEach(function (id) {
+       'rolebook-rel', 'rolebook-sort', 'rolebook-region', 'rolebook-loc'].forEach(function (id) {
         var el = $(id); if (el) el.value = '';
       });
+      var st = $('rolebook-state'); if (st) st.value = DEFAULTS.state;
       var qa = $('rolebook-q'); if (qa) qa.value = '';
       syncChips(); renderCards(m, true);
     };
@@ -595,31 +662,44 @@
     var realms = uniq(npcs.map(function (c) { return c.realm_short; }).filter(Boolean));
     var sects = uniq(npcs.map(function (c) { return c.sect; }));
     var persons = uniq(npcs.map(function (c) { return c.personality; }).filter(Boolean));
+    // 地区来自存档实时位置，只列当前存档里真实存在的地点，避免给出空筛选。
+    var regions = uniq(npcs.map(function (c) { return c.region; }).filter(Boolean)).sort();
+    // 关系类型从存档里出现过的关系派生：游戏新增关系会自动多一个选项。
+    var relValues = uniq(npcs.reduce(function (acc, c) { return acc.concat(c.roles || []); }, []));
 
     view = $('rolebook');
     if (!view) return;
+    var live = m.live_stats || {}, counts = (m.player || {}).counts || {}, stats = m.stats || {};
     view.innerHTML = sourceHtml(m) +
       '<div class="rolebook-hero">' +
-        '<div class="rolebook-hero-text"><h2>人物图鉴 · NPC 档案</h2>' +
-        '<p><b>在世</b>是存档里真实存在、能定位的人；<b>有交情</b>才是打过交道的那一小撮。' +
-        '位置来自存档实时空间；不在当前世界的如实标注，不拿配置常驻地凑数。' +
-        '想找人动手又不想背恶名：勾选<b>可安全击杀</b>再叠<b>在世</b>，名单里的人杀完不掉恶值、不扣城镇与宗门声望。</p></div>' +
+        '<div class="rolebook-hero-head"><h2>人物图鉴</h2>' +
+          '<span>共收录 <b>' + esc(stats.total || 0) + '</b> 位 · 可安全击杀 <b>' +
+            esc(live.safe_target_ready || 0) + '</b> 位</span></div>' +
         '<div class="rolebook-hero-figures">' +
-          '<div><b>' + esc(stats.total || 0) + '</b><span>图鉴</span></div>' +
-          '<div><b>' + esc((m.live_stats || {}).present || 0) + '</b><span>在世</span></div>' +
-          '<div><b>' + esc((m.live_stats || {}).safe_target_present || 0) + '</b><span>安全击杀</span></div>' +
-          '<div><b>' + esc((m.live_stats || {}).met || 0) + '</b><span>有交情</span></div>' +
+          '<div><b>' + esc(live.present || 0) + '</b><span>在世</span></div>' +
+          '<div><b>' + esc(live.met || 0) + '</b><span>有交情</span></div>' +
+          '<div><b>' + esc(live.dead || 0) + '</b><span>已寿终</span></div>' +
+          '<div><b>' + esc(live.retired || 0) + '</b><span>已退隐</span></div>' +
+          '<div><b>' + esc(live.absent || 0) + '</b><span>尚未登场</span></div>' +
+          '<div><b>' + esc(counts.dao || 0) + '</b><span>道侣</span></div>' +
+          '<div><b>' + esc(counts.friend || 0) + '</b><span>朋友</span></div>' +
+          '<div><b>' + esc(counts.housed || 0) + '</b><span>已入住</span></div>' +
+          '<div><b>' + esc(live.special || 0) + '</b><span>本月可互动</span></div>' +
         '</div>' +
       '</div>' +
-      statsHtml(m) +
-      breakthroughHtml(m) +
       '<div class="rolebook-filters">' +
         '<div class="rolebook-filters-row">' +
           '<label class="rolebook-search"><span>查找 NPC</span>' +
             '<input id="rolebook-q" placeholder="名字 / 称号 / 门派 / 境界 / 地点 / 关系" value="' + esc(filters.q) + '"></label>' +
+          '<label class="rolebook-field"><span>状态</span><select id="rolebook-state" ' +
+            'title="在世=当前世界可交互；已寿终=寿元耗尽；已退隐=境界突破/剧情清退；尚未登场=存档里还没有这个人">' +
+            [['alive', '在世（可交互）'], ['', '全部状态'], ['dead', '已寿终'], ['retired', '已退隐'], ['absent', '尚未登场']]
+              .map(function (p) {
+                return '<option value="' + p[0] + '"' + (String(filters.state || '') === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+              }).join('') + '</select></label>' +
           '<label class="rolebook-field"><span>范围</span><select id="rolebook-rel">' +
-            [['', '全部 NPC'], ['present', '在世（可定位）'], ['met', '有交情'], ['师尊', '师尊'], ['弟子', '弟子'],
-             ['道侣', '道侣'], ['朋友', '朋友'], ['仇敌', '仇敌'], ['已故', '已故']]
+            [['', '全部 NPC'], ['met', '有交情']]
+              .concat(relValues.map(function (r) { return [r, r]; }))
               .map(function (p) {
                 return '<option value="' + p[0] + '"' + (filters.rel === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
               }).join('') + '</select></label>' +
@@ -629,6 +709,10 @@
             '<option value="good"' + (filters.evil === 'good' ? ' selected' : '') + '>善念</option></select></label>' +
           '<label class="rolebook-field"><span>境界</span><select id="rolebook-realm">' +
             optList(realms, filters.realm, '全部境界') + '</select></label>' +
+          '<label class="rolebook-field"><span>地区</span><select id="rolebook-region">' +
+            optList(regions, filters.region, '全部地区') + '</select></label>' +
+          '<label class="rolebook-field"><span>地点</span><select id="rolebook-loc">' +
+            locOptions(npcs, filters.loc) + '</select></label>' +
           '<label class="rolebook-field"><span>门派</span><select id="rolebook-sect">' +
             optList(sects, filters.sect, '全部门派') + '</select></label>' +
           '<label class="rolebook-field"><span>性格</span><select id="rolebook-personality">' +
@@ -636,7 +720,7 @@
         '</div>' +
         '<div class="rolebook-filters-row rolebook-filters-row2">' +
           '<label class="rolebook-field"><span>排序</span><select id="rolebook-sort">' +
-            [['relevance', '与我相关优先'], ['safe', '安全目标优先'], ['layer', '境界高低'], ['lifespan', '剩余寿元'],
+            [['relevance', '与我相关优先'], ['special', '本月可互动优先'], ['safe', '安全目标优先'], ['layer', '境界高低'], ['lifespan', '剩余寿元'],
              ['favor', '好感优先'], ['evil', '由恶到善'], ['evilDesc', '由善到恶'], ['name', '按名字'], ['id', '按 ID']]
               .map(function (p) {
                 return '<option value="' + p[0] + '"' + (filters.sort === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
@@ -647,14 +731,15 @@
           CHIPS.map(function (p) {
             var tip = p[0] === 'safe'
               ? ' title="图鉴口径 ' + esc((m.live_stats || {}).safe_target || 0) +
-                ' 位；默认只列在世、现在就能去杀的 ' +
-                esc((m.live_stats || {}).safe_target_present || 0) + ' 位"'
+                ' 位；只列在世、现在就能去杀的 ' +
+                esc((m.live_stats || {}).safe_target_ready || 0) + ' 位"'
               : '';
             return '<button type="button" id="rolebook-f-' + p[0] + '" class="rolebook-chip"' + tip + '>' +
-              p[1] + '</button>';
+              p[1] + (p[0] === 'special' ? ' ' + esc((m.live_stats || {}).special || 0) : '') + '</button>';
           }).join('') +
           '<button type="button" id="rolebook-reset" class="rolebook-chip rolebook-chip-reset">清空</button>' +
         '</div>' +
+        '<div class="rolebook-state-hint">在世＝当前可交互；已寿终＝寿元耗尽；已退隐＝境界突破或剧情清退；尚未登场＝存档里还没有这个人。攻击 / 切磋 / 偷窃 / 交易只对在世的人生效。</div>' +
       '</div>' +
       '<div id="rolebook-count" class="rolebook-count"></div>' +
       '<div id="rolebook-grid" class="rolebook-grid"></div>' +
@@ -673,7 +758,7 @@
       var card = e.target.closest('.rolebook-card');
       if (!card) return;
       var c = npcs.find(function (n) { return n.id === num(card.getAttribute('data-npc')); });
-      if (c) openDrawer(c, meta, m.avatar_map || {});
+      if (c) openDrawer(c, meta, m.avatar_map || {}, m.avatars || {});
     }
     grid.onclick = openFromEvent;
     grid.onkeydown = function (e) {

@@ -192,6 +192,18 @@ def scan_memoria(obj, meta_obj):
     viewed = _int_set(mem.get("viewed"))
     dao = _int_set(((player.get("npc_dao_ally") or {}).get("npc_ids")))
     cast = meta_obj.get("cast") or {}
+    # NPC 每天只保留一个“特殊互动入口”，留影石也是其中之一。
+    # special_sub_id 就是当前激活入口的 subId，0 表示今天没有可用入口。
+    runtime = {}
+    records = (obj or {}).get("npcs")
+    for record in records.values() if isinstance(records, dict) else ():
+        if not isinstance(record, dict):
+            continue
+        npc_id = _int(record.get("npcCfgId"))
+        if not npc_id:
+            continue
+        info = record.get("npc_interaction_runtime") or {}
+        runtime[npc_id] = _int(info.get("special_sub_id"))
 
     shooting, bonds, adventure = {}, [], []
     for entry in meta_obj.get("entries") or []:
@@ -224,6 +236,7 @@ def scan_memoria(obj, meta_obj):
                     "layer": profile.get("layer", ""),
                     "segs": [], "total": 0, "got": 0, "viewed": 0, "last": "",
                     "reachable": 0, "blocked": 0,
+                    "active_sub": runtime.get(npc_id, 0),
                 }
             card["segs"].append(row)
         elif category == 2:
@@ -248,6 +261,15 @@ def scan_memoria(obj, meta_obj):
 
     for card in shooting.values():
         card["segs"].sort(key=lambda seg: (seg.get("sort") or 0, seg.get("id") or 0))
+        active_sub = _int(card.get("active_sub"))
+        active_seg = None
+        for seg in card["segs"]:
+            hit = bool(active_sub and _int((seg.get("unlock") or {}).get("sub")) == active_sub)
+            seg["active"] = hit
+            if hit and active_seg is None:
+                active_seg = seg
+        card["active_title"] = (active_seg or {}).get("title") or ""
+        card["active_other"] = bool(active_sub and active_seg is None)
         card["total"] = len(card["segs"])
         card["got"] = sum(1 for seg in card["segs"] if seg["got"])
         card["viewed"] = sum(1 for seg in card["segs"] if seg["viewed"])

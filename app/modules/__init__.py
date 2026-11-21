@@ -6,8 +6,8 @@
                        EXTRA_SNAPSHOTS（{文件名: f(tables, inspection)}，与内置快照一起导出）。
     build.py           可选。build(tables) -> dict，把配置表压成模块快照。
     scan.py            可选。scan(obj, meta, state)、meta(metadata)、prepare(game_dir)、
-                       post(rows, state, original, path)、score(rows)、enrich(module, meta, state)、
-                       summary(module)、empty()、builtin_ok(data)。
+                       post(rows, state, original, path)、score(rows)、merge(rows_list)、
+                       enrich(module, meta, state)、summary(module)、empty()、builtin_ok(data)。
     view.js            可选。window.PROGRESS_VIEWS[key]=function(DATA){...}，渲染与事件自包含。
     view.css           可选。只写本模块自己的选择器，避免与其它模块抢样式。
     <snapshot>.json    可选。内置快照，文件名由 __init__.py 的 SNAPSHOT 声明。
@@ -68,6 +68,7 @@ class Plugin(object):
     def __init__(self, key, package, directory):
         self.KEY = key
         self.LABEL = str(getattr(package, "LABEL", "") or key)
+        self.LABEL_EN = str(getattr(package, "LABEL_EN", "") or self.LABEL)
         self.ORDER = _order(getattr(package, "ORDER", 1000))
         self.TABLES = frozenset(_strings(getattr(package, "TABLES", ())))
         self.SCHEMA = _positive(getattr(package, "SCHEMA", 1), 1)
@@ -85,6 +86,9 @@ class Plugin(object):
         self.score = getattr(package, "score", None)
         if not callable(self.score):
             self.score = None
+        self.merge = getattr(package, "merge", None)
+        if not callable(self.merge):
+            self.merge = None
         self.empty = getattr(package, "empty", None)
         if not callable(self.empty):
             self.empty = None

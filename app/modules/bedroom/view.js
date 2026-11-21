@@ -39,7 +39,7 @@ function renderBedroom(){
 
   $('bedroom').innerHTML=sourceHtml(m)+`<div class="cards">${cards}</div>${controls}`+
     (visible.length?`<table><thead><tr><th>仙友 / 寝室</th><th>各部位 6 段</th><th></th></tr></thead><tbody>${body}</tbody></table>`:'<div class="empty">暂无仙居楼互动数据</div>')+
-    `<div class="tip">仙居楼互动：进入仙居楼与入住的仙友互动，每位仙友 3 个部位、每个部位 6 段（0~3 为四段升阶，4 为循环段，5 为回落段）；18/18 才算 1 位，对应成就「十八摸 Ⅰ~Ⅳ」。实心块＝已获得的段，空心块＝还缺的段，悬停可见第几段。</div>`;
+    `<div class="tip">仙居楼互动：进入仙居楼与入住的仙友互动，每位仙友 3 个部位、每个部位 6 段（0~3 为四段升阶，4 为循环段，5 为回落段）；18/18 才算 1 位，对应成就「十八摸 Ⅰ~Ⅳ」。实心块＝已获得的段，空心块＝还缺的段，悬停可见第几段。这里会合并同一角色所有存档里曾经获得过的段，旧档拿到的不会丢；互动后保存一次即可刷新，档位见上方「来源」。</div>`;
 
   const b1=$('bed-unfinished'),b2=$('bed-less');
   if(b1)b1.onclick=function(){state.unfinished=state.unfinished?0:1;save();renderBedroom()};

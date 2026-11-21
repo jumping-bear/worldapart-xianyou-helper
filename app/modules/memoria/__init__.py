@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """留影石（忆海回溯）：留影、结缘、奇遇留影与故交往事。"""
 from meta_update import SCHEMA as DATA_SCHEMA
 
@@ -7,7 +7,8 @@ from .build import build
 from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "memoria", "留影石"
-ORDER, SELECT, SCHEMA = 80, "latest", 2  # 模块自有缓存版本，改数据结构时只递增这里
+KEY, LABEL_EN = "memoria", "Memoria"
+ORDER, SELECT, SCHEMA = 99, "latest", 3  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "memoria_meta.json"
 EXTRA_SNAPSHOTS = {"memoria_avatars_meta.json": build_avatars}
 TABLES = frozenset({

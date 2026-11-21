@@ -13,6 +13,7 @@
     * 失败一律在写入前拦下（先检查后写入），覆盖式写入都走临时文件 + 原子替换。
 """
 import glob
+import hashlib
 import json
 import os
 import re
@@ -61,10 +62,13 @@ def _first_line(path):
 
 
 def _vdf(value):
-    """VDF 字符串转义：换行与反斜杠用 JSON 转义；双引号无法在 SteamCMD 的
-    KeyValues 里转义（不认 \\"），一律换成单引号，避免解析到一半截断报
-    「key name too long / got } in key」。"""
-    return json.dumps(str(value).replace('"', "'"), ensure_ascii=False)[1:-1]
+    """VDF 字符串：保留真实换行和单反斜杠。
+
+    SteamCMD 的 KeyValues 不会把 `\\n` 还原成换行，也不会把 `\\\\` 还原成
+    单反斜杠；JSON 式转义会让工坊页面显示一堆字面量 `\\n` 和双反斜杠。
+    双引号不认 `\\"`，一律换成单引号，避免解析到一半截断。
+    """
+    return str(value).replace('"', "'")
 
 
 def _slash(path):
@@ -166,27 +170,52 @@ def generate_pages(out_dir, version):
     return True
 
 
-def generate_vdf(target, version, content_dir):
+def generate_vdf(target, version, content_dir, keep_listing=False):
+    """生成上传配置。
+
+    默认写入英文标题与工坊描述：Steam 工坊的默认语言由脚本更新，中文标题/描述
+    是作者在 Steam 后台单独维护的本地化版本，不会被这里覆盖。
+    keep_listing=True 时省略 title/description，只更新内容与 changenote。
+    """
     template = _read(os.path.join(RELEASE_DIR, "workshop.vdf.tpl"))
-    title = "%s v%s（%s）" % ("仙友助手", version, _first_line(os.path.join(RELEASE_DIR, "title.txt")))
+    title = _first_line(os.path.join(RELEASE_DIR, "title.txt"))
     changenote = _read(os.path.join(RELEASE_DIR, "changenote.txt")).strip()
-    description = _read(os.path.join(WORKSHOP_DIR, "工坊描述_en.txt")).strip()
     body = (template
             .replace("{{CONTENT}}", _vdf(_slash(content_dir)))
             .replace("{{PREVIEW}}", _vdf(_slash(os.path.join(WORKSHOP_DIR, "preview.png"))))
-            .replace("{{TITLE}}", _vdf(title))
-            .replace("{{DESCRIPTION}}", _vdf(description))
             .replace("{{CHANGENOTE}}", _vdf(changenote)))
+    if keep_listing:
+        body = re.sub(r'^\s*"title"\s+"{{TITLE}}"\s*$\n?', '', body, flags=re.M)
+        body = re.sub(r'^\s*"description"\s+"{{DESCRIPTION}}"\s*$\n?', '', body, flags=re.M)
+        print("生成 vdf：%s（保留线上标题/描述）" % target)
+    else:
+        description = _read(os.path.join(WORKSHOP_DIR, "工坊描述_en.txt")).strip()
+        body = (body.replace("{{TITLE}}", _vdf(title))
+                    .replace("{{DESCRIPTION}}", _vdf(description)))
+        print("生成 vdf：%s（英文标题/描述：%s）" % (target, title))
     _write_atomic(target, body)
-    print("生成 vdf：%s" % target)
     return title
 
 
 def write_version_file(version):
-    """插件靠 仙友助手/version.json 判断工坊里是否有新版本，必须随包发布。"""
+    """插件靠 仙友助手/version.json 判断工坊里是否有新版本，必须随包发布。
+
+    同时写入 EXE 大小与 SHA-256：Steam 下载不完整时，插件会拒绝覆盖旧版，
+    避免把截断的 EXE 复制过去后整个工具打不开。
+    """
     path = os.path.join(APP_DIR, "version.json")
-    _write_atomic(path, json.dumps({"version": version}, ensure_ascii=False) + "\n")
-    print("已生成 仙友助手/version.json（v%s）" % version)
+    exe = os.path.join(APP_DIR, "仙友助手.exe")
+    payload = {"version": version}
+    if os.path.isfile(exe):
+        digest = hashlib.sha256()
+        with open(exe, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        payload["exe_size"] = str(os.path.getsize(exe))
+        payload["exe_sha256"] = digest.hexdigest()
+    _write_atomic(path, json.dumps(payload, ensure_ascii=False) + "\n")
+    print("已生成 仙友助手/version.json（v%s，EXE %s 字节）"
+          % (version, payload.get("exe_size", "?")))
 
 
 def update_readme(version):
@@ -255,16 +284,17 @@ def acquire_lock(version):
     return LOCK
 
 
-def release(version):
+def release(version, keep_listing=False):
     lock = acquire_lock(version)
     try:
         generate_pages(APP_DIR, version)
         update_readme(version)
-        write_version_file(version)
         staging = build_exe()
+        write_version_file(version)
         archive = make_zip(staging, version)
         clean_private_artifacts()
-        generate_vdf(os.path.join(WORKSHOP_DIR, "workshop.vdf"), version, APP_DIR)
+        generate_vdf(os.path.join(WORKSHOP_DIR, "workshop.vdf"), version, APP_DIR,
+                     keep_listing=keep_listing)
         print("发布产物就绪：%s" % archive)
         print("下一步：人工执行 workshop_release\\upload_to_workshop.bat")
     finally:
@@ -298,7 +328,7 @@ def main(argv):
         title = generate_vdf(os.path.join(out, "workshop.vdf"), version, APP_DIR)
         print("试运行完成：%s（标题：%s）" % (out, title))
         return 0
-    release(version)
+    release(version, keep_listing="--keep-listing" in argv)
     return 0
 
 

@@ -8,3 +8,14 @@
 .evbranch.branch-closed{border-left-color:#3a2126;opacity:.72}
 .evbranch.branch-closed .evname{color:#9aa3b2}
 @media(max-width:560px){.evbranch{margin-left:4px}}
+
+/* 高品质待拿奖励：和支线一致，直接在奇遇标题旁亮出紫/橙/红品 */
+.ev-hi{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+.ev-hi-chip{font-size:10px;line-height:1.6;padding:1px 6px;border-radius:5px;white-space:nowrap;
+  background:#241f14;border:1px solid #5a4c2a;color:#f0d38a}
+.ev-hi-chip.f3{background:#1e1a29;border-color:#453a5c;color:#cbb2ee}
+.ev-hi-chip.f5{background:#251818;border-color:#5c3535;color:#f0a6a6}
+.ev-hi-more{font-size:10px;color:#7d8593}
+#evopen .chip i{font-style:normal;color:#8b93a1;margin-left:5px;font-size:10px}
+#evopen .chip.on i{color:#c9f5dd}
+.effchip.note{border-color:#4c5d74;background:#18202b;color:#a9c4de;cursor:help}

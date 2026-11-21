@@ -1,10 +1,12 @@
 /* 人物图鉴：仅本模块 .rolebook-* 选择器。信息层级：在哪 → 是谁 → 关系 → 能做什么 → 善恶后果 → 履历 */
-.rolebook-hero{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;background:linear-gradient(120deg,#182031 0%,#151a24 60%,#1b1a26 100%);border:1px solid #2b3446;border-radius:14px;padding:18px 22px;margin:2px 0 12px}
-.rolebook-hero-text h2{font-size:18px;font-weight:600;color:#eef2f8;letter-spacing:.5px}
-.rolebook-hero-text p{color:#9aa6b8;font-size:12px;line-height:1.8;margin-top:6px;max-width:640px}
-.rolebook-hero-figures{display:flex;gap:22px}
-.rolebook-hero-figures>div{text-align:center;min-width:62px}
-.rolebook-hero-figures b{display:block;font-size:23px;color:#cfe9db;font-variant-numeric:tabular-nums;line-height:1.25}
+.rolebook-hero{display:flex;flex-direction:column;gap:13px;background:linear-gradient(120deg,#182031 0%,#151a24 60%,#1b1a26 100%);border:1px solid #2b3446;border-radius:14px;padding:16px 20px;margin:2px 0 12px}
+.rolebook-hero-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.rolebook-hero-head h2{font-size:17px;font-weight:600;color:#eef2f8;letter-spacing:.5px}
+.rolebook-hero-head span{color:#8b93a1;font-size:11.5px;line-height:1.6}
+.rolebook-hero-head b{color:#dfe6ef;font-weight:600}
+.rolebook-hero-figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:8px}
+.rolebook-hero-figures>div{text-align:center;padding:8px 4px;background:rgba(255,255,255,.025);border:1px solid #232b38;border-radius:9px}
+.rolebook-hero-figures b{display:block;font-size:20px;color:#cfe9db;font-variant-numeric:tabular-nums;line-height:1.25}
 .rolebook-hero-figures span{color:#7d8593;font-size:11px}
 
 /* 玩家关系概览 */
@@ -222,5 +224,41 @@
 .rolebook-chase li b{color:#ffb3bd}
 .rolebook-rel-label{color:#c2ccda;font-size:12px;margin:10px 0 6px;font-weight:600}
 .rolebook-rel-label:first-child{margin-top:0}
-@media(max-width:860px){.rolebook-filters-row{grid-template-columns:repeat(3,1fr)}.rolebook-search{grid-column:span 3}.rolebook-relnodes{grid-template-columns:1fr}}
+@media(max-width:860px){.rolebook-filters-row{grid-template-columns:repeat(3,1fr)}.rolebook-search{grid-column:span 3}.rolebook-relnodes{grid-template-columns:1fr}.rolebook-hero-figures{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:560px){.rolebook-filters-row{grid-template-columns:1fr 1fr}.rolebook-search{grid-column:span 2}.rolebook-hero-figures{gap:12px}.rolebook-grid{grid-template-columns:1fr}.rolebook-grid2,.rolebook-duo,.rolebook-relnodes{grid-template-columns:1fr}.rolebook-hero{padding:14px 16px}.rolebook-drawer-body{padding:8px 16px 32px}.rolebook-drawer-head{padding:16px}}
+
+/* 状态说明：一行小字，解释在世 / 寿终 / 退隐 / 未登场的关系 */
+.rolebook-state-hint{color:#7d8593;font-size:10.5px;line-height:1.7;margin:7px 2px 0}
+.rolebook-state-hint b{color:#c2ccda}
+
+/* 天赋：卡片列出全部名称 + 品质色，详情展示完整描述 */
+.rolebook-card-talents{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0 6px;color:#c7b08a;font-size:11.5px}
+.rolebook-talent-ico{color:#c9a86a}
+.rolebook-talent-chip{background:#2a2119;border:1px solid #4a3a26;color:#e0c48f;border-radius:6px;padding:2px 7px;white-space:nowrap}
+.rolebook-talent-more{color:#8a7a63}
+.rolebook-talents{display:grid;gap:8px}
+.rolebook-talent{border:1px solid #2b3446;background:#161c26;border-radius:9px;padding:10px 12px}
+.rolebook-talent.is-locked{opacity:.55}
+.rolebook-talent-head{display:flex;align-items:center;gap:8px;color:#e2d3b6;font-size:12.5px}
+.rolebook-talent-head b{font-weight:600}
+.rolebook-talent-lock{font-size:10.5px;color:#8d97a8;border:1px solid #3a4456;border-radius:5px;padding:1px 5px}
+.rolebook-talent p{margin:6px 0 0;color:#9fb0c6;font-size:12px;line-height:1.6}
+/* 覆盖模式顶栏高 46px，详情抽屉要避开，否则人物名字被压住 */
+body.xy-overlay .rolebook-drawer{top:46px}
+
+/* 天赋品质色：--qcolor 由前端按品质数值动态给出，新增品质无需改 CSS */
+.rolebook-talent-chip{background:#171d26;border:1px solid var(--qcolor,#4a3a26);color:var(--qcolor,#e0c48f)}
+.rolebook-talent-chip.is-locked{opacity:.6}
+.rolebook-talent{border-left:3px solid var(--qcolor,#2b3446)}
+.rolebook-talent-head b{color:var(--qcolor,#e2d3b6)}
+
+/* 闭关寿元：默认一行摘要，展开才占篇幅 */
+.rolebook-bt-sum{color:#8f9aab;font-size:11.5px;margin-left:6px}
+
+/* 值得洗髓：凡人 + 在世 + 高品质天赋，一眼可辨 */
+.rolebook-wash{display:inline-block;font-size:11px;color:#e0a34a;border:1px solid #6b5124;background:#2a2113;border-radius:5px;padding:1px 6px;margin-right:4px}
+
+/* 本月特殊互动入口：卡片徽标与详情标签 */
+.rolebook-special{display:inline-block;font-size:10.5px;line-height:1.6;padding:1px 7px;border-radius:5px;
+  color:#8ee6b3;background:rgba(95,189,139,.1);border:1px solid rgba(95,189,139,.36);white-space:nowrap}
+.rolebook-tag-green{color:#8ee6b3;background:rgba(95,189,139,.1);border-color:rgba(95,189,139,.36)}

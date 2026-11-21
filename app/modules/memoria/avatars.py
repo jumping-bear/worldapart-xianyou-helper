@@ -9,8 +9,8 @@ import base64
 import io
 import os
 
-AVATAR_SIZE = 96
-IMAGE_QUALITY = 80
+AVATAR_SIZE = 72
+IMAGE_QUALITY = 65
 
 
 def _rows(value):

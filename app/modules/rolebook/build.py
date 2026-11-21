@@ -207,8 +207,15 @@ def build(tables):
     sects = _name_map(tables.get("tbsect"), "sectName")
     races = _name_map(tables.get("tbnpcrace"), "raceName")
     elements = _name_map(tables.get("tbelement"), "element_name")
-    talents = {str(r["id"]): _text(r.get("name")) for r in _rows(tables.get("tbnpctalent"))
-               if isinstance(r, dict) and r.get("id") is not None}
+    talents = {}
+    for r in _rows(tables.get("tbnpctalent")):
+        if not isinstance(r, dict) or r.get("id") is None:
+            continue
+        talents[str(r["id"])] = {
+            "name": _text(r.get("name")),
+            "desc": _text(r.get("effect_desc")) or _text(r.get("ui_trigger_desc")),
+            "quality": _int(r.get("quality")),
+        }
     space_index = _space_index(tables)
 
     # 关联内容：按 npc_id / npcId 聚合，NPC 卡只存计数与前几个标题
@@ -224,6 +231,22 @@ def build(tables):
     for row in _rows(tables.get("tbnpcpersuadetopic")):
         if isinstance(row, dict) and row.get("npcId") is not None:
             persuade.setdefault(str(row["npcId"]), []).append(_text(row.get("topic")))
+    # 本月特殊互动入口：存档里的 special_sub_id 只是数字，这里换成按钮名/状态标签。
+    special_entries = {}
+    for row in _rows(tables.get("tbnpcinteractgameentry")):
+        if not isinstance(row, dict):
+            continue
+        npc_id = _int(row.get("npcId"))
+        sub_id = _int(row.get("subId"))
+        name = _text(row.get("interactButtonName"))
+        if not npc_id or not sub_id or not name:
+            continue
+        special_entries.setdefault("%s|%s" % (npc_id, sub_id), {
+            "name": name,
+            "type": _int(row.get("interactGameType")),
+            "tag": _text(row.get("stateTagName")),
+            "desc": _text(row.get("stateTagDesc")),
+        })
 
     # ---- meta：共享档位 / 规则 / 名称表（说明完整，只存一份）----
     def tier_pack(rows, min_key, name_key, desc_key):
@@ -264,6 +287,7 @@ def build(tables):
         return -1
 
     meta = {
+        "special_entries": special_entries,
         "evil_tiers": tier_pack(evil_tiers, "min", "evilName", "evilPrompt"),
         "repute_tiers": tier_pack(repute_tiers, "min", "reputeName", "reputePrompt"),
         "charm_tiers": tier_pack(charm_tiers, "min", "charmName", "charmPrompt"),
@@ -286,6 +310,8 @@ def build(tables):
              "prob": _int(r.get("chase_probability"))} for r in chase_rules],
         "realms": realms, "sects": sects, "races": races,
         "elements": elements, "talents": talents,
+        # 层号 → 境界全称：扫描期用存档里的实时境界覆盖模板值
+        "layers": layer_map,
         "spaces": space_index,
     }
 
@@ -348,13 +374,15 @@ def build(tables):
         safe_target = killable and evil < 0
 
         fixed_talents = []
+        seen_talents = set()
         for slot in row.get("talent_slots") or []:
             if not isinstance(slot, dict):
                 continue
             tid = _int(slot.get("fixed_talent_id"))
-            if tid and talents.get(str(tid)):
-                fixed_talents.append(talents[str(tid)])
-        fixed_talents = list(dict.fromkeys(fixed_talents))
+            info = talents.get(str(tid))
+            if tid and info and tid not in seen_talents:
+                seen_talents.add(tid)
+                fixed_talents.append({"id": tid, "name": info["name"]})
 
         mem_titles = memoria.get(str(npc_id)) or []
         topic_titles = topics.get(str(npc_id)) or []

@@ -12,7 +12,8 @@ import time
 # 保证 app/modules/*/build.py 的既有 import 路径不变。
 from app.tablekit import (  # noqa: F401
     SCHEMA, _callee_name, _call_parts, _clip, _const_args, _const_value, _expr_ints,
-    _int, _plain, _rows, _text, build_realms, build_spaces,
+    _int, _plain, _rows, _text, build_realms, build_spaces, set_text_language,
+    TEXT_REVISION,
 )
 
 CACHE_SCHEMA = 21
@@ -178,7 +179,23 @@ def _map(b, i, n):
     return out, i
 
 
+def _ext_hook(code, data):
+    return Ext(code, data)
+
+
+try:  # 有 C 扩展时解码快 5~6 倍；没有就退回纯 Python 实现，功能一致。
+    import msgpack as _msgpack
+except Exception:  # pragma: no cover - 打包环境缺依赖时走纯 Python
+    _msgpack = None
+
+
 def unpack(data):
+    if _msgpack is not None:
+        try:
+            return _msgpack.unpackb(data, strict_map_key=False, unicode_errors="replace",
+                                    ext_hook=_ext_hook)
+        except Exception:
+            pass
     return _dec(data, 0)[0]
 
 
@@ -463,12 +480,15 @@ def _empty_data(module, spec=None):
     return {"schema": SCHEMA}
 
 
-def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_dir=None):
+def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_dir=None,
+                  language="zh-Hans"):
     """返回 (数据, 来源报告)；任何更新失败都回退，不阻断存档查询。
 
     缓存按模块拆分到 cache_dir/modules/<key>.json，单个模块重算不会牵动其它模块。
     旧版 game_meta_cache.json 仍会读取一次，命中后按新结构继续使用。
+    配置表自带简中/繁中/英文三列，language 决定构建快照时取哪一列。
     """
+    set_text_language(language)
     modules = tuple(dict.fromkeys(modules))
     cache_dir = cache_dir or cache_directory()
     legacy_path = os.path.join(cache_dir, "game_meta_cache.json")
@@ -483,6 +503,10 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
     inspect_error = ""
     try:
         inspection = inspect_game(game_dir)
+        # 同一份配置在不同语言/文本清洗规则下会构建出不同文本，缓存指纹必须带上这些。
+        inspection["fingerprint"] = hashlib.sha256(
+            (inspection["fingerprint"] + "|" + language + "|t" + str(TEXT_REVISION)
+             ).encode("utf-8")).hexdigest()
         report["fingerprint"] = inspection["fingerprint"]
         report["package_version"] = inspection["source"]["package_version"]
     except Exception as e:
@@ -602,6 +626,8 @@ def export_snapshots(game_dir, output_dir, only=None):
     内容与现有文件一致的快照不落盘，保持 git diff 只体现真实变化。
     """
     specs = _plugin_specs()
+    # 内置快照统一以简中导出，运行时再按玩家游戏语言重建。
+    set_text_language("zh-Hans")
     if only:
         unknown = [key for key in only if key not in specs]
         if unknown:

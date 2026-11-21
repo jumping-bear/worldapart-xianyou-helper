@@ -9,10 +9,16 @@ from meta_update import (
     SCHEMA, _call_parts, _clip, _const_args, _const_value, _expr_ints, _int, _plain, _rows,
     _text, build_realms, build_spaces,
 )
+from app import acquire
 
 
 EVENT_GRADE_NAMES = {1: "上品", 2: "中品", 3: "下品"}
 EVENT_GRADE_HINT = "上品结局的平均奖励优于中品，中品优于下品；具体奖励见每条结局。"
+
+# 条件表达式里常出现「拥有物品数量(50000)」这类裸 id；构建时先把物品名/货币表准备好，
+# 渲染成「拥有 灵石」而不是「拥有物品 50000 数量」。
+_ITEM_NAMES = {}
+_CURRENCY = set()
 
 
 _OP_NAMES = {
@@ -20,6 +26,99 @@ _OP_NAMES = {
     "<": "<", "小于": "<", "<=": "<=", "小于等于": "<=",
     "==": "==", "等于": "==", "!=": "!=",
 }
+
+
+def _layer_maps(tables, realms):
+    """层数 id → 阶段名 / 境界 id。
+
+    境界只能由「层 → 阶段 → 境界」推出；直接拿阶段 id 当层号查会得到凡人。
+    """
+    phase_names, phase_realms = {}, {}
+    for row in _rows(tables.get("tbcultivatephase")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            phase_id = str(_int(row["id"]))
+            phase_names[phase_id] = _text(row.get("phase_name")) or ""
+            phase_realms[phase_id] = _int(row.get("realm"))
+    names, layer_realms, layer_numbers = {}, {}, {}
+    for row in _rows(tables.get("tbcultivatelayer")):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        phase_id = str(_int(row.get("phase")))
+        realm_id = phase_realms.get(phase_id, 0)
+        name = phase_names.get(phase_id) or realms.get(str(realm_id)) or ""
+        layer_id = str(_int(row["id"]))
+        if name:
+            names[layer_id] = name
+        if realm_id:
+            layer_realms[layer_id] = realm_id
+        local = _int(row.get("layer"))
+        if local:
+            layer_numbers[layer_id] = local
+    return names, layer_realms, layer_numbers
+
+
+def _humanize_gate(text, realms, layer_phases):
+    """把表达式里的阶段/层数阈值换成境界名和阶段名。"""
+    if not text:
+        return text
+    text = re.sub(r"(?:修炼阶段|境界)\s*(?:>=|≥|达到)\s*(\d+)",
+                  lambda m: "境界达到「%s」" % (realms.get(m.group(1)) or ("境界 %s" % m.group(1))),
+                  text)
+    text = re.sub(r"(?:(?:修炼)?层数|修为)\s*(?:>=|≥|达到)\s*(\d+)",
+                  lambda m: "修为达到「%s」" % (layer_phases.get(m.group(1)) or ("第 %s 层" % m.group(1))),
+                  text)
+    text = text.replace("指定年月日时辰", "在特定时辰")
+    return text
+
+
+def _left_key(node):
+    """解析「玩家.境界」这类索引表达式，返回 (拥有者, 字段)。"""
+    node = node[1] if isinstance(node, (list, tuple)) and len(node) == 2 \
+        and isinstance(node[1], dict) else node
+    if not isinstance(node, dict):
+        return "", ""
+    owner = ""
+    target = node.get("target")
+    if isinstance(target, list) and len(target) > 1 and isinstance(target[1], dict):
+        owner = str(target[1].get("name") or "")
+    key = ""
+    index = node.get("index")
+    if isinstance(index, list) and len(index) > 1 and isinstance(index[1], dict):
+        key = str(index[1].get("value") or "")
+    return owner, key
+
+
+def _self_check(node, self_id):
+    """交互点的“任务目标未激活 / 非（已提交自身）”是自检，不是给玩家的开启条件。"""
+    call, index, args = _call_parts(node)
+    ids = {_int(value) for value in _expr_ints(args)}
+    if not self_id or self_id not in ids:
+        return False
+    if call in ("!", "非") or index in ("!", "非"):
+        inner = _call_parts(args[0]) if args else ("", "", [])
+        if inner[1] in ("任务提交", "任务持有", "任务接取", "任务进行中"):
+            return True
+    return index in ("任务目标未激活", "任务目标激活中")
+
+
+def _gate_text(node, attrs, quest_names, realms, layer_phases, layer_numbers, self_id=0):
+    """统一走 acquire：奇遇与支线对同一表达式永远得到同一句人话。"""
+    return acquire.gate_text(node, {
+        "attrs": attrs, "quest_names": quest_names,
+        "realms": realms, "layer_phases": layer_phases,
+        "layer_local": layer_numbers,
+    }, self_id)
+
+
+def _internal_only_cond(cond):
+    """选项条件是否只是奇遇自身的状态自检（不构成玩家门槛）。"""
+    text = cond.get("text") or ""
+    if cond.get("checks"):
+        return False
+    if not any(tag in text for tag in ("奇遇进行中", "已接取", "已提交",
+                                       "任务进行中", "任务持有", "任务提交", "任务接取")):
+        return False
+    return not re.search(r"(等级|灵石|层|境界|时辰|声望|好感)\s*[><=≥≤]", text)
 
 
 def _lines(value):
@@ -149,6 +248,8 @@ def _designer_path(note):
 # 必须对齐到对话树里选项的真实条件（tree.nodes.*.options[].conds[].checks）。下面这组函数负责对齐。
 _THRESHOLD_RE = re.compile(r"^(.*?)（(需)?\s*([^（）]*?)\s*(≥|>)\s*(\d+)\s*）$")
 _LEVEL_RE = re.compile(r"^(.*?)（(需)?\s*([^（）]*?)\s*(\d+)\s*级）$")
+# 策划备注常把门槛写在句尾，如「帮少女说话　【医术1级 ✓】」；这类标注会随版本过期。
+_BRACKET_RE = re.compile(r"\s*【([^】]*)】\s*$")
 _VERDICT_RE = re.compile(r"^(神识|灵机|体魄|辩道|医术)检定(成功|失败)$")
 
 
@@ -167,6 +268,17 @@ def _match_score(a, b):
         return 0.85 + 0.15 * len(a) / len(b)
     if b in a:
         return 0.85 + 0.15 * len(b) / len(a)
+    # 策划备注常把选项缩写成「反问坐庄」，而真实选项是一整句话；
+    # 按字符顺序包含关系给一个较高分，避免误挂「以实际选项为准」。
+    if len(a) >= 3:
+        cursor = 0
+        for char in a:
+            cursor = b.find(char, cursor)
+            if cursor < 0:
+                break
+            cursor += 1
+        else:
+            return 0.8
     return difflib.SequenceMatcher(None, a, b).ratio()
 
 
@@ -248,10 +360,18 @@ def _min_attr_threshold(records, attr_id):
 
 def _align_path_step(step, records, attrs, items, currency):
     """把单条路径步骤里的“（需X≥N）”“（X≥N）”“（需X N 级）”阈值对齐到剧情树的真实选项条件。"""
+    # 策划备注里的「【医术1级 ✓】」会随版本过期（实际选项可能已要求 4 级），
+    # 先剥掉旧标注，再按真实选项条件重算，避免同一结局出现两个不同等级。
+    bracket = _BRACKET_RE.search(step)
+    if bracket:
+        step = step[:bracket.start()].strip(" 　")
     match = _THRESHOLD_RE.match(step) or _LEVEL_RE.match(step)
-    if not match:
+    if match:
+        core = match.group(1).strip()
+    elif bracket:
+        core = step
+    else:
         return step
-    core = match.group(1).strip()
     core_norm = _norm_match(core)
     if not core_norm:
         return step
@@ -266,6 +386,8 @@ def _align_path_step(step, records, attrs, items, currency):
         if need:
             return "%s（%s）" % (core, need)
         return core
+    if not match:
+        return step
     # 流程型“神识检定成功/失败”等无法按选项文本匹配，改用属性名在树里找回真实门槛。
     verdict = _VERDICT_RE.match(core)
     if verdict:
@@ -301,6 +423,10 @@ def _operand_text(node, attrs, quest_names=None):
         attr_id = values[0] if values else 0
         info = attrs.get(str(attr_id)) or {}
         return {"text": (info.get("name") or "探索属性") + "等级", "attr": attr_id}
+    if name == "玩家" and index in ("达到修炼层数", "修炼层数"):
+        return {"text": "修为"}
+    if name == "玩家" and index in ("修炼阶段", "境界"):
+        return {"text": "境界"}
     if name == "条件" and index in ("任务持有", "任务提交"):
         values = _expr_ints(args)
         quest_id = values[0] if values else 0
@@ -311,7 +437,11 @@ def _operand_text(node, attrs, quest_names=None):
     if name == "拥有物品数量":
         values = _expr_ints(args)
         if values:
-            return {"text": "拥有物品 %s 数量" % values[0], "item": values[0]}
+            item_id = _int(values[0])
+            if item_id in _CURRENCY:
+                return {"text": "灵石", "money": True}
+            name = _ITEM_NAMES.get(item_id) or "物品"
+            return {"text": "拥有 %s" % name, "item": item_id}
     value = _const_value(node)
     if isinstance(value, bool):
         return {"text": "是" if value else "否", "value": value}
@@ -336,6 +466,14 @@ def _operand_text(node, attrs, quest_names=None):
 def _condition(node, attrs, quest_names=None):
     """把条件表达式转成可读文本，并在可靠时附带可判定的检查项。"""
     name, index, args = _call_parts(node)
+    if name == "玩家" and index in ("达到修炼层数", "修炼层数"):
+        values = _const_args(args) or _expr_ints(args)
+        if values:
+            return {"text": "修为 >= %s" % _int(values[-1]), "checks": [], "exact": False}
+    if name == "玩家" and index in ("修炼阶段", "境界"):
+        values = _const_args(args) or _expr_ints(args)
+        if values:
+            return {"text": "境界 >= %s" % _int(values[-1]), "checks": [], "exact": False}
     if name in ("&&", "and", "||", "or"):
         parts = [_condition(arg, attrs, quest_names) for arg in args]
         checks, exact = [], True
@@ -491,7 +629,7 @@ def _option_actions(expr, flows, attrs, quest_names=None):
                     sink.append({"kind": "jump", "id": values[0],
                                  "sub": values[1] if len(values) > 1 else 0, "conds": conds})
                 return
-            if name == "流程" and index == "播放立绘AVG组":
+            if name == "流程" and index in ("播放剧情", "播放立绘AVG组"):
                 values = _const_args(args) or _expr_ints(args)
                 if values:
                     sink.append({"kind": "jump", "id": values[0], "sub": 0, "conds": conds})
@@ -501,7 +639,7 @@ def _option_actions(expr, flows, attrs, quest_names=None):
                 if values:
                     resolve_flow(values[0], conds, depth + 1, set(seen), sink)
                 return
-            if name == "随机事件" and index == "完整奖励结局":
+            if name == "随机事件" and index in ("完整奖励结局", "随机事件结局"):
                 values = _const_args(args) or _expr_ints(args)
                 if values:
                     sink.append({"kind": "ending", "id": values[0], "conds": conds})
@@ -518,6 +656,97 @@ def _option_actions(expr, flows, attrs, quest_names=None):
 
     resolve(expr, [], 0, set())
     return out
+
+
+def _flow_actions(flow_id, flows, attrs, quest_names=None):
+    """把某个流程当成选项动作来展开，复用 _option_actions 的流程跟随逻辑。"""
+    expr = {"func": ["call", {"name": "执行流程",
+                              "arguments": [["int", {"value": flow_id}]]}], "args": []}
+    return _option_actions(expr, flows, attrs, quest_names)
+
+
+def _flow_entries(quest_id, flows, attrs, quest_names=None):
+    """随机事件入口对白常只有旁白，真正的选项在流程后续的对白里。
+
+    找出“从播放 quest_id 开始”的流程链，按顺序返回对话 id 与直接结局 id。
+    多个流程都能播这段剧情时，取对话链最长的一条，避免拿到回顾/摘要流程。
+    """
+    best = ([], [])
+    matches = 0
+    for flow_id in sorted(flows):
+        if not isinstance(flows[flow_id], dict):
+            continue
+        actions = _flow_actions(flow_id, flows, attrs, quest_names)
+        if not any(action.get("kind") == "jump" and _int(action.get("id")) == quest_id
+                   for action in actions):
+            continue
+        matches += 1
+        dialogues, endings, seen = [], [], set()
+
+        def collect(action):
+            if not isinstance(action, dict):
+                return
+            if action.get("kind") == "jump":
+                dialogue_id = _int(action.get("id"))
+                if dialogue_id and dialogue_id not in seen:
+                    seen.add(dialogue_id)
+                    dialogues.append(dialogue_id)
+            elif action.get("kind") == "ending":
+                ending_id = _int(action.get("id"))
+                if ending_id and ending_id not in endings:
+                    endings.append(ending_id)
+            for tail in action.get("after") or []:
+                collect(tail)
+
+        for action in actions:
+            collect(action)
+        if len(dialogues) > len(best[0]):
+            best = (dialogues, endings)
+        if matches >= 6:
+            break
+    return best
+
+
+def _compact_linear(nodes):
+    """把“只有一条继续”的旁白节点合并进上一段，只保留真正的选项节点。"""
+    def key_of(to):
+        try:
+            parts = str(to)[2:].split(":")
+            return (_int(parts[0]), _int(parts[1]))
+        except (IndexError, ValueError):
+            return None
+
+    changed = True
+    while changed:
+        changed = False
+        inbound = {}
+        for node in nodes.values():
+            for option in node.get("options") or []:
+                to = option.get("to") or ""
+                if to.startswith("d:"):
+                    target = key_of(to)
+                    if target:
+                        inbound[target] = inbound.get(target, 0) + 1
+        for key, node in list(nodes.items()):
+            options = node.get("options") or []
+            if len(options) != 1:
+                continue
+            option = options[0]
+            if option.get("t") or option.get("after"):
+                continue
+            to = option.get("to") or ""
+            if not to.startswith("d:"):
+                continue
+            target = key_of(to)
+            nxt = nodes.get(target)
+            if not nxt or inbound.get(target) != 1:
+                continue
+            node["text"] = (node.get("text") or "") + "\n" + (nxt.get("text") or "")
+            node["options"] = nxt.get("options") or []
+            nodes.pop(target, None)
+            changed = True
+            break
+    return nodes
 
 
 def _build_tree(quest_id, dialogues, flows, attrs, quest_names=None, max_nodes=160):
@@ -553,6 +782,16 @@ def _build_tree(quest_id, dialogues, flows, attrs, quest_names=None, max_nodes=1
 
     root = entry_key(quest_id, 0)
     nodes, endings, queue = {}, set(), [root]
+    # 随机事件（如“新挂的招工牌”）：入口对白只有旁白，选项在流程后续对白里，
+    # 先把整条流程链上的对白加入待处理队列，再在无选项的节点上补“继续”。
+    flow_chain, flow_endings = _flow_entries(quest_id, flows, attrs, quest_names)
+    flow_keys = {}
+    flow_links = {}
+    for dialogue_id in ([quest_id] + [cid for cid in flow_chain if cid != quest_id]):
+        key = entry_key(dialogue_id, 0)
+        flow_keys[dialogue_id] = key
+        if key != root and key not in nodes:
+            queue.append(key)
     while queue and len(nodes) < max_nodes:
         key = queue.pop(0)
         if key in nodes:
@@ -563,31 +802,94 @@ def _build_tree(quest_id, dialogues, flows, attrs, quest_names=None, max_nodes=1
         node = {"text": node_text(key[0], key), "options": []}
 
         def add(option_text, effects, actions):
+            entries, seen_sigs = [], set()
             for action in actions:
                 entry = {"t": option_text, "eff": effects, "conds": action.get("conds") or []}
+                tail_ids, tail_endings = [], []
+
+                def collect_tail(items):
+                    for item in items:
+                        if not isinstance(item, dict):
+                            continue
+                        if item.get("kind") == "jump":
+                            tail_ids.append(_int(item.get("id")))
+                        elif item.get("kind") == "ending":
+                            tail_endings.append(_int(item.get("id")))
+                        collect_tail(item.get("after") or [])
+
+                def linear_chain(items):
+                    """随机事件流程把后续对白串在 after 里；只有单链时才逐段接“继续”。"""
+                    out = []
+                    while (isinstance(items, list) and len(items) == 1
+                           and isinstance(items[0], dict) and items[0].get("kind") == "jump"):
+                        item = items[0]
+                        out.append(_int(item.get("id")))
+                        items = item.get("after") or []
+                    return out
+
                 if action["kind"] == "jump":
                     target = entry_key(action["id"], action.get("sub") or 0)
                     entry["to"] = "d:%s:%s" % target
+                    collect_tail(action.get("after") or [])
+                    chain = linear_chain(action.get("after") or [])
+                    for dialogue_id in dict.fromkeys(tail_ids):
+                        if not dialogue_id:
+                            continue
+                        tail_key = entry_key(dialogue_id, 0)
+                        if tail_key in dialogues and tail_key not in nodes:
+                            queue.append(tail_key)
+                    if tail_endings:
+                        unique_endings = list(dict.fromkeys(tail_endings))
+                        entry["after"] = ["e:%s" % eid for eid in unique_endings]
+                        endings.update(unique_endings)
+                    # 单链：动作目标 → 后续对白逐段续接，避免中间旁白变成孤立节点。
+                    if chain:
+                        previous = _int(action["id"])
+                        for dialogue_id in chain:
+                            if dialogue_id and previous != quest_id:
+                                flow_links[previous] = dialogue_id
+                            previous = dialogue_id
                     if target in dialogues and target not in nodes:
                         queue.append(target)
-                    after = []
-                    for tail in action.get("after") or []:
-                        if isinstance(tail, dict) and tail.get("kind") == "ending":
-                            after.append("e:%s" % tail["id"])
-                            endings.add(tail["id"])
-                    if after:
-                        entry["after"] = after
                 elif action["kind"] == "ending":
                     entry["to"] = "e:%s" % action["id"]
                     endings.add(action["id"])
                 else:
                     entry["to"] = ""
-                node["options"].append(entry)
+                signature = (entry.get("t"), entry.get("to"), tuple(entry.get("after") or []))
+                if signature in seen_sigs:
+                    continue
+                seen_sigs.add(signature)
+                entries.append(entry)
+            # 同一选项的成功/失败、随机流程会解析成多条动作：文案相同就合成一条，
+            # 结局取并集；目标不同则标记“结果随机”，避免树里出现多个一模一样的选项。
+            if not option_text:
+                node["options"].extend(entries)
+                return
+            merged, order = {}, []
+            for entry in entries:
+                key = entry.get("t")
+                if key not in merged:
+                    merged[key] = dict(entry)
+                    order.append(key)
+                    continue
+                slot = merged[key]
+                if not slot.get("after") and entry.get("after"):
+                    slot["after"] = entry["after"]
+                elif entry.get("after"):
+                    slot["after"] = list(dict.fromkeys(
+                        list(slot.get("after") or []) + list(entry["after"])))
+                if entry.get("to") != slot.get("to"):
+                    slot["multi"] = True
+            node["options"].extend(merged[key] for key in order)
 
         for option in row.get("options") or []:
             if not isinstance(option, dict):
                 continue
             label = _clip(_plain(option.get("optionText")), 80)
+            # 配置里的「【医术4级 ✓】」是写死的旧标注，容易和实时条件冲突；
+            # 去掉方括号后缀，统一由前端按真实门槛显示 ✓/✗。
+            label = re.sub(r"\s*【[^】]*】\s*$", "", label).strip() or label
             effects = _option_effects(option.get("optionExpr"), attrs)
             actions = _option_actions(option.get("optionExpr"), flows, attrs, quest_names)
             if actions:
@@ -602,7 +904,71 @@ def _build_tree(quest_id, dialogues, flows, attrs, quest_names=None, max_nodes=1
                                     "to": "d:%s:%s" % target})
             if target in dialogues and target not in nodes:
                 queue.append(target)
+        # 只由「奇遇进行中 / 已接取 / 已提交」这类内部状态组成的条件，玩家在选项上看不到，
+        # 也不影响能不能选；全部过滤掉，避免把自检当成门槛展示。
+        for option in node["options"]:
+            option["conds"] = [cond for cond in (option.get("conds") or [])
+                               if not _internal_only_cond(cond)]
+        # 同文案的“条件成功 / 条件不足”两段剧情，在游戏里始终只显示一个选项：
+        # 条件只决定走哪段结果，不是“能不能选”。这里合成一条，条件改成结果提示。
+        by_label = {}
+        for entry in node["options"]:
+            label = entry.get("t")
+            if label:
+                by_label.setdefault(label, []).append(entry)
+        for label, group in by_label.items():
+            if len(group) != 2:
+                continue
+            conditioned = [item for item in group if item.get("conds")]
+            plain = [item for item in group if not item.get("conds")]
+            if len(conditioned) != 1 or len(plain) != 1:
+                continue
+            main, alt = plain[0], conditioned[0]
+            notes = []
+            for cond in alt.get("conds") or []:
+                for check in cond.get("checks") or []:
+                    if check.get("t") != "attr":
+                        continue
+                    info = attrs.get(str(check.get("a"))) or {}
+                    name = info.get("name") or ("属性 %s" % check.get("a"))
+                    notes.append("%s %s %s" % (name, check.get("op"), check.get("v")))
+            if notes:
+                main["note"] = "满足 %s 时另有结果" % " 且 ".join(notes)
+            else:
+                texts = [cond.get("text") for cond in alt.get("conds") or [] if cond.get("text")]
+                if texts:
+                    main["note"] = "条件满足时另有结果"
+            # 条件分支的目标不能丢：主选项走兜底结果，条件满足时的另一段挂在 alts 上。
+            if alt.get("to") or alt.get("after"):
+                main.setdefault("alts", []).append({
+                    "conds": alt.get("conds") or [],
+                    "to": alt.get("to") or "",
+                    "after": alt.get("after") or []})
+            node["options"] = [item for item in node["options"] if item is not alt]
         nodes[key] = node
+    # 流程链补边：没有真实选项的旁白节点自动接到下一段对白；链尾接流程结局。
+    ordered_ids = list(flow_keys)
+    for index, dialogue_id in enumerate(ordered_ids):
+        node = nodes.get(flow_keys[dialogue_id])
+        if not node or node.get("options"):
+            continue
+        if index + 1 < len(ordered_ids):
+            next_key = flow_keys[ordered_ids[index + 1]]
+            node["options"].append({"t": "", "eff": [], "conds": [],
+                                    "to": "d:%s:%s" % next_key})
+        elif flow_endings:
+            node["options"].append({"t": "", "eff": [], "conds": [], "to": "",
+                                    "after": ["e:%s" % eid for eid in flow_endings]})
+            endings.update(flow_endings)
+    # 选项跳转后的单链对白：目标节点没有真实选项时补“继续”，走到链尾再结算结局。
+    for source_id, next_id in flow_links.items():
+        node = nodes.get(entry_key(source_id, 0))
+        next_key = entry_key(next_id, 0)
+        if not node or node.get("options") or next_key not in nodes:
+            continue
+        node["options"].append({"t": "", "eff": [], "conds": [],
+                                "to": "d:%s:%s" % next_key})
+    _compact_linear(nodes)
     if not nodes:
         return None
     prefix_keys = [key for key in keys if key != root and (dialogues[key].get("text") or "")]
@@ -613,6 +979,61 @@ def _build_tree(quest_id, dialogues, flows, attrs, quest_names=None, max_nodes=1
         "nodes": {"d:%s:%s" % key: value for key, value in nodes.items()},
         "endings": sorted(endings),
     }
+
+
+def _ending_requirements(tree):
+    """反推每个结局的获取条件（只统计“所有走法都带条件”的硬门槛）。
+
+    返回 {结局id: [[条件, ...], ...]}：外层每条是一种走法（或），内层是必须同时满足的条件（且）。
+    """
+    nodes = (tree or {}).get("nodes") or {}
+    root = (tree or {}).get("root") or ""
+    if not nodes or root not in nodes:
+        return {}
+    paths = {}
+
+    def record(ending_id, conds):
+        cleaned, seen = [], set()
+        for cond in conds:
+            key = json.dumps(cond, ensure_ascii=False, sort_keys=True)
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(cond)
+        paths.setdefault(str(ending_id), {})[tuple(sorted(seen))] = cleaned
+
+    def walk(node_id, acc, seen, depth):
+        if depth > 12 or node_id in seen:
+            return
+        node = nodes.get(node_id)
+        if not isinstance(node, dict):
+            return
+        seen = seen | {node_id}
+        for option in node.get("options") or []:
+            base = list(acc) + list(option.get("conds") or [])
+            branches = [(option.get("to") or "", option.get("after") or [], base)]
+            for alt in option.get("alts") or []:
+                branches.append((alt.get("to") or "", alt.get("after") or [],
+                                 base + list(alt.get("conds") or [])))
+            for target, after, conds in branches:
+                target = str(target)
+                if target.startswith("e:"):
+                    record(target[2:], conds)
+                elif target.startswith("d:"):
+                    walk(target, conds, seen, depth + 1)
+                for tail in after:
+                    tail = str(tail)
+                    if tail.startswith("e:"):
+                        record(tail[2:], conds)
+
+    walk(root, [], set(), 0)
+    out = {}
+    for ending_id, group in paths.items():
+        if not group or not all(conds for conds in group.values()):
+            continue
+        # 同一结局可能有多条走法：短的排前面，最多留 4 条，够玩家判断。
+        out[ending_id] = sorted(group.values(), key=lambda conds: len(conds))[:4]
+    return out
 
 
 def build_event(tables):
@@ -666,6 +1087,11 @@ def build_event(tables):
             "use": sorted(usage.get(str(item_id), [])),
         }
 
+    _ITEM_NAMES.clear()
+    _ITEM_NAMES.update({_int(key): value.get("name") for key, value in items.items()})
+    _CURRENCY.clear()
+    _CURRENCY.update(currency)
+
     attrs = {}
     for row in _rows(tables["tbinteractattribute"]):
         if not isinstance(row, dict) or row.get("id") is None:
@@ -682,6 +1108,26 @@ def build_event(tables):
     drops = {str(_int(r.get("id"))): r for r in _rows(tables["tbrewarddrop"]) if isinstance(r, dict)}
     spaces = build_spaces(tables)
     realms = build_realms(tables)
+    layer_phases, layer_realms, layer_numbers = _layer_maps(tables, realms)
+    npc_names = {}
+    for row in _rows(tables.get("tbnpcbasecfg")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            npc_names[str(_int(row["id"]))] = _plain(row.get("npcName")) or ""
+    npc_homes = {}
+    for row in _rows(tables.get("tbinitialspacenpc")):
+        if not isinstance(row, dict) or row.get("npcId") is None:
+            continue
+        info = spaces.get(str(_int(row.get("spaceId")))) or {}
+        path = [part for part in (info.get("path") or []) if part]
+        if path:
+            npc_homes[str(_int(row["npcId"]))] = " / ".join(path)
+    cond_rows, cond_aliases = {}, {}
+    for row in _rows(tables.get("tbconditionexpr")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            cond_rows[str(_int(row["id"]))] = row
+            alias = _text(row.get("alias"))
+            if alias and row.get("condition"):
+                cond_aliases[alias] = row.get("condition")
     dialogues = {}
     for row in _rows(tables["tbdialogue"]):
         if isinstance(row, dict) and row.get("id") is not None:
@@ -707,9 +1153,13 @@ def build_event(tables):
 
     # 交互点：tbinteractaction 表达式里引用任务 id，再经 tbspaceinteractui 落到具体场景。
     ui_by_action = {}
+    ui_unlock = {}
     for row in _rows(tables["tbspaceinteractui"]):
         if isinstance(row, dict):
-            ui_by_action.setdefault(_int(row.get("interactActionId")), []).append(row)
+            action_id = _int(row.get("interactActionId"))
+            ui_by_action.setdefault(action_id, []).append(row)
+            if row.get("unlockConditionExpr"):
+                ui_unlock.setdefault(action_id, []).append(row.get("unlockConditionExpr"))
     interact_hits = {}
     for row in _rows(tables["tbinteractaction"]):
         if not isinstance(row, dict):
@@ -783,6 +1233,128 @@ def build_event(tables):
              for quest_id in events}
     quest_names = {quest_id: _plain((row or {}).get("name")) or ("任务 %s" % quest_id)
                    for quest_id, row in quests.items()}
+
+    # 场景交互点的开启条件（例：先完成某主线才出现），奇遇也从这里取，和支线同源。
+    interact_open = {}
+    interact_checks = {}
+    for row in _rows(tables.get("tbinteractaction")):
+        if not isinstance(row, dict):
+            continue
+        matched = {value for value in _expr_ints(row.get("interactExpr")) if value in candidates}
+        if not matched:
+            continue
+        node = row.get("openConditionExpr") or {}
+        action_id = _int(row.get("id"))
+        for quest_id in matched:
+            unlock_parts = []
+            unlock_trees = []
+            for unlock in ui_unlock.get(action_id, []):
+                unlock = acquire.resolve_aliases(unlock, cond_aliases)
+                text = _gate_text(unlock, attrs, quest_names, realms, layer_phases,
+                                  layer_numbers, quest_id)
+                if text:
+                    unlock_parts.append(text)
+                tree = acquire.collect(unlock, {"quest_names": quest_names, "realms": realms,
+                                                "layer_phases": layer_phases,
+                                                "layer_local": layer_numbers})
+                if tree:
+                    unlock_trees.append(tree)
+            node = acquire.resolve_aliases(node, cond_aliases)
+            action_text = _gate_text(node, attrs, quest_names, realms, layer_phases,
+                                     layer_numbers, quest_id)
+            text = acquire.combine(" 且 ".join(unlock_parts), action_text)
+            if text:
+                interact_open[quest_id] = acquire.combine(interact_open.get(quest_id), text)
+            action_tree = acquire.collect(node, {"quest_names": quest_names,
+                                                 "realms": realms, "layer_phases": layer_phases,
+                                                 "layer_local": layer_numbers}, quest_id)
+            trees = unlock_trees + ([action_tree] if action_tree else [])
+            if trees:
+                interact_checks[quest_id] = ({"mode": "all", "parts": trees}
+                                             if len(trees) > 1 else trees[0])
+
+    def event_open(quest_id, quest):
+        """奇遇开启条件与支线共用同一套字段优先级：接取条件 > 触发表达式 > 对话选项 > 交互点。"""
+        cond_row = cond_rows.get(str(_int(quest.get("acqCondition")))) or {}
+        base_text, base_tree = "", None
+        if cond_row:
+            cond_expr = acquire.resolve_aliases(cond_row.get("condition"), cond_aliases)
+            base_text = _gate_text(cond_expr, attrs, quest_names,
+                                   realms, layer_phases, layer_numbers, quest_id)
+            base_tree = acquire.collect(cond_expr,
+                                        {"quest_names": quest_names,
+                                         "realms": realms, "layer_phases": layer_phases,
+                                         "layer_local": layer_numbers},
+                                        quest_id)
+
+        def _ret(kind, text, source, checks):
+            """接取条件与地点/交互门槛同时成立才算开启，不能只取其中一个。"""
+            if base_text and text.startswith("无额外开启条件"):
+                text = ""
+            return {"kind": kind, "text": acquire.combine(base_text, text), "source": source,
+                    "checks": _merge_checks(base_tree, checks)}
+
+        def _merge_checks(*trees):
+            items = [tree for tree in trees if tree]
+            if not items:
+                return None
+            return {"mode": "all", "parts": items} if len(items) > 1 else items[0]
+        trigger = acquire.resolve_aliases(quest.get("triggerExpr") or {}, cond_aliases)
+        _name, call, targs = _call_parts(trigger)
+        nums = [value for value in _const_args(targs) if isinstance(value, (int, float))]
+        if _name == "任务触发" and call == "进入场景" and nums:
+            info = spaces.get(str(_int(nums[0]))) or {}
+            place = " / ".join([part for part in (info.get("path") or []) if part]) \
+                or info.get("name") or ("场景 %s" % _int(nums[0]))
+            return _ret("enter_scene", "进入「%s」时自动触发" % place, "triggerExpr", None)
+        if call == "任务提交" and nums:
+            labels = [quest_names.get(_int(value)) or ("任务 %s" % _int(value)) for value in nums]
+            return _ret("quest", "完成「%s」后出现" % "」或「".join(labels), "triggerExpr",
+                        {"mode": "any", "parts": [
+                            {"kind": "quest", "quest": _int(value), "mode": "任务提交"}
+                            for value in nums]})
+        if call in ("修炼阶段达到", "境界达到") and nums:
+            realm_id = str(_int(nums[0]))
+            return _ret("realm", "境界达到「%s」" % (realms.get(realm_id) or ("境界 %s" % realm_id)),
+                        "triggerExpr", {"kind": "realm", "need": _int(nums[0])})
+        if call == "修炼层数达到" and nums:
+            layer_id = str(_int(nums[0]))
+            level = _int(nums[0])
+            return _ret("layer", "修为达到「%s」（第 %s 层）" % (
+                layer_phases.get(layer_id) or ("第 %s 层" % (layer_numbers.get(layer_id) or level)),
+                layer_numbers.get(layer_id) or level), "triggerExpr",
+                {"kind": "layer", "need": level})
+        # 其余「任务触发.XXX」统一翻成人话；没见过的写法也要露出来，不能静默当成无门槛。
+        trigger_labels = {
+            "进入任一场景": "进入任意场景时自动触发",
+            "接取条件满足": "满足接取条件时自动触发",
+            "首次加入宗门": "首次加入宗门时触发",
+            "剧情组播放完毕": "剧情播放完后触发",
+            "修炼层数修为已满": "当前层修为满后触发",
+            "新手完成": "完成新手引导后触发",
+        }
+        if _name == "任务触发":
+            if call in trigger_labels:
+                return _ret("trigger", trigger_labels[call], "triggerExpr", None)
+            if call == "NPC好感度达到" and nums:
+                need = _int(nums[-1])
+                return _ret("favor", "NPC 好感达到 %s 后触发" % need, "triggerExpr", None)
+            if call and call not in ("任务提交", "修炼阶段达到", "修炼层数达到", "境界达到"):
+                return _ret("unknown", "触发条件：%s" % call, "triggerExpr",
+                            {"kind": "unknown", "text": "触发条件：%s" % call})
+        option = _text(quest.get("acqOptionText"))
+        npc_id = _int(quest.get("acqNpcID"))
+        if option and npc_id:
+            home = npc_homes.get(str(npc_id)) or ""
+            return _ret("dialogue",
+                        "%s与「%s」对话，选择「%s」接取" % (
+                            ("在%s" % home) if home else "",
+                            npc_names.get(str(npc_id)) or ("NPC %s" % npc_id), option),
+                        "dialogue", None)
+        if interact_open.get(quest_id):
+            return _ret("interaction", interact_open[quest_id], "interaction",
+                        interact_checks.get(quest_id))
+        return _ret("none", "无额外开启条件，到地点即可触发", "auto", None)
     parents = {}
     for quest_id, name in names.items():
         parent = 0
@@ -810,13 +1382,17 @@ def build_event(tables):
                 slot.append(text)
 
     def ending_rewards(drop_id):
+        """解析掉落表：ALL 全部获得，ONE 按权重随机其一（见 RewardDropType）。"""
         drop = drops.get(str(drop_id))
         if not drop:
-            return None
-        out, seen = [], set()
+            return None, "all"
+        out, seen, mode = [], set(), "all"
         for variant in drop.get("variants") or []:
             if not isinstance(variant, dict):
                 continue
+            # RewardDropType: ALL=1 / ONE=2 / EACH_REWARD=4 / ONE_REWARD=5
+            drop_type = _int(variant.get("type"), 1)
+            mode = "one" if drop_type in (2, 5) else "all"
             entries = [entry for entry in (variant.get("dropList") or []) if isinstance(entry, dict)]
             weights = [max(0, _int(entry.get("dropWeight"), 1)) for entry in entries]
             total = sum(weights) or len(entries)
@@ -827,7 +1403,9 @@ def build_event(tables):
                 seen.add(item_id)
                 low = _int(entry.get("itemCountMin"), 1)
                 high = _int(entry.get("itemCountMax"), low)
-                chance = (weight * 100.0 / total) if total else 100.0
+                # 全部获得时权重没有概率含义，统一按 100% 展示。
+                chance = 100.0 if mode == "all" else (
+                    (weight * 100.0 / total) if total else 100.0)
                 info = items.get(str(item_id)) or {}
                 out.append({
                     "item": item_id, "name": info.get("name") or ("物品 %s" % item_id),
@@ -838,10 +1416,21 @@ def build_event(tables):
                     "chance": round(chance, 1),
                     "expected": round(chance / 100.0 * (low + high) / 2.0, 2),
                 })
-        return out
+        return out, mode
 
     result, stats = [], {"exact": 0, "inferred": 0, "unknown": 0}
+    # 忆海「奇遇留影」条目 id：存档 memoria.unlocked 里有它，说明玩家回忆里已收录，
+    # 可重复奇遇的结算记录被重置后仍然能据此判定达成。
+    memoria_ids = {}
+    for row in _rows(tables.get("tbmemoriaentry")):
+        if not isinstance(row, dict) or _int(row.get("category")) != 3:
+            continue
+        quest_id = _int(row.get("event_quest_id"))
+        if quest_id:
+            memoria_ids[quest_id] = _int(row.get("id"))
     resolved = {}
+    hidden_settlements = 0
+    dialogue_ids = {key[0] for key in dialogues}
     for quest_id in sorted(events):
         rows = events[quest_id]
         quest = quests.get(quest_id) or {}
@@ -852,10 +1441,18 @@ def build_event(tables):
                                    if isinstance(obj, dict))
         location = direct_location(quest_id, stage_ids, desc + "\n" + objective_text)
         tree = _build_tree(quest_id, dialogues, flows, attrs, quest_names)
+        ending_reqs = _ending_requirements(tree)
+        # 委托类（type=3）且完全没有对话的条目是付款/领取后的记账记录，不作为奇遇展示。
+        if not tree and quest_id not in dialogue_ids and _int(quest.get("type")) == 3:
+            hidden_settlements += 1
+            continue
+        # 有旁白、但所有节点都没有选项：纯旁白事件，进入后直接结算。
+        narration_only = bool(tree) and not any(
+            node.get("options") for node in (tree or {}).get("nodes", {}).values())
         endings = []
         for row in sorted(rows, key=lambda r: (_int(r.get("grade")), _int(r.get("id")))):
             drop_id = _int(row.get("reward_drop_id"))
-            rewards = ending_rewards(drop_id) if drop_id else []
+            rewards, reward_mode = ending_rewards(drop_id) if drop_id else (None, "all")
             grade = _int(row.get("grade"))
             path = _ending_path(row.get("id"), row.get("title"), row.get("designer_note"))
             path = _align_path(path, tree, attrs, items, currency)
@@ -865,16 +1462,20 @@ def build_event(tables):
                 "detail": _lines(row.get("detail_lines")), "grade": grade,
                 "grade_name": EVENT_GRADE_NAMES.get(grade, "第%s档" % grade),
                 "path": path,
-                "rewards": rewards or [],
+                "reqs": ending_reqs.get(str(_int(row.get("id")))) or [],
+                "rewards": rewards or [], "reward_mode": reward_mode,
                 "reward_ok": True if not drop_id else rewards is not None,
             })
         resolved[quest_id] = location
         result.append({
             "id": quest_id, "name": names[quest_id], "desc": desc,
+            "open": event_open(quest_id, quest),
             "one_off": bool(quest.get("oneOff")), "parent": parents[quest_id],
             "endings": endings, "dialogue": {str(key): value for key, value in dialogue_texts.items()
                                              if key // 100 == quest_id // 100},
             "tree": tree,
+            "narration_only": narration_only,
+            "memoria": memoria_ids.get(quest_id, 0),
             "has_conditions": bool(tree) and any(
                 option.get("conds") for node in (tree or {}).get("nodes", {}).values()
                 for option in node.get("options") or []),
@@ -904,6 +1505,8 @@ def build_event(tables):
     stats["endings_with_path"] = sum(
         1 for event in result for ending in event["endings"] if ending["path"])
     stats["tree_endings"] = sum(len((event.get("tree") or {}).get("endings") or []) for event in result)
+    stats["narration_only"] = sum(1 for event in result if event["narration_only"])
+    stats["hidden_settlements"] = hidden_settlements
     phases = {}
     for row in _rows(tables["tbcultivaterealm"]):
         if isinstance(row, dict):
@@ -912,6 +1515,11 @@ def build_event(tables):
                 phases[str(_int(phase))] = realm_id
     return {"schema": SCHEMA, "events": result, "realms": realms, "attrs": attrs,
             "currency": sorted(currency), "phases": phases,
+            "layer_phases": layer_phases, "layer_realms": layer_realms,
+            "layer_numbers": layer_numbers,
+            # 开启条件的判定明细要能叫出任务名，不能把「任务 11143」甩给玩家。
+            "quest_names": {str(quest_id): _plain(row.get("name")) or ("任务 %s" % quest_id)
+                            for quest_id, row in quests.items()},
             "grade_names": EVENT_GRADE_NAMES, "grade_hint": EVENT_GRADE_HINT,
             "stats": stats}
 

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """人物图鉴：以 NPC 为中心的全息档案（当前所在/身份/关系/能做什么/善恶后果/履历）。
 
 数据全部来自配置表，新增 NPC 或规则只需重跑快照，不改代码。
@@ -13,7 +13,8 @@ from .scan import enrich, meta, post, prepare, scan, summary
 
 # ORDER=95，避开 quest=70 / talent=20 / memoria=80 / hongchen=90
 KEY, LABEL = "rolebook", "人物图鉴"
-ORDER, SELECT, SCHEMA = 95, "latest", 7  # 模块自有缓存版本，改数据结构时只递增这里
+KEY, LABEL_EN = "rolebook", "Character Gallery"
+ORDER, SELECT, SCHEMA = 10, "latest", 11  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "rolebook_meta.json"
 TABLES = frozenset({
     "tbnpcbasecfg",            # NPC 主表：基础字段、身份称号、性格/善恶/声望/魅力/悟性原始值、能力标记
@@ -24,6 +25,7 @@ TABLES = frozenset({
     "tbnpcwisdomtitle",        # 悟性称号：min_wisdom / name
     "tbnpcintimacy",           # 8 档亲密：intimacyRequirement / intimacyName / intimacyPrompt
     "tbnpctalent",             # 天赋：资质槽固定天赋名
+    "tbnpcinteractgameentry",  # NPC 互动入口：本月特殊互动的 subId → 按钮名/状态标签
     "tbmemoriaentry",          # 留影条目：npc_id 关联
     "tbnpctopicchat",          # 可聊话题：npcId
     "tbnpcpersuadetopic",      # 说服话题：npcId

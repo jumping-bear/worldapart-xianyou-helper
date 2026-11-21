@@ -31,7 +31,8 @@ def describe(key, module_payload):
 
 
 def tabs():
-    return [{"key": module.KEY, "label": getattr(module, "LABEL", module.KEY)}
+    return [{"key": module.KEY, "label": getattr(module, "LABEL", module.KEY),
+             "label_en": getattr(module, "LABEL_EN", None) or getattr(module, "LABEL", module.KEY)}
             for module in MODULES]
 
 

@@ -8,6 +8,53 @@ from meta_update import (
     SCHEMA, _call_parts, _clip, _const_args, _expr_ints, _int, _plain, _rows,
     _text, build_realms, build_spaces,
 )
+from app import tablekit
+from app import acquire
+
+# 层 id → 本境界内层数（29 → 筑基 9 层），避免页面上出现“第 29 层”。
+_LAYER_NUMBERS = {}
+# 条件别名（条件.CW_MONTH_7_12）→ 真实表达式；从 tbconditionexpr 自动构建。
+_COND_ALIASES = {}
+# 城镇 id → 城镇名；城镇声望条件必须写清是哪座城，不能只写「城镇声望」。
+_CITY_NAMES = {}
+
+
+def _gate_text_en(node, names=None, layer_phases=None):
+    """条件叶子在英文数据下的读法；找不到对应说法时退回配置里的中文文案。"""
+    node = node or {}
+    names = names or {}
+    layer_phases = layer_phases or {}
+    mode = node.get("mode")
+    parts = node.get("parts") or []
+    if mode in ("all", "any") and parts:
+        joiner = " or " if mode == "any" else " and "
+        return joiner.join(_gate_text_en(part, names, layer_phases) for part in parts)
+    kind = node.get("kind") or ""
+    need = _int(node.get("need"))
+    quest = _int(node.get("quest"))
+    if kind == "quest_done":
+        return "completing “%s”" % names.get(quest, quest)
+    if kind == "quest_hold":
+        return "having “%s” in progress" % names.get(quest, quest)
+    if kind == "quest_accepted":
+        return "accepting “%s”" % names.get(quest, quest)
+    if kind == "quest_active":
+        return "“%s” active" % names.get(quest, quest)
+    if kind == "layer":
+        layer_name = layer_phases.get(str(need))
+        local = _LAYER_NUMBERS.get(str(need)) or need
+        if layer_name:
+            return "reaching “%s” (layer %d)" % (layer_name, local)
+        return "reaching cultivation layer %d+" % local
+    if kind in ("phase", "realm"):
+        return "reaching realm %d+" % need
+    if kind == "money":
+        return "Spirit Stones ≥ %d" % need
+    if kind == "favor":
+        return "Affinity ≥ %d" % need
+    if kind == "attr":
+        return "attribute ≥ %d" % need
+    return node.get("text") or ""
 
 
 QUEST_STATE_NAMES = {
@@ -236,12 +283,12 @@ MISSING_QUEST_NAME = "未收录任务"
 
 
 def _quest_condition(cond, npcs, quest_names=None, attr_names=None, realms=None,
-                     self_id=0, exclusive=None):
+                     self_id=0, exclusive=None, layer_phases=None):
     """把接取条件表达式转成可判定的结构：好感度、城镇声望、境界、修炼阶段等。"""
     if not isinstance(cond, dict):
         return None
     root = _cond_leaf(cond.get("condition"), npcs, quest_names, attr_names,
-                      realms, self_id, exclusive)
+                      realms, self_id, exclusive, layer_phases)
     if not root:
         return None
     checks, modes = [], set()
@@ -412,9 +459,9 @@ def _negate_cond(inner, self_id, exclusive, quest_names):
 
 
 def _cond_leaf(node, npcs, quest_names=None, attr_names=None, realms=None,
-               self_id=0, exclusive=None):
+               self_id=0, exclusive=None, layer_phases=None):
     """单个条件或“且/或”组合，输出可读文本与可判定字段。"""
-    node = _unwrap_expr(node)
+    node = acquire.resolve_aliases(_unwrap_expr(node), _COND_ALIASES)
     name, index, args = _call_parts(node)
     name = OP_ALIAS.get(name, name)
     values = _const_args(args)
@@ -424,8 +471,8 @@ def _cond_leaf(node, npcs, quest_names=None, attr_names=None, realms=None,
 
     if name in LOGIC_NAMES and args:
         mode = "any" if name == "或" else "all"
-        parts = [_cond_leaf(item, npcs, names, attr_names, realms, self_id, exclusive)
-                 for item in args]
+        parts = [_cond_leaf(item, npcs, names, attr_names, realms, self_id, exclusive,
+                            layer_phases) for item in args]
         parts = [item for item in parts if item]
         if not parts:
             return None
@@ -434,7 +481,8 @@ def _cond_leaf(node, npcs, quest_names=None, attr_names=None, realms=None,
         return {"mode": mode, "parts": parts, "text": _join_cond(parts, mode, names)}
 
     if name == NEG_NAME and args:
-        inner = _cond_leaf(args[0], npcs, names, attr_names, realms, self_id, exclusive)
+        inner = _cond_leaf(args[0], npcs, names, attr_names, realms, self_id, exclusive,
+                           layer_phases)
         return _negate_cond(inner, self_id, exclusive, names) if inner else None
 
     if name == "条件" and isinstance(index, str) and values:
@@ -466,20 +514,27 @@ def _cond_leaf(node, npcs, quest_names=None, attr_names=None, realms=None,
     if name == "玩家" and isinstance(index, str) and values:
         if index == "城镇声望至少" and len(values) >= 2:
             need = _int(values[1])
-            text = "城镇声望 ≥ %d" % need
-            return {"kind": "city_rep", "city": _int(values[0]), "need": need,
+            city_id = _int(values[0])
+            city_name = _CITY_NAMES.get(str(city_id)) or ""
+            text = ("%s声望 ≥ %d" % (city_name, need)) if city_name \
+                else ("城镇声望 ≥ %d" % need)
+            return {"kind": "city_rep", "city": city_id, "need": need,
                     "text": text, "pos_text": text, "neg_text": "不满足：%s" % text}
         # 阈值直接写在参数里：玩家.达到修炼层数(7) / 玩家.境界(2)。
         need = _int(values[-1])
         if index in ("达到修炼层数", "修炼层数"):
-            text = "修炼层数 ≥ %d" % need
+            # 只写「层数 ≥ 7」玩家看不懂；有阶段名就写成「修为达到炼气后期」。
+            layer_name = (layer_phases or {}).get(str(need))
+            local = _LAYER_NUMBERS.get(str(need)) or need
+            text = ("修为达到「%s」（第 %d 层）" % (layer_name, local)) if layer_name \
+                else ("修炼层数 ≥ %d" % local)
             return {"kind": "layer", "need": need, "text": text,
                     "pos_text": text, "neg_text": "不满足：%s" % text}
         if index in ("修炼阶段", "境界"):
             kind = "phase" if index == "修炼阶段" else "realm"
             realm_name = (realms or {}).get(str(need))
-            subject = "你的修炼阶段" if kind == "phase" else "你的境界"
-            text = ("%s ≥ %s" % (subject, realm_name)) if realm_name else ("%s ≥ %d" % (subject, need))
+            # 修炼阶段 id 本身就是境界 id；统一说“境界达到”，别让玩家猜“阶段”是什么。
+            text = ("境界达到「%s」" % realm_name) if realm_name else ("境界 ≥ %d" % need)
             return {"kind": kind, "need": need, "text": text,
                     "pos_text": text, "neg_text": "不满足：%s" % text}
         if index == "灵石":
@@ -496,10 +551,15 @@ def _cond_leaf(node, npcs, quest_names=None, attr_names=None, realms=None,
             left_name, left_index, _left_args = _call_parts(left)
             subject = {"label": str(left_index or left_name or "条件"), "kind": ""}
         text = "%s %s %d" % (subject["label"], op, need)
-        if subject.get("kind") in ("realm", "phase", "npc_realm"):
+        if subject.get("kind") in ("realm", "phase"):
             realm_name = (realms or {}).get(str(need))
             if realm_name:
-                if subject.get("kind") == "npc_realm" and need == 0:
+                # 玩家境界统一说“境界达到”，不要出现“你的修炼阶段 ≥ 筑基期”。
+                text = "境界达到「%s」" % realm_name
+        elif subject.get("kind") == "npc_realm":
+            realm_name = (realms or {}).get(str(need))
+            if realm_name:
+                if need == 0:
                     text = "%s仍是凡人（尚未开始修炼）" % subject["label"].replace("的境界", "")
                 else:
                     text = "%s %s %s" % (subject["label"], op, realm_name)
@@ -545,7 +605,7 @@ def _expr_string(node):
 
 
 def _cond_tree(node, npcs, quest_names=None, attr_names=None, realms=None,
-               self_id=0, exclusive=None):
+               self_id=0, exclusive=None, layer_phases=None):
     """保留条件表达式的完整嵌套树，供逐条勾叉判定；文本一律人话。"""
     node = _unwrap_expr(node)
     name, index, args = _call_parts(node)
@@ -557,7 +617,8 @@ def _cond_tree(node, npcs, quest_names=None, attr_names=None, realms=None,
         op = "and" if name == "且" else "or"
         children = []
         for arg in args:
-            child = _cond_tree(arg, npcs, names, attr_names, realms, self_id, exclusive)
+            child = _cond_tree(arg, npcs, names, attr_names, realms, self_id, exclusive,
+                               layer_phases)
             if child:
                 children.append(child)
         if not children:
@@ -581,7 +642,8 @@ def _cond_tree(node, npcs, quest_names=None, attr_names=None, realms=None,
             texts = _collapse_done_texts(texts)
         return {"op": op, "children": children, "text": joiner.join(texts)}
     if name == NEG_NAME and args:
-        child = _cond_tree(args[0], npcs, names, attr_names, realms, self_id, exclusive)
+        child = _cond_tree(args[0], npcs, names, attr_names, realms, self_id, exclusive,
+                           layer_phases)
         if not child:
             return None
         if not child.get("op"):
@@ -589,7 +651,8 @@ def _cond_tree(node, npcs, quest_names=None, attr_names=None, realms=None,
             return {"op": "", "children": [], "leaf": leaf, "text": leaf["text"]}
         leaf = _negate_cond(child, self_id, exclusive, names)
         return {"op": "", "children": [], "leaf": leaf, "text": leaf["text"]}
-    leaf = _cond_leaf(node, npcs, names, attr_names, realms, self_id, exclusive)
+    leaf = _cond_leaf(node, npcs, names, attr_names, realms, self_id, exclusive,
+                      layer_phases)
     if not leaf:
         return None
     return {"op": "", "children": [], "leaf": leaf, "text": leaf.get("text") or "条件"}
@@ -649,6 +712,7 @@ def _quest_gate(node):
     返回兼容旧 gate 的字段，并附 trigger_detail；quests 不再用 >1000 启发式，
     由调用方按本模块任务集合过滤。
     """
+    node = acquire.resolve_aliases(node, _COND_ALIASES)
     if isinstance(node, (list, tuple)) and len(node) == 2 and isinstance(node[1], dict):
         node = node[1]
     name, index, args = _call_parts(node)
@@ -675,6 +739,24 @@ def _quest_gate(node):
     elif event == "修炼阶段达到":
         detail.update(kind="realm", layer=_int(values[0]) if values else 0)
         detail["label"] = "修炼到指定阶段后触发"
+    elif event == "进入任一场景":
+        detail.update(kind="scene_enter_any")
+        detail["label"] = "进入任意场景后触发"
+    elif event == "首次加入宗门":
+        detail.update(kind="sect_first")
+        detail["label"] = "首次加入宗门后触发"
+    elif event == "剧情组播放完毕":
+        detail.update(kind="timeline_done")
+        detail["label"] = "剧情播放完后触发"
+    elif event == "修炼层数修为已满":
+        detail.update(kind="layer_full")
+        detail["label"] = "当前层修为满后触发"
+    elif event == "新手完成":
+        detail.update(kind="tutorial_done")
+        detail["label"] = "完成新手引导后触发"
+    else:
+        detail.update(kind="unknown")
+        detail["label"] = ("触发条件：%s" % event) if event else ""
 
     gate = {"event": event, "quests": detail["quests"], "space": detail["space"],
             "npc": detail["npc"], "favor": detail["favor"], "layer": detail["layer"],
@@ -779,13 +861,19 @@ def _build_layer_phases(tables):
             phase_names[phase_id] = _text(row.get("phase_name")) or ""
             phase_realms[phase_id] = _int(row.get("realm"))
     out = {}
+    global _LAYER_NUMBERS
+    _LAYER_NUMBERS = {}
     for row in _rows(tables.get("tbcultivatelayer")):
         if not isinstance(row, dict) or row.get("id") is None:
             continue
         phase_id = str(_int(row.get("phase")))
         name = phase_names.get(phase_id) or realms.get(str(phase_realms.get(phase_id, 0))) or ""
+        layer_id = str(_int(row["id"]))
         if name:
-            out[str(_int(row["id"]))] = name
+            out[layer_id] = name
+        local = _int(row.get("layer"))
+        if local:
+            _LAYER_NUMBERS[layer_id] = local
     return out
 
 
@@ -821,11 +909,20 @@ def _chapter_layout(realms):
     return order, tones
 
 
-def _build_storylines(quests, edges, realms, region_names=None, chapter_order=None):
+def _build_storylines(quests, edges, realms, region_names=None, chapter_order=None,
+                      interaction_lines=None):
     """把 254 个支线聚成玩家可顺着走的剧情线；同 group 的多条 chain 必须合成一条。"""
     clusters = {}
+    line_info = {}
     for quest_id, quest in quests.items():
-        key = ("g:" + quest["group"]) if quest["group"] else ("c:" + quest["chain_id"])
+        if "retry_of" in quest:
+            continue
+        info = (interaction_lines or {}).get(quest["chain_id"])
+        if info:
+            key = "i:%d" % _int(info.get("action"))
+            line_info[key] = info
+        else:
+            key = ("g:" + quest["group"]) if quest["group"] else ("c:" + quest["chain_id"])
         clusters.setdefault(key, []).append(quest_id)
 
     out = []
@@ -856,8 +953,9 @@ def _build_storylines(quests, edges, realms, region_names=None, chapter_order=No
                 break
 
         # 同一 group 里的“单环支线”（如再试行针）没有前置，放到主线之后，避免插在开头。
+        # 场景交互点下的几条链是有意的并列分支，保持同一环，不能挪到末尾。
         roots = [quest_id for quest_id in ids if not preds[quest_id]]
-        if len(roots) > 1:
+        if len(roots) > 1 and key not in line_info:
             chain_size = {}
             for quest_id in ids:
                 chain_id = quests[quest_id]["chain_id"]
@@ -883,6 +981,11 @@ def _build_storylines(quests, edges, realms, region_names=None, chapter_order=No
                 chapter = "隐藏"
         if region and region in name:
             region = ""
+        info = line_info.get(key)
+        if info:
+            name = info.get("spot") or name
+            region = (info.get("place") or "").split(" / ")[0]
+            chapter = _chapter_from_realms(order, quests, realms)
         npc_names = []
         for quest_id in order:
             giver = quests[quest_id].get("giver") or {}
@@ -892,10 +995,96 @@ def _build_storylines(quests, edges, realms, region_names=None, chapter_order=No
         out.append({"id": key, "name": name, "chapter": chapter, "region": region,
                     "group": group, "quests": order,
                     "depths": {str(qid): depth[qid] for qid in order},
+                    "trigger": info or None,
                     "npc": npc_names, "size": len(order), "first": order[0]})
     rank = chapter_order or {}
     out.sort(key=lambda line: (rank.get(line["chapter"], 99),
                                -line["size"], line["first"]))
+    return out
+
+
+def _detect_retry_quests(quests, npcs, tables):
+    """识别“失败重试”记录：由重置流程或“再试/重试/再战”命名标记，再挂回宿主任务。
+
+    这不是某个任务的特判：只要策划沿用「重置任务」流程或同类命名，就会自动归组。
+    """
+    reset_ids = {}
+    for row in _rows(tables.get("tbgameactionflow")):
+        if not isinstance(row, dict):
+            continue
+        action = row.get("action")
+        if "重置任务" not in json.dumps(action, ensure_ascii=False):
+            continue
+        flow_id = _int(row.get("id"))
+        for value in _expr_ints(action):
+            qid = _int(value)
+            if qid in quests:
+                reset_ids.setdefault(qid, set()).add(flow_id)
+
+    entry_hosts = {}
+    for row in _rows(tables.get("tbnpcinteractgameentry")):
+        if not isinstance(row, dict):
+            continue
+        npc_id = _int(row.get("npcId"))
+        for value in _expr_ints(row.get("UnlockCondition")):
+            host = _int(value)
+            if host in quests and not quests[host].get("hidden"):
+                entry_hosts.setdefault(npc_id, set()).add(host)
+
+    by_npc = {}
+    for qid, quest in quests.items():
+        if quest.get("hidden"):
+            continue
+        desc = _plain(quest.get("description"))
+        if not desc:
+            continue
+        for npc_id, npc_name in npcs.items():
+            if npc_name and npc_name in desc:
+                by_npc.setdefault(npc_id, set()).add(qid)
+
+    out = {}
+    for qid, quest in quests.items():
+        name = _plain(quest.get("name"))
+        desc = _plain(quest.get("description"))
+        is_reset = qid in reset_ids
+        is_named = any(tag in name for tag in ("再试", "重试", "再战"))
+        if not (is_reset or is_named):
+            continue
+        # 隐藏的失败重试一直算；非隐藏的命名重试只有在完全脱离主线（没有 prev/next）时才算，
+        # 避免把剧情里正常的一步「再战某某」误并到别的任务上。
+        orphan = not quest.get("prev") and not quest.get("next")
+        if not quest.get("hidden") and not (is_named and orphan):
+            continue
+        npc_id = next((nid for nid, npc_name in npcs.items()
+                       if npc_name and npc_name in desc), 0)
+        # 重置流程 id 通常以宿主任务 id 开头（701095 ← 70109），优先用这条约定。
+        flow_host = 0
+        for flow_id in reset_ids.get(qid) or ():
+            text = str(flow_id)
+            for host_id in quests:
+                if host_id == qid or quests[host_id].get("hidden"):
+                    continue
+                if text.startswith(str(host_id)) and len(str(host_id)) > len(str(flow_host)):
+                    flow_host = host_id
+        cands = set(entry_hosts.get(npc_id) or ())
+        if not cands:
+            cands = set(by_npc.get(npc_id) or ())
+        cands.discard(qid)
+        # 名称重叠最稳：再试疏经 ← 疏经开坛、项焘再战 ← 项焘…，不依赖 id 步长。
+        name_cands = set()
+        tokens = {name[i:i + 2] for i in range(max(0, len(name) - 1)) if len(name[i:i + 2]) == 2}
+        for other, other_quest in quests.items():
+            if other == qid or other_quest.get("hidden"):
+                continue
+            other_name = _plain(other_quest.get("name"))
+            if other_name and any(token in other_name for token in tokens):
+                name_cands.add(other)
+        if name_cands:
+            out[qid] = min(name_cands, key=lambda host: (abs(host - qid), host))
+        elif flow_host:
+            out[qid] = flow_host
+        elif cands:
+            out[qid] = min(cands, key=lambda host: (abs(host - qid), host))
     return out
 
 
@@ -904,6 +1093,18 @@ def build_quests(tables):
     quest_table = tables["tbquest"]
     quest_rows = quest_table.get("rows") if isinstance(quest_table, dict) else quest_table
     all_rows = [row for row in _rows(quest_rows) if isinstance(row, dict) and row.get("id") is not None]
+    global _COND_ALIASES
+    _COND_ALIASES = {}
+    for row in _rows(tables.get("tbconditionexpr")):
+        if isinstance(row, dict) and row.get("alias") and row.get("condition"):
+            _COND_ALIASES[str(row["alias"])] = row["condition"]
+    global _CITY_NAMES
+    _CITY_NAMES = {}
+    for row in _rows(tables.get("tbtown")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            name = _text(row.get("townName"))
+            if name:
+                _CITY_NAMES[str(_int(row["id"]))] = name
 
     type_names = {}
     for row in _rows(tables.get("tbquesttype")):
@@ -938,6 +1139,7 @@ def build_quests(tables):
                                      _text(row.get("npcTitle")) or ("NPC %s" % row["id"]))
     items = {}
     item_types = {}
+    currency = set()
     for row in _rows(tables.get("tbitemtype")):
         if isinstance(row, dict) and row.get("id") is not None:
             item_types[str(_int(row["id"]))] = _text(row.get("typeName")) or _text(row.get("name")) or ""
@@ -950,6 +1152,10 @@ def build_quests(tables):
                 "price": _int(row.get("price")),
                 "desc": _plain(row.get("itemDesc")),
             }
+            # 灵石＝货币类型且名字为「灵石」；同名「灵石」的机关道具不能算进钱包。
+            if (items[_int(row["id"])]["name"] == "灵石"
+                    and items[_int(row["id"])]["type"] in ("货币", "Currency")):
+                currency.add(_int(row["id"]))
     attr_names = {}
     attr_levels = {}
     for row in _rows(tables.get("tbinteractattribute")):
@@ -968,17 +1174,85 @@ def build_quests(tables):
     place_names = sorted(((info.get("name") or "", space_id) for space_id, info in spaces.items()
                           if len(info.get("name") or "") >= 2), key=lambda pair: -len(pair[0]))
     # 剧情型委托人不在存档场景列表里，用人物小传里的地名推断常驻地。
+    # 只存场景名会出现“杂货铺”这种不知道在哪的写法，所以存完整层级（河望镇 / 杂货铺）。
     npc_homes = {}
+    # 初始场景配置是权威位置（纪小蝶 → 河望镇 / 村长家），优先于小传地名推断。
+    for row in _rows(tables.get("tbinitialspacenpc")):
+        if not isinstance(row, dict) or row.get("npcId") is None:
+            continue
+        info = spaces.get(str(_int(row.get("spaceId")))) or {}
+        path = [part for part in (info.get("path") or []) if part]
+        if path:
+            npc_homes[str(_int(row["npcId"]))] = " / ".join(path)
     for row in _rows(tables["tbnpcbasecfg"]):
         if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        if str(_int(row["id"])) in npc_homes:
             continue
         plot = _plain(row.get("propPlot"))
         if not plot:
             continue
         for name, space_id in place_names:
             if name in plot:
-                npc_homes[str(_int(row["id"]))] = (spaces.get(str(space_id)) or {}).get("name") or name
+                info = spaces.get(str(space_id)) or {}
+                path = [part for part in (info.get("path") or []) if part]
+                npc_homes[str(_int(row["id"]))] = " / ".join(path) or info.get("name") or name
                 break
+
+    # 场景交互点：像「生锈的铁剑」这种剧情对话，真正解锁它的是交互点自己的开启条件
+    # （例：完成主线「拜会镇长」或修炼层数 ≥ 7），对话本身不带这条门槛。
+    space_ui = {}
+    for row in _rows(tables.get("tbspaceinteractui")):
+        if isinstance(row, dict):
+            space_ui.setdefault(_int(row.get("interactActionId")), []).append(row)
+    interact_triggers = {}
+    interaction_actions = {}
+    for row in _rows(tables.get("tbinteractaction")):
+        if not isinstance(row, dict):
+            continue
+        action_id = _int(row.get("id"))
+        targets = [value for value in _expr_ints(row.get("interactExpr") or {}) if value]
+        open_leaf = _cond_leaf(row.get("openConditionExpr") or {}, npcs, full_quest_names,
+                               attr_names, realms, 0, None, layer_phases)
+        open_text = ""
+        open_node = None
+        if open_leaf:
+            node = open_leaf
+            # 顶层“且”的后半段通常是“任务目标未激活/尚未完成”的自检，只保留第一组解锁条件。
+            if node.get("mode") == "all" and len(node.get("parts") or []) > 1:
+                node = node["parts"][0]
+            open_node = node
+            if str(tablekit.TEXT_LANGUAGE).lower().startswith("en"):
+                open_text = _clip(_gate_text_en(node, full_quest_names, layer_phases), 90)
+            else:
+                open_text = _clip((node or {}).get("text") or "", 90)
+        spot = _plain(row.get("textInteract"))
+        gate_ctx = {"quest_names": full_quest_names, "attr_names": attr_names,
+                    "realms": realms, "layer_phases": layer_phases,
+                    "layer_local": _LAYER_NUMBERS}
+        for ui in space_ui.get(action_id) or []:
+            info = spaces.get(str(_int(ui.get("spaceId")))) or {}
+            path = " / ".join([part for part in (info.get("path") or []) if part]) \
+                or info.get("name") or ""
+            for target in targets:
+                slot = interact_triggers.setdefault(target, {})
+                ui_gate = acquire.gate_text(ui.get("unlockConditionExpr"), gate_ctx, 0)
+                slot_open = acquire.combine(ui_gate, open_text)
+                if slot_open and not slot.get("open"):
+                    slot["open"] = _clip(slot_open, 120)
+                if path and not slot.get("place"):
+                    slot["place"] = path
+                if spot and not slot.get("spot"):
+                    slot["spot"] = spot
+                slot["action"] = action_id
+                if spot and action_id:
+                    interaction_actions.setdefault(action_id, {
+                        "action": action_id, "spot": spot, "place": path,
+                        "open": _clip(slot_open, 120), "open_node": open_node, "targets": [],
+                    })
+                    target_slot = interaction_actions[action_id]
+                    if target not in target_slot["targets"]:
+                        target_slot["targets"].append(target)
 
     conds = {}
     for row in _rows(tables.get("tbconditionexpr")):
@@ -1146,9 +1420,9 @@ def build_quests(tables):
         trigger_text = ""
         if cond_row:
             acq_cond = _quest_condition(cond_row, npcs, full_quest_names, attr_names,
-                                        realms, quest_id, exclusive)
+                                        realms, quest_id, exclusive, layer_phases)
             tree = _cond_tree(cond_row.get("condition"), npcs, full_quest_names,
-                              attr_names, realms, quest_id, exclusive)
+                              attr_names, realms, quest_id, exclusive, layer_phases)
             if acq_cond:
                 acq_cond["tree"] = tree
                 acq_cond["readable"] = acq_cond["text"]
@@ -1163,6 +1437,13 @@ def build_quests(tables):
             if not (gate["quests"] or gate["space"] or gate["npc"] or gate["layer"]
                     or gate["event"] == "接取条件满足"):
                 gate = None
+        acq_option = _text(row.get("acqOptionText")) or ""
+        trigger_parts = _call_parts(row.get("triggerExpr") or {})
+        # 全表唯一的“死签名”：自动接取、有选项文案，却既没有触发表达式也没有接取条件。
+        # 这类行在游戏里没有任何入口；若同时存在同名新版本，就是被替代的旧版任务。
+        legacy_entry = bool(_int(row.get("acqSource")) == 2 and acq_option
+                            and not row.get("acqCondition")
+                            and not (trigger_parts[0] or trigger_parts[1]))
         quests[quest_id] = {
             "id": quest_id,
             "name": _plain(row.get("name")) or "未命名支线",
@@ -1172,6 +1453,8 @@ def build_quests(tables):
             "type": _int(row.get("type")),
             "type_name": type_names.get(_int(row.get("type"))) or "支线",
             "acq_source": _int(row.get("acqSource")),
+            "acq_option": acq_option,
+            "legacy_entry": legacy_entry,
             "hidden": bool(row.get("hidden")),
             "one_off": bool(row.get("oneOff")),
             "can_abandon": bool(row.get("canAbandon")),
@@ -1214,10 +1497,8 @@ def build_quests(tables):
             if not isinstance(option, dict):
                 continue
             cond_id = _int(option.get("optionCondition"))
-            if not cond_id:
-                continue
-            cond_row = conds.get(cond_id)
-            if not cond_row:
+            cond_row = conds.get(cond_id) if cond_id else None
+            if cond_id and not cond_row:
                 continue
             calls = []
             _quest_walk_calls(option.get("optionExpr"), calls)
@@ -1226,9 +1507,14 @@ def build_quests(tables):
             side_children = [child_id for child_id in children if child_id in quests]
             if not side_children:
                 continue
-            leaf = _cond_leaf(cond_row.get("condition"), npcs, full_quest_names, attr_names,
-                              realms, side_children[0], exclusive)
-            text = _clip((leaf or {}).get("text") or "无额外条件", 120)
+            if cond_row:
+                leaf = _cond_leaf(cond_row.get("condition"), npcs, full_quest_names, attr_names,
+                                  realms, side_children[0], exclusive, layer_phases)
+                text = _clip((leaf or {}).get("text") or "无额外条件", 120)
+            else:
+                # 没有条件门槛的接取选项也要保留：玩家记住的是选项原文，不是任务名。
+                leaf = {}
+                text = "无额外条件"
             hint = _text(option.get("optionGreyText"))
             opt_text = _text(option.get("optionText"))
             gate = {"cond": cond_id, "text": text,
@@ -1240,6 +1526,106 @@ def build_quests(tables):
             for child_id in side_children:
                 if gate not in quests[child_id]["option_gates"]:
                     quests[child_id]["option_gates"].append(gate)
+                target = quests[child_id]
+                # 这类支线不是“走到地点就能接”，而是某段对话里的一个选项结果；
+                # 把对话人、选项原文和条件补成触发说明，避免看起来像无条件可接。
+                if not target.get("trigger_text") and opt_text:
+                    ctx = gate.get("context") or {}
+                    npc = (ctx.get("npc_name") or "").strip()
+                    hit = interact_triggers.get(dialogue_id) or interact_triggers.get(child_id) or {}
+                    place = hit.get("place") or ""
+                    spot = hit.get("spot") or ""
+                    opener = hit.get("open") or ""
+                    cond_text = text if (text and text != "无额外条件") else ""
+                    if str(tablekit.TEXT_LANGUAGE).lower().startswith("en"):
+                        cond_text = _gate_text_en(leaf, full_quest_names, layer_phases) if cond_text else ""
+                        if spot and place:
+                            where = "at “%s” in %s, " % (spot, place)
+                        elif spot:
+                            where = "at “%s”, " % spot
+                        else:
+                            where = ("at %s, " % place) if place else ""
+                        if npc:
+                            phrase = "%stalk to “%s” and choose “%s”" % (where, npc, opt_text)
+                        else:
+                            phrase = "%schoose “%s” in the story dialogue" % (where, opt_text)
+                        if cond_text:
+                            phrase += " (%s)" % cond_text
+                        if opener:
+                            phrase = "After %s, %s" % (opener, phrase)
+                    else:
+                        if spot and place:
+                            where = "在%s的%s处" % (place, spot)
+                        elif spot:
+                            where = "在%s处" % spot
+                        elif place:
+                            where = ("在 %s " % place) if re.search(r"[A-Za-z]", place) else ("在%s" % place)
+                        else:
+                            where = ""
+                        if npc:
+                            phrase = "%s与「%s」对话时选择「%s」" % (where, npc, opt_text)
+                        else:
+                            phrase = "%s剧情对话中选择「%s」" % (where, opt_text)
+                        if cond_text:
+                            phrase += "（%s）" % cond_text
+                        if opener:
+                            phrase = "%s 后，%s" % (opener, phrase)
+                    target["trigger_text"] = phrase
+                    target["trigger_detail"] = {
+                        "kind": "dialogue", "npc": npc, "npc_id": _int(ctx.get("npc")),
+                        "dialogue": dialogue_id, "line": sub_id,
+                        "option": opt_text, "condition": cond_text,
+                        "place": place, "open": opener, "spot": hit.get("spot") or "",
+                        "action": _int(hit.get("action")),
+                    }
+                    if hit.get("action"):
+                        target["interaction"] = hit
+
+    # 场景交互点也是“树上的节点”：互动后出现的对话选项，各自接取不同支线。
+    # 把同一交互点的选项收成一组，结构对齐任务节点，后续按分支渲染。
+    interaction_defs = {}
+    for action_id, info in interaction_actions.items():
+        options, seen_opts = [], set()
+        for gate in option_gates.values():
+            if _int(gate.get("dialogue")) not in info["targets"]:
+                continue
+            children = [child for child in gate.get("children") or [] if child in quests]
+            if not children:
+                continue
+            key = (_int(gate.get("sub")), gate.get("option") or "", tuple(children))
+            if key in seen_opts:
+                continue
+            seen_opts.add(key)
+            options.append({"text": gate.get("option") or "", "quest": children[0],
+                            "quests": children, "gate": gate.get("text") or ""})
+        for target in info["targets"]:
+            if target not in quests:
+                continue
+            target_quest = quests[target]
+            if any(opt["quest"] == target for opt in options):
+                continue
+            options.append({"text": "调查「%s」" % info["spot"], "quest": target,
+                            "quests": [target], "gate": ""})
+            if not target_quest.get("trigger_text"):
+                where = ("在%s的%s处" % (info.get("place"), info["spot"])
+                         if info.get("place") else ("在%s处" % info["spot"]))
+                target_quest["trigger_text"] = (
+                    ("%s 后，%s交互接取" % (info.get("open"), where)) if info.get("open")
+                    else ("%s交互接取" % where))
+                target_quest["trigger_detail"] = {
+                    "kind": "interaction", "action": action_id,
+                    "place": info.get("place") or "", "spot": info["spot"] or "",
+                    "open": info.get("open") or "",
+                }
+        if options:
+            interaction_defs[action_id] = {
+                "action": action_id, "spot": info.get("spot") or "",
+                "place": info.get("place") or "", "open": info.get("open") or "",
+                "options": options,
+            }
+            for option in options:
+                for child in option["quests"]:
+                    quests[child].setdefault("interaction", info)
 
     # 只有指向本模块支线的前置才算数，避免把 NPC id 当成前置任务。
     for quest in quests.values():
@@ -1361,6 +1747,32 @@ def build_quests(tables):
     for quest_id, quest in quests.items():
         chain_members.setdefault(quest["chain_id"], []).append(quest_id)
 
+    # 同一场景交互点下的多条分支链并成一条剧情线，交互点作为根节点。
+    interaction_lines = {}
+    for quest in quests.values():
+        info = quest.get("interaction")
+        action = _int(info.get("action")) if isinstance(info, dict) else 0
+        if not action or action not in interaction_defs:
+            continue
+        definition = interaction_defs[action]
+        targets = [option["quest"] for option in definition.get("options") or []
+                   if option.get("quest")]
+        # 只有交互点接的是“链首任务”时，它才是这条线的起点。
+        # 像「继续查看画卷」接的是中段「雪中问询」，不能把整条画卷线改名为交互点。
+        def _is_line_root(quest_id):
+            node = quests.get(quest_id) or {}
+            if chain_root(quest_id) != quest_id:
+                return False
+            return _call_parts(node.get("triggerExpr") or {})[1] != "任务提交"
+        if targets and all(_is_line_root(quest_id) for quest_id in targets):
+            interaction_lines[quest["chain_id"]] = definition
+
+    # 失败重试记录不单独成线：挂回宿主任务，页面只在宿主卡上提示“失败可重试”。
+    for retry_id, host_id in _detect_retry_quests(quests, npcs, tables).items():
+        quests[retry_id]["retry_of"] = host_id
+        if host_id in quests:
+            quests[host_id].setdefault("retry_ids", []).append(retry_id)
+
     chains = []
     for chain_id, ids in chain_members.items():
         members = set(ids)
@@ -1464,11 +1876,18 @@ def build_quests(tables):
                                           if name != quest["name"])
 
     phases = {}
+    phase_order, layer_phase = {}, {}
     for row in _rows(tables["tbcultivaterealm"]):
         if isinstance(row, dict):
             realm_id = _int(row.get("id"))
-            for phase in row.get("phases") or []:
-                phases[str(_int(phase))] = realm_id
+            for order, phase in enumerate(row.get("phases") or []):
+                phase_id = str(_int(phase))
+                phases[phase_id] = realm_id
+                # 阶段先后顺序：用 境界*100 + 阶段序号，避免把阶段 id 当层号比较。
+                phase_order[phase_id] = realm_id * 100 + order + 1
+    for row in _rows(tables.get("tbcultivatelayer")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            layer_phase[str(_int(row["id"]))] = str(_int(row.get("phase")))
 
     # 统一关系边：前端只用它排脊柱顺序与隐藏连线；节点详情直接从任务行读取。
     edges = []
@@ -1560,7 +1979,8 @@ def build_quests(tables):
         if region:
             region_names.add(region)
     chapter_order, chapter_tones = _chapter_layout(realms)
-    storylines = _build_storylines(quests, edges, realms, region_names, chapter_order)
+    storylines = _build_storylines(quests, edges, realms, region_names, chapter_order,
+                                   interaction_lines)
 
     # 同名任务：不同章节/不同剧情链里可能各有一个「小蝶所托」这种同名任务，
     # 玩家容易把已完成的那条当成眼前这条的前置。这里按名字分组，全部来自配置，不写死。
@@ -1594,6 +2014,9 @@ def build_quests(tables):
             same_name_map[quest_id] = [other for other in ids if other != quest_id]
     for quest_id, quest in quests.items():
         quest["same_name"] = sorted(same_name_map.get(quest_id, []))
+        # 死签名本身只说明“配置里没有入口”，要同时存在同名新版本才算被替代的旧版任务；
+        # 以后策划若给这类任务补回触发表达式，会自动不再是 legacy，不用改代码。
+        quest["legacy_entry"] = bool(quest.get("legacy_entry") and quest["same_name"])
 
     stats = {
         "quests": len(result),
@@ -1634,11 +2057,14 @@ def build_quests(tables):
             "npc_homes": npc_homes,
             "npc_names": {str(key): value for key, value in npcs.items()},
             "realms": realms, "phases": phases, "layer_phases": layer_phases,
+            "layer_numbers": _LAYER_NUMBERS,
             "phase_names": phase_names,
+            "phase_order": phase_order, "layer_phase": layer_phase,
             "edges": edges, "diagnostics": diagnostics,
             "egg_notes": _build_egg_notes(items, quests, edges),
             "attr_names": {str(key): value for key, value in attr_names.items()},
             "attr_levels": attr_levels,
+            "currency": sorted(currency) or [50000],
             "states": {str(k): v for k, v in QUEST_STATE_NAMES.items()},
             "types": {str(k): v for k, v in type_names.items()}, "stats": stats}
 

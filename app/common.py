@@ -4,6 +4,7 @@ import glob
 import os
 import re
 import sys
+import threading
 
 import meta_update
 
@@ -11,6 +12,10 @@ from . import version
 
 APP_VERSION = version.VERSION
 FROZEN = getattr(sys, "frozen", False)
+# 浮窗「立即同步」：助手写信号文件，插件每 0.25 秒探一次后马上导出；
+# 同时唤醒助手侧的 3 秒轮询，避免点完还要等下一轮。
+SYNC_FLAG = "_refresh.flag"
+SYNC_EVENT = threading.Event()
 # 覆盖窗口模式（游戏内 F3 呼出）下，页面提示与双击启动的网页版不同。
 OVERLAY_MODE = False
 if FROZEN:
@@ -22,6 +27,25 @@ else:
 CFG = os.path.join(HERE, "config.json")
 OUT_HTML = os.path.join(HERE, "仙友助手.html")
 OUT_VERSION = os.path.join(HERE, "仙友助手版本.js")
+
+# 游戏设置里的 display.language：0 简中 / 1 繁中 / 2 英文。
+GAME_LANGUAGES = {0: "zh-Hans", 1: "zh-Hant", 2: "en-US"}
+
+
+def game_settings_file():
+    base = os.environ.get("USERPROFILE") or os.path.expanduser("~")
+    return os.path.join(base, "AppData", "LocalLow", "Nuverse", "WorldApart", "settings.json")
+
+
+def game_language():
+    """读取游戏内选择的语言；读不到时返回空字符串（调用方回退到助手界面语言）。"""
+    data = meta_update._read_json(game_settings_file(), {}) or {}
+    value = (data.get("display") or {}).get("language")
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return ""
+    return GAME_LANGUAGES.get(value, "")
 
 
 def _writable(directory):
@@ -88,17 +112,23 @@ HOTKEY_DEFAULT = "F3"
 HOTKEY_CHOICES = ["F%d" % i for i in range(1, 13)]
 
 
-def load_cfg():
-    raw = meta_update._read_json(CFG, {}) or {}
+def load_cfg(path=None):
+    raw = meta_update._read_json(path or CFG, {}) or {}
     modules = raw.get("modules") if isinstance(raw.get("modules"), dict) else {}
     hotkey = str(raw.get("overlay_hotkey") or HOTKEY_DEFAULT).upper()
     if hotkey not in HOTKEY_CHOICES:
         hotkey = HOTKEY_DEFAULT
+    ui_lang = str(raw.get("ui_lang") or "auto").lower()
+    if ui_lang not in ("auto", "zh", "en"):
+        ui_lang = "auto"
     return {
         "decrypted_dir": str(raw.get("decrypted_dir") or ""),
         "game_dir": str(raw.get("game_dir") or ""),
         "save_file": str(raw.get("save_file") or ""),
+        "save_name": str(raw.get("save_name") or ""),
+        "ui_lang": ui_lang,
         "overlay_hotkey": hotkey,
+        "overlay_compat": bool(raw.get("overlay_compat", True)),
         "overlay_size": int(raw.get("overlay_size") or 2),
         "overlay_pos": raw.get("overlay_pos") or None,
         "modules": {name: bool(modules.get(name, default))
@@ -106,26 +136,58 @@ def load_cfg():
     }
 
 
-def save_cfg(cfg):
-    raw = meta_update._read_json(CFG, {}) or {}
+def _cfg_payload(cfg, raw):
+    """把运行中的配置整理成写入文件的 JSON；未知模块沿用文件里的旧值。"""
     modules = raw.get("modules") if isinstance(raw.get("modules"), dict) else {}
     modules = dict(modules)
     for name, default in _module_defaults().items():
         modules[name] = bool((cfg.get("modules") or {}).get(name, default))
-    data = {
+    return {
         "decrypted_dir": cfg.get("decrypted_dir", ""), "game_dir": cfg.get("game_dir", ""),
         "save_file": cfg.get("save_file", ""),
+        "save_name": cfg.get("save_name", ""),
+        "ui_lang": cfg.get("ui_lang", "auto"),
         "overlay_hotkey": cfg.get("overlay_hotkey", HOTKEY_DEFAULT),
+        "overlay_compat": bool(cfg.get("overlay_compat", True)),
         "overlay_size": cfg.get("overlay_size", 2),
         "overlay_pos": cfg.get("overlay_pos") or None,
         "modules": modules,
     }
-    try:
-        meta_update._atomic_json(CFG, data)
-        return True
-    except Exception as e:
-        print("配置保存失败：%s" % e)
-        return False
+
+
+def save_cfg(cfg):
+    """保存配置：安装包目录写一份，游戏目录里的覆盖窗口副本也同步一份。
+
+    工坊/压缩包里的「功能设置.bat」改的是安装包目录的 config.json，而游戏内
+    覆盖窗口从 <游戏目录>\\BepInEx\\仙友助手 启动、只读它旁边那份；两边不同步，
+    玩家改完语言和快捷键会看起来完全不生效。
+    """
+    targets = [CFG]
+    installed = overlay_cfg_path(cfg)
+    if installed and os.path.abspath(installed) != os.path.abspath(CFG):
+        targets.append(installed)
+        # 安装包目录还没定位过游戏时，借安装副本里的目录信息补全，避免下次又要手填。
+        if not (cfg.get("game_dir") or "").strip():
+            old = meta_update._read_json(installed, {}) or {}
+            for key in ("game_dir", "decrypted_dir"):
+                if old.get(key):
+                    cfg[key] = old[key]
+    ok = True
+    for target in targets:
+        raw = meta_update._read_json(target, {}) or {}
+        data = _cfg_payload(cfg, raw)
+        if os.path.abspath(target) != os.path.abspath(CFG):
+            # 覆盖窗口运行时会自己写窗口位置和档位，不要用另一份的旧值覆盖它。
+            if isinstance(raw.get("overlay_pos"), list):
+                data["overlay_pos"] = raw["overlay_pos"]
+            if raw.get("overlay_size") is not None:
+                data["overlay_size"] = int(raw.get("overlay_size") or 2)
+        try:
+            meta_update._atomic_json(target, data)
+        except Exception as e:
+            print("配置保存失败（%s）：%s" % (target, e))
+            ok = False
+    return ok
 
 
 def _read_registry_value(key_path, value_name):
@@ -204,6 +266,24 @@ def _find_game_dir():
         if os.path.isfile(os.path.join(candidate, "WorldApart.exe")):
             return os.path.normpath(candidate)
     return ""
+
+
+def overlay_cfg_path(cfg=None):
+    """游戏内覆盖窗口实际读取的配置：<游戏目录>\\BepInEx\\仙友助手\\config.json。
+
+    没装覆盖窗口（或还没装到游戏目录）时返回空字符串。
+    """
+    cfg = cfg if isinstance(cfg, dict) else load_cfg()
+    game = (cfg.get("game_dir") or "").strip()
+    dec = (cfg.get("decrypted_dir") or "").strip()
+    if not game and dec:
+        game = meta_update.game_dir_from_config(cfg, dec) or ""
+    if not game or not os.path.isfile(os.path.join(game, "WorldApart.exe")):
+        game = _find_game_dir()
+    if not game:
+        return ""
+    path = os.path.join(game, "BepInEx", "仙友助手", "config.json")
+    return os.path.normpath(path) if os.path.isfile(path) else ""
 
 
 def missing_hints(cfg):
@@ -364,7 +444,8 @@ def source_time(copy_path, originals):
 
 def save_files(dec):
     files = []
-    for path in glob.glob(os.path.join(dec, "*gameworld*")):
+    # 只认最终产物 .bin，插件写入中的 .bin.tmp 一律不读，避免读到半截存档。
+    for path in glob.glob(os.path.join(dec, "*gameworld*.bin")):
         try:
             if os.path.getsize(path) > 100000:
                 files.append(path)
@@ -385,7 +466,12 @@ def state_signature(dec, cfg):
         cfg_stamp = os.stat(CFG).st_mtime_ns
     except OSError:
         cfg_stamp = 0
-    return tuple(sorted(result)), cfg_stamp, tuple(sorted(k for k, v in cfg["modules"].items() if v))
+    try:
+        lang_stamp = os.stat(game_settings_file()).st_mtime_ns
+    except OSError:
+        lang_stamp = 0
+    return (tuple(sorted(result)), cfg_stamp, lang_stamp,
+            tuple(sorted(k for k, v in cfg["modules"].items() if v)))
 
 
 

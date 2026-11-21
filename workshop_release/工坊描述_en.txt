@@ -1,5 +1,6 @@
-[h1]Xianyou Helper v2.3.0[/h1]
+[h1]Xianyou Helper v2.4.0[/h1]
 [b]Read-only save inspector. It never writes back to your save file.[/b]
+[b]English UI is supported[/b]: switch the language in 功能设置.bat, or choose Auto to follow the game.
 [b]Found it useful? Please rate and favorite.[/b]
 [i]The feature list below is long — just install it and explore as you play.[/i]
 
@@ -9,12 +10,13 @@
 [*][b]NPC talents[/b]: talents as the main list; open any NPC to see all their talents when choosing companions.
 [*][b]NPC inventory[/b]: look up an item to see who carries it, whether it can be stolen, the success rate and the penalty. Opening an NPC splits into Theft and Demand (fixed items and affinity cost).
 [*][b]Forging[/b]: forging level, exp, true fire, talent points and best artifact; embryos, material gaps, wash pity, all 78 embryos with board layouts.
-[*][b]Joy house[/b]: each NPC has 3 parts with 6 stages each (18 total); sort by progress to see who is nearly done and how many more for the 18-touches achievements.
+[*][b]Joy house[/b]: each NPC has 3 parts with 6 stages each; sort by progress and see how many more for the 18-touches achievements.
+[*][b]Realm cultivation[/b]: realm, exp gap and next goal at a glance; pick up to 5 auxiliaries with a live success rate and stat bonus. The material codex covers official routes, quests, monster spawns, auction, tournament and world boss.
 [*][b]Stone gambling[/b]: bag stones, opening progress and finished results listed separately, each with quality, crack/bloom progress and estimate; the guide lists odds, price bands, buyer offers and shop locations.
-[*][b]Encounters[/b]: 63 encounters plus 5 branch routes and 369 endings by realm; unlock conditions per option are checked against your stats. Each ending lists rewards first, then a numbered route.
-[*][b]Side quests[/b]: all 254 quests by story chain with 10 states from available to unreachable; unselected branches are flagged and filterable; search by quest, chain, location, giver or reward.
-[*][b]Character gallery[/b]: 1685 NPCs — where they are, what they are to you, what you can do to them. Filters for present/met/Dao companions/friends; safe-to-kill + present avoids reputation loss. Mortal NPCs show remaining lifespan, plus a Seclusion Lifespan panel (breaking through to Golden Core takes 75 years, and it lists who will die).
-[*][b]Romance[/b]: 6 heroine lines and 250 quests with a ring progress axis; each card shows done X/Y and available N; locked lines are dimmed as a whole.
+[*][b]Encounters[/b]: 62 encounters plus 5 branch routes and 364 endings; option conditions are checked against your stats. Each ending lists rewards, then a numbered route.
+[*][b]Side quests[/b]: all 254 quests by story chain with 10 states; unselected branches are flagged and filterable; search by quest, chain, location, giver or reward.
+[*][b]Character gallery[/b]: 1685 NPCs — where they are and what you can do to them. Filters for present/met/Dao companions/friends; safe-to-kill + present avoids reputation loss; a Seclusion Lifespan panel lists who will die.
+[*][b]Romance[/b]: 6 heroine lines and 250 quests with a ring progress axis; cards show done X/Y and available N; locked lines are dimmed.
 [*][b]Memoria[/b]: 187 entries, 37 characters, 62 bond types; progress cards show collected vs total; each entry is marked collected, viewed or not-yet-bonded; search by name or text.
 [*][b]Core passives and arts[/b]: checks your loadout, surfacing top issues and idle resources; the Build tab tests passives/resonances/arts against the real rules, Plan A fills gaps with what you own, Plan B turns gaps into acquisition steps.
 [*][b]Sect[/b]: rank, reputation and realm gaps, salary and task cap; this period's tasks split into to-submit, in-progress, submitted and board offers; 23 scripture-pavilion exchanges are filterable and simulatable one by one.
@@ -23,14 +25,15 @@
 [*][b]Follows the game config[/b]: reads the current game configuration first, so most content updates need no tool update.
 [/list]
 
-[h2]v2.3.0[/h2]
+[h2]v2.4.0[/h2]
 [list]
-[*][b]Automatic updates (highlights)[/b]: once Steam refreshes the workshop content, the next game launch syncs the new panel and plugin DLL automatically. No need to run 「一键安装.bat」 again.
-[*][b]Zoom[/b]: scale the panel from 50% to 250%; click the percentage to reset to 100%.
-[*][b]Three window sizes[/b]: switch between small / medium / large from the top bar.
-[*][b]Drag to move[/b]: drag the top bar to place the panel anywhere; position and size are remembered.
-[*][b]Resume where you were[/b]: after a save refresh, the active tab and scroll position are kept.
-[*]Existing users: run 「一键安装.bat」 one last time; all later updates are automatic.
+[*][b]Realm page redesign[/b]: realm, EXP and target in one view; pick up to 5 auxiliaries with live success rate.
+[*][b]Material codex[/b]: official routes, quests, monster spawns, auction, tournament and world boss.
+[*][b]Joy House[/b]: the 18-touches achievement merges every segment ever obtained across saves.
+[*][b]Ending requirements[/b]: conditions sit beside each ending and are checked live with ✓/✗.
+[*][b]Audit & English[/b]: quests, encounters and romance rechecked; English labels filled; F8 removed.
+[*][b]Quality of life[/b]: character pinning, faster sync, installer opens the browser version.
+[*]On v2.3.0+ no reinstall needed; updates sync automatically.
 [/list]
 
 [h2]Install[/h2]
@@ -46,11 +49,12 @@
 [h2]FAQ[/h2]
 [list]
 [*][b]Where is the workshop folder?[/b] `Steam\steamapps\workshop\content\4209920\3839624741`. You can also right-click the game in your Steam library, choose Manage > Browse local files, then go to `..\..\workshop\content\4209920\3839624741`.
-[*][b]Which save does it read?[/b] The newest one by default. To inspect another save, save it again in-game so it becomes the newest one.
+[*][b]Which save does it read?[/b] The newest save of each character by default. To inspect another save, save it again in-game so it becomes the newest one; you can also pin a save in 「功能设置.bat」.
 [*][b]No BepInEx\decrypted folder?[/b] The plugin did not load. Fully close the game and run 「一键安装.bat」 again; check that every self-check shows ✓.
 [*][b]Does it conflict with other BepInEx plugins?[/b] The installer only adds this tool's plugin and leaves the BepInEx core untouched.
-[*][b]No data in the tool?[/b] Let the game run for 15-20 seconds so the save copy can be exported; press F8 to force a refresh.
+[*][b]No data in the tool?[/b] Let the game run for 15-20 seconds so the save copy can be exported; click "Sync now" in the top bar.
 [*][b]F3 does nothing / updating from an old version?[/b] On v2.2.0 or older, close the game and run 「一键安装.bat」 one last time; v2.3.0 and later update automatically. Close any other software that grabs F3.
+[*][b]Steam download failed / no response after update?[/b] Fully exit the game and helper, then verify the game files. If it still fails, unsubscribe, restart Steam and subscribe again. The plugin verifies the workshop EXE and keeps the old version if the download is incomplete.
 [*][b]How do I update?[/b] v2.2.0 and older: close the game and run 「一键安装.bat」 once. v2.3.0 and newer: nothing to do — updates sync on the next game launch.
 [*][b]Uninstall[/b]: close the game, delete BepInEx\plugins\SaveDecryptProbe and BepInEx\仙友助手, then unsubscribe. Optionally delete BepInEx\decrypted and %LOCALAPPDATA%\WorldApartTouchProgress.
 [/list]
@@ -59,7 +63,7 @@
 [list]
 [*]Only the exported save copy is read; game saves are never modified.
 [*]Since v2.2 the panel starts with the game; press F3 to open it. You can still double-click 「仙友助手.exe」 to view it in a browser.
-[*]Data refreshes every 60 seconds; press F8 after saving to refresh immediately.
+[*]Data refreshes every 10 seconds; click "Sync now" in the top bar to refresh immediately.
 [*]「功能设置.bat」 lets you enable or disable each module separately.
 [*]The BepInEx console window stays closed by default; logs are still written to BepInEx\LogOutput.log. Set [Logging.Console] Enabled back to true in BepInEx.cfg when troubleshooting.
 [*]Uninstall: delete BepInEx\plugins\SaveDecryptProbe and BepInEx\仙友助手 from your game folder, then unsubscribe. Optionally delete BepInEx\decrypted and %LOCALAPPDATA%\WorldApartTouchProgress.

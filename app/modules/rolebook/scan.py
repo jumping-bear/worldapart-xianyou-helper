@@ -89,6 +89,13 @@ def _avatar_for(npc_id):
     return images.get(str(npc_id), "")
 
 
+def _avatar_ref(npc_id):
+    """返回头像在快照里的键，不复制 dataURI；页面端按键去重后再取图。"""
+    images, icons = _load_avatars()
+    key = icons.get(str(npc_id)) or str(npc_id)
+    return key if key in images else ""
+
+
 def scan(obj, meta_obj, state=None):
     """产出 {states, locs, stats, player}，玩家实际状态按 npcId 索引。"""
     player = (obj or {}).get("playerModel") or {}
@@ -106,6 +113,7 @@ def scan(obj, meta_obj, state=None):
     # 好感/亲密 + 实时位置：位置按"在存档里"记录，是否展示不看交情
     favor = {}
     locs = {}
+    realtime = {}
     records = (obj or {}).get("npcs")
     for record in records.values() if isinstance(records, dict) else ():
         if not isinstance(record, dict):
@@ -123,6 +131,21 @@ def scan(obj, meta_obj, state=None):
             "region": parts[0] if parts else "",
             # worldStatus 2 = 寿元已尽/已退隐，存档保留记录但世界里已经没有这个人
             "gone": _int(record.get("worldStatus")) == 2,
+        }
+        cult = record.get("cultivation_state") or {}
+        slots = (record.get("talent") or {}).get("slots") or []
+        live_talents = []
+        for slot in slots:
+            if not isinstance(slot, dict):
+                continue
+            tid = _int(slot.get("talent_id"))
+            if tid:
+                live_talents.append({"id": tid, "unlocked": bool(slot.get("unlocked"))})
+        realtime[npc_id] = {
+            "layer_id": _int(cult.get("cultivate_layer_id"), -1),
+            "talents": live_talents,
+            # 本月激活的特殊互动入口（留影/切磋/说服…），0 表示本月没有。
+            "special_sub": _int((record.get("npc_interaction_runtime") or {}).get("special_sub_id")),
         }
 
     rel = player.get("npc_relation") or {}
@@ -194,9 +217,14 @@ def scan(obj, meta_obj, state=None):
         is_dao = npc_id in dao_ids
         tier = _intimacy_tier(tiers, value) or {}
         raw_roles = rel_map.get(npc_id) or {}
-        roles = [label for key, label in REL_LABELS if key in raw_roles]
+        # 配置里新出现的关系类型不在已知表里时，仍要露出来（显示原始键名），
+        # 避免游戏更新后新关系被静默吞掉。
+        known_keys = {key for key, _ in REL_LABELS}
+        extra_roles = [(key, key) for key in raw_roles if key not in known_keys]
+        role_rows = list(REL_LABELS) + extra_roles
+        roles = [label for key, label in role_rows if key in raw_roles]
         detail = {}
-        for key, label in REL_LABELS:
+        for key, label in role_rows:
             peers = raw_roles.get(key)
             if not peers:
                 continue
@@ -256,7 +284,8 @@ def scan(obj, meta_obj, state=None):
         "present": len(set(locs) & set(name_of)),
         "absent": len(set(name_of) - set(locs)),
     }
-    return {"states": states, "locs": locs, "stats": stats, "player": player_state}
+    return {"states": states, "locs": locs, "realtime": realtime,
+            "stats": stats, "player": player_state}
 
 
 def post(rows, state, original, path):
@@ -274,11 +303,15 @@ def enrich(module, meta_obj, state=None):
     scanned = module.get("rows") if isinstance(module.get("rows"), dict) else {}
     states = scanned.get("states") or {}
     locs = scanned.get("locs") or {}
+    realtime = scanned.get("realtime") or {}
+    layers = meta.get("layers") or {}
+    talent_meta = meta.get("talents") or {}
     live_stats = scanned.get("stats") or {}
     player = scanned.get("player") or {}
 
     npcs = []
     avatar_map = {}
+    used_avatars = set()
     evil_met = merchant_met = present_count = 0
     safe_present = safe_ready = 0
     for card in built.get("npcs") or []:
@@ -289,6 +322,39 @@ def enrich(module, meta_obj, state=None):
             continue
         live = states.get(str(npc_id)) or {}
         place = locs.get(npc_id) or {}
+        # 存档里的实时境界与天赋优先：NPC 会自己修炼、解锁天赋，模板初值不一定是现状。
+        rt = realtime.get(str(npc_id)) or realtime.get(npc_id) or {}
+        layer_id = _int(rt.get("layer_id"), -1)
+        layer_info = layers.get(str(layer_id)) if layer_id >= 0 else None
+        if layer_info:
+            npc["realm"] = layer_info.get("full") or npc.get("realm")
+            npc["realm_short"] = layer_info.get("realm") or npc.get("realm_short")
+            npc["realm_raw"] = layer_info.get("phase") or npc.get("realm_raw")
+            npc["layer"] = layer_info.get("layer") or npc.get("layer")
+            npc["layer_order"] = layer_info.get("order") or npc.get("layer_order")
+            npc["realm_live"] = 1
+        live_talents = rt.get("talents")
+        if live_talents:
+            merged = []
+            for item in live_talents:
+                if not isinstance(item, dict):
+                    continue
+                tid = _int(item.get("id"))
+                info = talent_meta.get(str(tid)) or {}
+                merged.append({"id": tid,
+                               "name": info.get("name") or ("天赋 %s" % tid),
+                               "unlocked": bool(item.get("unlocked"))})
+            if merged:
+                npc["talents"] = merged
+        # 本月特殊互动入口：把 special_sub_id 映射成按钮名/状态标签。
+        special_sub = _int(rt.get("special_sub"))
+        entry_meta = (meta.get("special_entries") or {}).get(
+            "%s|%s" % (npc_id, special_sub)) if special_sub else None
+        npc["special_sub"] = special_sub
+        npc["special_name"] = (entry_meta or {}).get("name") or ""
+        npc["special_type"] = (entry_meta or {}).get("type") or 0
+        npc["special_tag"] = (entry_meta or {}).get("tag") or ""
+        npc["special_desc"] = (entry_meta or {}).get("desc") or ""
         favor = _int(live.get("favor"), 0)
         npc["favor"] = favor
         npc["met"] = bool(live.get("met"))          # 有交情（不是"在世"）
@@ -303,6 +369,17 @@ def enrich(module, meta_obj, state=None):
         npc["loc_name"] = place.get("name") or ""
         npc["region"] = place.get("region") or ""
         npc["gone"] = bool(place.get("gone"))
+        # 已退隐再细分：寿元已尽是明确的寿终；其余（境界突破/剧情清退等）
+        # 存档没有记录来源，只标“已退隐”，不替游戏下结论。
+        if npc["gone"]:
+            death_text = str(npc.get("death") or "")
+            remaining = npc.get("remaining_years")
+            natural = ("寿元" in death_text) or (remaining is not None and _int(remaining) <= 0)
+            npc["gone_reason"] = "dead" if natural else "retired"
+        elif not npc["present"]:
+            npc["gone_reason"] = "absent"
+        else:
+            npc["gone_reason"] = ""
         # 安全击杀目标：杀他不掉善恶、不扣声望；safe_now 才是"现在就能去杀"的
         npc["safe_now"] = bool(npc.get("safe_target")) and npc["present"] and not npc["gone"]
         tier = _intimacy_tier(tiers, favor) or {}
@@ -322,9 +399,10 @@ def enrich(module, meta_obj, state=None):
         if npc["met"]:
             evil_met += 1 if _int(npc.get("evil"), 0) < 0 else 0
             merchant_met += 1 if npc.get("merchant") else 0
-        uri = _avatar_for(npc["id"])
-        if uri:
-            avatar_map[str(npc["id"])] = uri
+        ref = _avatar_ref(npc["id"])
+        if ref:
+            avatar_map[str(npc["id"])] = ref
+            used_avatars.add(ref)
         npcs.append(npc)
 
     live_stats = dict(live_stats)
@@ -339,6 +417,12 @@ def enrich(module, meta_obj, state=None):
     live_stats["safe_target_present"] = safe_present
     live_stats["safe_target_ready"] = safe_ready
     live_stats["safe_target_absent"] = safe_total - safe_present
+    live_stats["gone"] = sum(1 for card in npcs if card.get("gone"))
+    live_stats["dead"] = sum(1 for card in npcs if card.get("gone_reason") == "dead")
+    live_stats["retired"] = sum(1 for card in npcs if card.get("gone_reason") == "retired")
+    live_stats["absent"] = sum(1 for card in npcs if card.get("gone_reason") == "absent")
+    live_stats["special"] = sum(1 for card in npcs if card.get("special_name")
+                                and card.get("present") and not card.get("gone"))
 
     module["npcs"] = npcs
     module["meta"] = meta
@@ -346,6 +430,9 @@ def enrich(module, meta_obj, state=None):
     module["live_stats"] = live_stats
     module["player"] = player
     module["avatar_map"] = avatar_map
+    # 同一个头像会被几十个 NPC 共用；只存一份，页面端按 avatar_map 的键回查。
+    images, _icons = _load_avatars()
+    module["avatars"] = {key: images.get(key, "") for key in used_avatars if images.get(key)}
     module["breakthroughs"] = built.get("breakthroughs") or []
     module["death_risk"] = built.get("death_risk") or []
     return module
