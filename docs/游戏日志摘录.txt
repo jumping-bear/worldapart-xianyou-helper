@@ -1,0 +1,79 @@
+游戏日志摘录（用于反馈给官方）
+====================================================
+采集时间：2026-11-22 14:0x
+日志位置：C:\Users\Hason Shaw\AppData\LocalLow\Nuverse\WorldApart\
+
+  Player.log       当前/最近一次会话（08:38 结束）
+  Player-prev.log  上一次会话（07:14 结束）
+
+注意：Player-prev.log 会在下次启动游戏时被覆盖，需要留证请先复制。
+
+----------------------------------------------------
+一、环境（摘自 Player-prev.log 第 1-11 行）
+----------------------------------------------------
+Loading player data from F:/Program Files (x86)/Steam/steamapps/common/A1/WorldApart_Data/data.unity3d
+Initialize engine version: 2022.3.43f1 (85497d293fa1)
+GfxDevice: creating device client; threaded=1; jobified=1
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+    Renderer: AMD Radeon RX 9070 XT (ID=0x7550)
+    Vendor:   ATI
+    VRAM:     16191 MB
+    Driver:   32.0.32029.2010
+D3D11 device created for Microsoft Media Foundation video decoding.
+
+显示器：3840x2160 @ 120Hz
+游戏内设置：分辨率 4096x2160（比显示器宽 256 像素）、垂直同步关、帧率上限 60
+
+----------------------------------------------------
+二、关键诊断行（Player-prev.log，07:14 那次会话）
+----------------------------------------------------
+第 21 行（启动阶段，紧跟在输入系统初始化之后）：
+
+    Direct3D: detected that using refresh rate causes time drift.
+    Will stop trusting refresh rate until the game window is moved.
+
+第 5201 行（游戏过程中，场景切换时再次出现）：
+
+    Direct3D: detected that using refresh rate causes time drift.
+    Will stop trusting refresh rate until the game window is moved.
+
+上下文（第 19-23 行）：
+    19: <RI> Initialized touch support.
+    20:
+    21: Direct3D: detected that using refresh rate causes time drift. Will stop trusting refresh rate until the game window is moved.
+    22: [PhysX] Initialized MultithreadedTaskDispatcher with 20 workers.
+    23: UnloadTime: 0.551400 ms
+
+----------------------------------------------------
+三、对照：最近一次会话（Player.log，08:38 结束）
+----------------------------------------------------
+同一位置没有任何 time drift 警告，只有基本信息：
+
+     6 Direct3D:
+     7 Version:  Direct3D 11.0 [level 11.1]
+     8 Renderer: AMD Radeon RX 9070 XT (ID=0x7550)
+    10 VRAM:     16191 MB
+    11 Driver:   32.0.32029.2010
+
+两次会话之间改过的设置：垂直同步 开 → 关。
+
+----------------------------------------------------
+四、此前会话还出现过（已被覆盖，仅记录）
+----------------------------------------------------
+    Direct3D: detected that vsync is broken (it does not limit frame rate properly).
+    Delta time will now be calculated using cpu-side time stamping
+    until the game window is moved.
+
+----------------------------------------------------
+五、反馈要点
+----------------------------------------------------
+1. 日志里出现了引擎自己报的 "time drift" 和（此前）"vsync is broken"，
+   说明 Unity 对当前全屏呈现的刷新率/垂直同步判定失效，已降级为
+   CPU 侧时间戳计算 delta time。
+2. 游戏内分辨率设为 4096x2160，而显示器原生为 3840x2160，
+   两者不匹配，可能是刷新率/时间漂移的直接来源。
+3. 现象：全屏下使用中文输入法（微软拼音，TSF）打字明显卡顿；
+   切到窗口化后正常。英雄联盟同样"全屏"打字不卡。
+4. 希望确认：Screen.fullScreenMode 用的是 ExclusiveFullScreen
+   还是 FullScreenWindow；全屏下 WM_IME_* 消息是否在渲染线程上同步处理。
