@@ -5,8 +5,74 @@ from meta_update import (
 )
 
 
+def _constant_values(tables):
+    """tbconstants 有主表和多张分表，全部合并后再取常量，避免同键折叠时丢字段。"""
+    result = {}
+    for name, value in tables.items():
+        if name != "tbconstants" and not str(name).startswith("tbconstants."):
+            continue
+        for row in _rows(value):
+            if isinstance(row, dict):
+                for key, item in row.items():
+                    result[str(key)] = item
+    return result
+
+
+def _collect_drop_items(drop_id, drops, out, seen=None, depth=0):
+    """递归展开掉落表：dropList 直接给物品，rewardDropList 指向下一张表。"""
+    if not drop_id or depth > 8:
+        return
+    key = str(drop_id)
+    if seen is None:
+        seen = set()
+    if key in seen:
+        return
+    seen.add(key)
+    row = drops.get(key) or {}
+    for variant in row.get("variants") or []:
+        if not isinstance(variant, dict):
+            continue
+        for entry in variant.get("dropList") or []:
+            if isinstance(entry, dict) and entry.get("itemId") is not None:
+                out.add(_int(entry.get("itemId")))
+        for entry in variant.get("rewardDropList") or []:
+            if isinstance(entry, dict) and entry.get("rewardDropId") is not None:
+                _collect_drop_items(entry.get("rewardDropId"), drops, out, seen, depth + 1)
+
+
+def _gift_pool_meta(tables):
+    """AI 聊天赠礼：按境界档展开四张掉落表，并派生境界分档边界。"""
+    constants = _constant_values(tables)
+    drops = {str(row.get("id")): row for row in _rows(tables.get("tbrewarddrop") or [])
+             if isinstance(row, dict) and row.get("id") is not None}
+    keys = (("1", "AINPC_CHAT_REWARD_LIANQI_DROP_ID"),
+            ("2", "AINPC_CHAT_REWARD_ZHUJI_DROP_ID"),
+            ("3", "AINPC_CHAT_REWARD_JIEDAN_DROP_ID"),
+            ("4", "AINPC_CHAT_REWARD_YUANYING_DROP_ID"))
+    pools = {}
+    for bucket, key in keys:
+        items = set()
+        _collect_drop_items(_int(constants.get(key)), drops, items)
+        pools[bucket] = sorted(items)
+    phases = {}
+    for row in _rows(tables.get("tbcultivaterealm") or []):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        values = [_int(x) for x in (row.get("phases") or []) if _int(x) > 0]
+        if values:
+            phases[_int(row.get("id"))] = min(values)
+    limits = [phases[r] - 1 for r in (2, 3, 4) if r in phases]
+    return {
+        "gift_pools": pools,
+        "gift_bucket_limits": limits,
+        "gift_cycle_days": _int(constants.get("AINPC_CHAT_REWARD_CYCLE_DAYS")),
+        "gift_total_count": _int(constants.get("AINPC_CHAT_REWARD_CYCLE_TOTAL_COUNT")),
+        "gift_per_npc_count": _int(constants.get("AINPC_CHAT_REWARD_PER_NPC_MAX_COUNT")),
+    }
+
+
 def build_items(tables):
-    """物品只读元数据：名称、类型、品质、偷窃参数和持有者的可偷状态。"""
+    """NPC物品：名称、类型、品质、偷窃参数、索要模板、可赠私物与持有者的可偷状态。"""
     item_types = {}
     for row in _rows(tables["tbitemtype"]):
         if isinstance(row, dict) and row.get("id") is not None:
@@ -40,9 +106,15 @@ def build_items(tables):
     templates = {str(r.get("id")): r for r in _rows(tables["tbnpcitemdemandholdtemplate"])
                  if isinstance(r, dict) and r.get("id") is not None}
     demands = {}
+    supplies = {}
     for rule in _rows(tables["tbnpcbagrule"]):
         if not isinstance(rule, dict) or rule.get("npcId") is None:
             continue
+        npc_key = str(rule.get("npcId"))
+        supply = {_int(entry.get("itemId")) for entry in (rule.get("supplyItemList") or [])
+                  if isinstance(entry, dict) and entry.get("itemId") is not None}
+        if supply:
+            supplies[npc_key] = sorted(supply)
         template = templates.get(str(rule.get("demandTemplateId")))
         if not template:
             continue
@@ -74,11 +146,14 @@ def build_items(tables):
             "realm": realms.get(str(layer or 0)) or _text(row.get("layerZeroShowText")) or "凡人",
             "can_steal": bool(row.get("can_steal", True)) if has_flag else True,
             "demand": demands.get(str(row["id"])) or [],
+            "supply": supplies.get(str(row["id"])) or [],
         }
     if not items:
         raise ValueError("物品配置为空")
-    return {"schema": SCHEMA, "items": items, "npcs": npcs, "intimacy": tiers,
-            "spaces": build_spaces(tables), "realms": realms}
+    result = {"schema": SCHEMA, "items": items, "npcs": npcs, "intimacy": tiers,
+              "spaces": build_spaces(tables), "realms": realms}
+    result.update(_gift_pool_meta(tables))
+    return result
 
 
 # 插件统一入口

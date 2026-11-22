@@ -2,7 +2,7 @@
    可切换到「按 NPC 看」的完整清单视角。 */
 (function(){
 const ITEM_KEY='worldapart.item.filters.v1';
-const ITEM_DEFAULTS={q:'',npc:'',region:'',location:'',type:'',quality:'',steal:'',demand:''};
+const ITEM_DEFAULTS={q:'',npc:'',region:'',location:'',type:'',quality:'',steal:'',demand:'',gift:''};
 let itemFilters=Object.assign({},ITEM_DEFAULTS,store.get(ITEM_KEY,{}));
 let itemView=store.get('worldapart.item.view.v1','item');
 if(itemView!=='npc')itemView='item';
@@ -45,8 +45,10 @@ function itemOwnersHtml(iid){
    if(o.t.steal.kill)rate+='<span class="badge deadly">致命</span>';
   }
   const inPool=(o.row.demand||[]).some(id=>String(id)===String(iid));
+  const giftAble=(o.row.gift||[]).some(id=>String(id)===String(iid));
   const demandBadge=!inPool?'':(o.t.demand?'<span class="badge demand">索要 -'+esc(o.t.demand_cost||0)+' 好感</span>':'<span class="badge demand-absent">不可索要</span>');
-  return '<details class="npc owner" data-uid="'+esc(o.row.uid)+'" data-item="'+esc(iid)+'"><summary><span class="who">'+hi(o.row.who,state.npcQ)+'</span>'+(o.row.realm?'<span class="badge">'+esc(o.row.realm)+'</span>':'')+badge+demandBadge+'<span class="badge">×'+esc(o.count)+'</span>'+rate+'<span class="location">'+esc(o.row.location_path||o.row.location||'未知地点')+'</span>'+stealDetailHtml(o.v.ok?o.t.steal:null)+'</summary><div class="slots"></div></details>';
+  const giftBadge=giftAble?'<span class="badge gift">可赠</span>':'';
+  return '<details class="npc owner" data-uid="'+esc(o.row.uid)+'" data-item="'+esc(iid)+'"><summary><span class="who">'+hi(o.row.who,state.npcQ)+'</span>'+(o.row.realm?'<span class="badge">'+esc(o.row.realm)+'</span>':'')+badge+demandBadge+giftBadge+'<span class="badge">×'+esc(o.count)+'</span>'+rate+'<span class="location">'+esc(o.row.location_path||o.row.location||'未知地点')+'</span>'+stealDetailHtml(o.v.ok?o.t.steal:null)+'</summary><div class="slots"></div></details>';
  }).join('');
  const blocked=all.filter(o=>!o.v.ok).length;
  const labels={rate:'按成功率从高到低',count:'按持有数量从多到少',name:'按 NPC 名称排序'};
@@ -77,37 +79,104 @@ function intimacyName(row){
  for(const t of tiers){if(row.intimacy!=null&&row.intimacy>=t.need)name=t.name}
  return name;
 }
+/* 一名 NPC 一张表：三个渠道（偷 / 索要 / 赠礼）的结论并列在物品同一行，
+   不再把同一批物品拆成三段各铺一遍。默认按「获取成本从低到高」排序，
+   玩家从上往下就是推荐的拿取顺序。 */
+let npcChannel='';
+let npcPage={};
+const NPC_PAGE_SIZE=20;
+function npcChanOk(o){
+ if(!npcChannel)return true;
+ if(npcChannel==='steal')return o.v.ok;
+ if(npcChannel==='gift')return o.gift;
+ if(npcChannel==='demand')return o.demand;
+ return true;
+}
 function npcItemsHtml(uid,focus){
  const idx=itemIndex(),row=idx.rows.get(uid);
  if(!row)return '';
  const cat=idx.cat;
- const list=(row.items||[]).map(pair=>{
-  const t=cat[String(pair[0])]||{name:'物品 #'+pair[0],quality:0,type:''};
-  return{o:t,t:t,count:pair[1]||1,v:itemVerdict(row,t)};
- });
- list.sort((a,b)=>Number(b.v.ok)-Number(a.v.ok)||String(a.t.name).localeCompare(String(b.t.name),'zh-CN'));
- const bagIds=new Set(list.map(o=>String(o.t.id)));
  const focusId=focus!==undefined&&focus!==null?String(focus):'';
- const stealRows=list.map(o=>{
-  const rule=o.t.steal,verdict=o.v.ok?'<span class="steal-ok">可偷</span>':'<span class="muted">'+esc(o.v.label)+'</span>';
-  const current=focusId&&String(o.t.id)===focusId;
-  const effect=o.v.ok&&rule?'<div class="effect">成功率 '+rule.rate+'% · 一次最多 '+rule.count+' 个 · 善恶值 '+rule.alignment+' · 好感 '+rule.intimacy+(rule.kill?' · <span class="steal-risk">失手触发击杀</span>':'')+'</div>':'';
-  return '<div class="slot'+(current?' focus':'')+'"><div class="slot-head"><span class="talent-name '+fqClass(o.t.quality)+'">'+esc(o.t.name)+'</span>'+(current?'<span class="badge steal">当前物品</span>':'')+'<span class="badge">×'+esc(o.count)+'</span><span class="badge">'+esc(o.t.type||'未分类')+'</span>'+verdict+'</div>'+effect+'</div>';
+ const demandSet=new Set((row.demand||[]).map(id=>String(id)));
+ const giftSet=new Set((row.gift||[]).map(id=>String(id)));
+ const entries=new Map();
+ for(const pair of row.items||[]){
+  const key=String(pair[0]);
+  const t=cat[key]||{name:'物品 #'+key,quality:null,type:''};
+  const count=pair[1]||1;
+  if(entries.has(key))entries.get(key).count+=count;
+  else entries.set(key,{t:t,count:count});
+ }
+ for(const key of demandSet){
+  if(entries.has(key))continue;
+  entries.set(key,{t:cat[key]||{name:'物品 #'+key,quality:null,type:''},count:0});
+ }
+ const list=[];
+ for(const [key,o] of entries){
+  const v=itemVerdict(row,o.t);
+  const inTemplate=demandSet.has(key)&&!!o.t.demand;
+  list.push({
+   key:key,t:o.t,count:o.count,v:v,
+   demand:inTemplate&&o.count>0,demandPool:demandSet.has(key),
+   gift:giftSet.has(key)
+  });
+ }
+ const rankOf=o=>o.gift?0:(o.v.ok?1:(o.demand?2:3));
+ list.sort((a,b)=>rankOf(a)-rankOf(b)||Number(b.t.quality||0)-Number(a.t.quality||0)||String(a.t.name).localeCompare(String(b.t.name),'zh-CN'));
+ const st={steal:0,demand:0,gift:0};
+ for(const o of list){if(o.v.ok)st.steal++;if(o.demand)st.demand++;if(o.gift)st.gift++}
+ const gm=DATA.modules.items||{},cycle=gm.gift_cycle_days||0,total=gm.gift_total_count||0,per=gm.gift_per_npc_count||0;
+ const tips=[];
+ const both=list.filter(o=>o.gift&&o.demand).length;
+ if(both)tips.push('有 <b>'+both+'</b> 件既能等他主动赠予、也能花好感索要，优先等赠礼更省。');
+ if(st.gift){
+  if(row.gift_left>0)tips.push('本轮赠礼还可要 <b>'+esc(row.gift_left)+'</b> 次（单 NPC 整轮 '+per+' 次，已用 '+esc(row.gift_used||0)+'），是否给要看这次聊得让不让他愿意亲近。');
+  else tips.push('本轮赠礼次数已用完（'+per+' 次），这些只能靠索要或偷取。');
+ }else if(cycle){
+  tips.push('他身上暂时没有能进入 AI 赠礼池的物品（赠礼池 ∩ 他的背包，已排除货架货）。');
+ }
+ const chanBtn=(key,label,num)=>'<button type="button" class="ni-chip'+(npcChannel===key?' on':'')+'" data-ch="'+key+'">'+label+' '+num+'</button>';
+ const bar='<div class="ni-bar">'
+  +'<span class="ni-title">他身上的 '+list.length+' 件</span>'
+  +(row.intimacy!=null?'<span class="ni-k">好感 <b>'+esc(row.intimacy)+'</b>'+(intimacyName(row)?'（'+esc(intimacyName(row))+'）':'')+'</span>':'')
+  +'<span class="ni-sep"></span>'
+  +'<button type="button" class="ni-chip'+(npcChannel===''?' on':'')+'" data-ch="">全部</button>'
+  +(st.steal?chanBtn('steal','能偷',st.steal):'')
+  +(st.gift?chanBtn('gift','可赠',st.gift):'')
+  +(st.demand?chanBtn('demand','可索要',st.demand):'')
+  +'<details class="ni-rule"><summary>判定规则</summary><div class="ni-rule-body">'
+   +'<div><b>偷</b>：只在对方「可被偷」且物品本身可偷时成立，行内数字是成功率；把鼠标停在数字上可看每件的「一次最多 / 善恶值 / 好感」消耗，带 ⚠ 表示失手会触发击杀。</div>'
+   +'<div><b>索要</b>：来自这个 NPC 的索要模板，一次扣固定好感，与他的境界无关；模板里若有他此刻背包没有的物品会标「缺」。</div>'
+   +'<div><b>赠礼</b>：来自 AI 聊天赠礼池与他的背包的交集（已排除货架货）'+(cycle?'，'+cycle+' 游戏日一轮、整轮 '+total+' 次、单 NPC '+per+' 次':'')+'；属于聊天时的随机赠予，不是必得。</div>'
+  +'</div></details></div>';
+ const shown=list.filter(npcChanOk);
+ const limit=NPC_PAGE_SIZE*(npcPage[uid]||1);
+ const visible=shown.slice(0,limit),rest=shown.length-visible.length;
+ const rows=visible.map(o=>{
+  const cur=focusId&&o.key===focusId;
+  const name='<span class="ni-name"><span class="talent-name '+fqClass(o.t.quality)+'">'+esc(o.t.name)+'</span>'+(cur?'<span class="badge steal">当前物品</span>':'')+'</span>';
+  const count='<span class="ni-n">'+(o.count>0?'×'+esc(o.count):'<i class="nil">缺</i>')+'</span>';
+  const type='<span class="ni-type">'+esc(o.t.type||'未分类')+'</span>';
+  let steal;
+  if(o.v.ok){
+   const r=o.t.steal;
+   const tip='成功率 '+r.rate+'% · 一次最多 '+r.count+' 个 · 善恶值 '+r.alignment+' · 好感 '+r.intimacy+(r.kill?' · 失手触发击杀':'');
+   steal='<span class="ni-c steal ok" title="'+esc(tip)+'">'+r.rate+'%'+(r.kill?'<i class="warn">⚠</i>':'')+'</span>';
+  }else{
+   steal='<span class="ni-c off" title="'+esc(o.v.label)+'">—</span>';
+  }
+  let demand;
+  if(o.demand)demand='<span class="ni-c demand" title="一次消耗 '+esc(o.t.demand_cost||0)+' 好感">-'+esc(o.t.demand_cost||0)+'</span>';
+  else if(o.demandPool&&o.count<=0)demand='<span class="ni-c off" title="在他的索要模板里，但他身上没有这件">缺</span>';
+  else demand='<span class="ni-c off">—</span>';
+  const gift=o.gift?'<span class="ni-c gift">可赠</span>':'<span class="ni-c off">—</span>';
+  return '<div class="ni-row'+(cur?' focus':'')+'">'+name+count+type+steal+demand+gift+'</div>';
  }).join('');
- const demands=(row.demand||[]).map(id=>{
-  const key=String(id),t=cat[key]||{name:'物品 #'+key,quality:0,type:''};
-  return{t:t};
- });
- demands.sort((a,b)=>Number(!!b.t.demand)-Number(!!a.t.demand)||(a.t.demand_cost||0)-(b.t.demand_cost||0)||String(a.t.name).localeCompare(String(b.t.name),'zh-CN'));
- const demandRows=demands.map(o=>{
-  const ok=!!o.t.demand,current=focusId&&String(o.t.id)===focusId;
-  const absent=bagIds.has(String(o.t.id))?'':'<span class="badge demand-absent">不在背包</span>';
-  const value=ok?'<span class="badge demand">好感 -'+esc(o.t.demand_cost||0)+'</span>':'<span class="badge nosteal">不可索要</span>';
-  return '<div class="slot'+(current?' focus':'')+'"><div class="slot-head"><span class="talent-name '+fqClass(o.t.quality)+'">'+esc(o.t.name)+'</span>'+absent+'<span class="badge">'+esc(qualityLabel(o.t.quality))+'</span>'+value+'</div></div>';
- }).join('');
- const fav=row.intimacy!=null?'<div class="item-sec-note">好感 '+esc(row.intimacy)+(intimacyName(row)?'（'+esc(intimacyName(row))+'）':'')+' · 无好感门槛 · 每周期 1 次 · 消耗不随境界折算</div>':'';
- return '<div class="item-sec"><div class="item-sec-head"><span>偷取</span><span class="meta">'+list.length+' 件 · 来自他的背包</span></div>'+(stealRows||'<div class="empty">他目前没有持有物品</div>')+'</div>'
-  +'<div class="item-sec"><div class="item-sec-head"><span>索要</span><span class="meta">'+demands.length+' 件 · 来自索要模板</span></div>'+fav+(demandRows||'<div class="empty">这个 NPC 没有索要模板</div>')+'</div>';
+ const tipHtml=tips.length?'<div class="ni-tip">'+tips.join(' ')+'</div>':'';
+ const grid=shown.length?'<div class="ni-grid"><div class="ni-row hd"><span>物品</span><span class="ni-n">数量</span><span class="ni-type">类型</span><span class="ni-c">偷取</span><span class="ni-c">索要</span><span class="ni-c">赠礼</span></div>'+rows+'</div>'
+  :'<div class="ni-none">这个渠道下没有物品；点上方「全部」看完整清单。</div>';
+ const more=rest?'<button type="button" class="ni-more" data-ni-more="'+esc(uid)+'">显示更多（还有 '+rest+' 件）</button>':'';
+ return '<div class="npc-items" data-uid="'+esc(uid)+'">'+bar+tipHtml+grid+more+'</div>';
 }
 function npcPass(row,npcQ){
  if(itemFilters.region&&(row.region||'未知区域')!==itemFilters.region)return false;
@@ -123,9 +192,10 @@ function itemPass(iid,t,row,v,q){
  if(itemFilters.steal==='1'&&!v.ok)return false;
  if(itemFilters.steal==='0'&&v.ok)return false;
  if(itemFilters.demand==='1'&&!((row.demand||[]).some(id=>String(id)===iid)&&t.demand))return false;
+ if(itemFilters.gift==='1'&&!(row.gift||[]).some(id=>String(id)===iid))return false;
  return true;
 }
-function hasItemFilters(){return !!(itemFilters.q||itemFilters.type||itemFilters.quality||itemFilters.steal||itemFilters.demand)}
+function hasItemFilters(){return !!(itemFilters.q||itemFilters.type||itemFilters.quality||itemFilters.steal||itemFilters.demand||itemFilters.gift)}
 function renderItems(){
  itemPage={};
  const m=DATA.modules.items,idx=itemIndex();
@@ -172,6 +242,7 @@ function renderItems(){
 }
 function renderNpcs(){
  itemPage={};
+ npcPage={};
  const m=DATA.modules.items,idx=itemIndex();
  const npcQ=itemFilters.npc.trim().toLowerCase(),q=itemFilters.q.trim().toLowerCase();
  const itemFilterOn=hasItemFilters();
@@ -189,12 +260,13 @@ function renderNpcs(){
   }
   if(itemFilterOn&&!matched)continue;
   const demandable=(row.demand||[]).filter(did=>{const dt=idx.cat[String(did)];return dt&&dt.demand}).length;
-  npcs[row.uid]={row:row,total:(row.items||[]).length,matched:matched,stealable:stealable,demandable:demandable};
+  const giftable=(row.gift||[]).length;
+  npcs[row.uid]={row:row,total:(row.items||[]).length,matched:matched,stealable:stealable,demandable:demandable,giftable:giftable};
  }
  const list=Object.values(npcs).sort((a,b)=>b.stealable-a.stealable||b.total-a.total||String(a.row.who).localeCompare(String(b.row.who),'zh-CN'));
  const cards=list.map(g=>{
   const held=itemFilterOn?'符合 '+g.matched+' / 共 '+g.total+' 件':'共 '+g.total+' 件';
-  return '<details class="item-group npc-card" data-uid="'+esc(g.row.uid)+'"><summary class="item-head"><span class="item-arrow">›</span><span class="item-title">'+hi(g.row.who,npcQ)+'</span>'+(g.row.realm?'<span class="badge">'+esc(g.row.realm)+'</span>':'')+'<span class="badge steal">可偷 '+g.stealable+' 件</span>'+(g.demandable?'<span class="badge demand">可索要 '+g.demandable+' 件</span>':'')+'<span class="item-stat">'+held+' · '+esc(g.row.location_path||g.row.location||'未知地点')+'</span></summary><div class="slots"></div></details>';
+  return '<details class="item-group npc-card" data-uid="'+esc(g.row.uid)+'"><summary class="item-head"><span class="item-arrow">›</span><span class="item-title">'+hi(g.row.who,npcQ)+'</span>'+(g.row.realm?'<span class="badge">'+esc(g.row.realm)+'</span>':'')+'<span class="badge steal">可偷 '+g.stealable+' 件</span>'+(g.demandable?'<span class="badge demand">可索要 '+g.demandable+' 件</span>':'')+(g.giftable?'<span class="badge gift">可赠 '+g.giftable+' 件</span>':'')+'<span class="item-stat">'+held+' · '+esc(g.row.location_path||g.row.location||'未知地点')+'</span></summary><div class="slots"></div></details>';
  });
  itemRenderState={groups:{},q:q,npcQ:npcQ};
  $('iresult').textContent='筛选结果：'+list.length+' 位 NPC，共 '+list.reduce((s,g)=>s+g.total,0)+' 件物品（按 NPC 查看完整清单）';
@@ -219,11 +291,46 @@ function initItems(){
  }
  $('items').innerHTML=sourceHtml(m)+`
   <style>
-  .item-sec{margin-top:14px;border-top:1px solid #2a3340;padding-top:10px}
-  .item-sec-head{display:flex;align-items:baseline;gap:8px;margin:2px 0 4px;font-size:13px;font-weight:600}
-  .item-sec-head .meta{font-weight:400;color:#8b93a1;font-size:12px}
-  .item-sec-note{font-size:12px;color:#8b93a1;margin:0 0 6px}
+  .npc-items{margin:4px 0 8px}
+  .ni-title{font-size:13px;font-weight:600;margin-right:2px}
+  .ni-k{color:#8b93a1;font-size:12px}
+  .ni-k b{color:#cfd6e2;font-weight:600}
+  .ni-sep{width:1px;height:14px;background:#2f3a47;margin:0 4px}
+  .ni-tip{font-size:12px;line-height:1.65;color:#c8b06a;background:rgba(200,176,106,.09);border:1px solid rgba(200,176,106,.26);border-radius:8px;padding:6px 10px;margin:0 0 8px}
+  .ni-tip b{color:#e6d08a}
+  .ni-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px}
+  .ni-chip{background:#1b222c;border:1px solid #35404f;border-radius:999px;color:#9aa3b2;padding:4px 11px;font-size:12px;cursor:pointer;font-family:inherit}
+  .ni-chip:hover{background:#25303d;color:#cfd6e2}
+  .ni-chip.on{background:#263b34;border-color:#3d735b;color:#c9f5dd}
+  .ni-rule{margin-left:auto;font-size:12px;color:#8b93a1}
+  .ni-rule>summary{cursor:pointer;color:#8894a4;padding:2px 0;list-style:none}
+  .ni-rule>summary::-webkit-details-marker{display:none}
+  .ni-rule>summary:hover{color:#cfd6e2}
+  .ni-rule>summary::before{content:'?  ';color:#6f7787}
+  .ni-rule-body{margin-top:6px;line-height:1.75;color:#8b93a1;background:#12161c;border:1px solid #232b36;border-radius:8px;padding:8px 10px;max-width:640px}
+  .ni-rule-body b{color:#cfd6e2;margin-right:2px}
+  .ni-grid{display:flex;flex-direction:column;gap:1px;max-width:760px}
+  .ni-row{display:grid;grid-template-columns:minmax(0,1fr) 44px 68px 64px 62px 50px;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;font-size:13px}
+  .ni-row.hd{font-size:11px;color:#778292;padding:0 10px 5px;border-bottom:1px solid #232b36;border-radius:0}
+  .ni-row:not(.hd):nth-child(odd){background:rgba(255,255,255,.016)}
+  .ni-row:not(.hd):hover{background:#1b222c}
+  .ni-row.focus{background:rgba(110,221,162,.11);box-shadow:inset 0 0 0 1px rgba(110,221,162,.32)}
+  .ni-name{min-width:0;display:flex;align-items:center;gap:6px;overflow:hidden;white-space:nowrap}
+  .ni-name .talent-name{overflow:hidden;text-overflow:ellipsis}
+  .ni-n{text-align:right;color:#9aa3b2;font-size:12px;font-variant-numeric:tabular-nums}
+  .ni-n .nil{color:#5d6673;font-style:normal;font-size:11px;border:1px dashed #3c4655;border-radius:4px;padding:0 4px}
+  .ni-type{color:#8b93a1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ni-c{font-size:12px;text-align:center;border-radius:5px;padding:2px 0;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .ni-c.off{color:#5d6673}
+  .ni-c.steal.ok{color:#f0b45f;background:rgba(240,180,95,.13);cursor:help}
+  .ni-c.demand{color:#6edda2;background:rgba(110,221,162,.13);cursor:help}
+  .ni-c.gift{color:#9fc0ff;background:rgba(150,190,255,.13)}
+  .ni-c .warn{color:#e4736b;font-style:normal;margin-left:2px}
+  .ni-none{padding:10px 2px;color:#778292;font-size:12px}
+  .ni-more{display:block;width:100%;max-width:760px;margin:7px 0 2px;background:#1b222c;border:1px dashed #35404f;border-radius:8px;color:#9aa3b2;padding:8px;font-size:12px;cursor:pointer;font-family:inherit}
+  .ni-more:hover{background:#25303d;color:#c6cfda}
   .badge.demand{background:rgba(110,221,162,.14);color:#6edda2;border:1px solid rgba(110,221,162,.35)}
+  .badge.gift{background:rgba(150,190,255,.14);color:#9fc0ff;border:1px solid rgba(150,190,255,.35)}
   .badge.demand-absent{background:transparent;color:#8b93a1;border:1px dashed #4a5563}
   .item-viewbar{display:flex;gap:8px;margin-bottom:14px}
   .viewbtn{background:#1b222c;border:1px solid #35404f;border-radius:8px;color:#9aa3b2;padding:9px 16px;cursor:pointer;font-size:13px}
@@ -241,6 +348,7 @@ function initItems(){
   .qsec-meta{margin-left:auto;color:#778292;font-size:11px;font-weight:400}
   .qsec-body{padding:4px 12px 12px}
   @media(max-width:850px){.filter-bar.items{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-bar.items .filter-actions{grid-column:span 2}}
+  @media(max-width:720px){.ni-row{grid-template-columns:minmax(0,1fr) 36px 54px 56px 46px;gap:6px;padding:6px 6px}.ni-row .ni-type{display:none}.ni-name .badge{display:none}.ni-rule{margin-left:0;width:100%}.ni-sep{display:none}}
   @media(max-width:560px){.filter-bar.items{grid-template-columns:1fr}.filter-bar.items .filter-actions{grid-column:span 1}.qsec-body{padding:4px 8px 8px}}
   </style>
   <div class="search-panel">
@@ -260,6 +368,7 @@ function initItems(){
    <label class="filter-field"><span>具体位置</span><select id="ilocation"></select></label>
    <label class="filter-field"><span>偷窃</span><select id="isteal"><option value="">全部持有者</option><option value="1">只看可偷</option><option value="0">只看不可偷</option></select></label>
    <label class="filter-field"><span>索要</span><select id="idemand"><option value="">全部物品</option><option value="1">只看可索要</option></select></label>
+   <label class="filter-field"><span>赠礼</span><select id="igift"><option value="">全部物品</option><option value="1">只看可赠</option></select></label>
    <div class="filter-actions"><button type="button" id="iclear" class="filter-button">清空筛选</button></div>
   </div>
   <div id="iresult" class="result-info"></div><div id="ilist"></div>`;
@@ -276,7 +385,7 @@ function initItems(){
  $('iview-item').addEventListener('click',()=>{itemView='item';store.set('worldapart.item.view.v1',itemView);applyView();renderList()});
  $('iview-npc').addEventListener('click',()=>{itemView='npc';store.set('worldapart.item.view.v1',itemView);applyView();renderList()});
  $('iregion').value=itemFilters.region||'';updateItemLocations();
- for(const key of ['q','npc','location','type','quality','steal','demand']){
+ for(const key of ['q','npc','location','type','quality','steal','demand','gift']){
   const node=$('i'+key);node.value=itemFilters[key]??'';
   node.addEventListener(node.tagName==='INPUT'?'input':'change',()=>{itemFilters[key]=node.value;saveAndRender()});
  }
@@ -317,6 +426,22 @@ function refreshItemOwners(iid){
 }
 document.addEventListener('click',event=>{
  if(!event.target.closest('#items'))return;
+ const chip=event.target.closest('[data-ch]');
+ if(chip){
+  const ch=chip.dataset.ch;
+  npcChannel=(npcChannel===ch)?'':ch;
+  const host=chip.closest('.npc-items');
+  if(host)host.outerHTML=npcItemsHtml(host.dataset.uid);
+  return;
+ }
+ const niMore=event.target.closest('[data-ni-more]');
+ if(niMore){
+  const uid=niMore.dataset.niMore;
+  npcPage[uid]=(npcPage[uid]||1)+1;
+  const host=niMore.closest('.npc-items');
+  if(host)host.outerHTML=npcItemsHtml(uid);
+  return;
+ }
  const more=event.target.closest('[data-more]');
  if(more){
   const iid=more.dataset.more;
