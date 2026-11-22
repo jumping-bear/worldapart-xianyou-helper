@@ -83,6 +83,129 @@ def _gift_pool_meta(tables):
     }
 
 
+# 只展示设定文案、不在行内展开效果的类型：材料、药材、器胚、法宝、璞石、妖丹、
+# 文玩礼物、货币等。其余类型（功法、心法、丹药、灵物、灵根果等）的说明本身就是
+# 效果，直接放进行内。
+LORE_TYPES = frozenset({4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 93, 99})
+SCOPE_BOTH = ("战斗内外均可使用", "戰鬥內外均可使用", "usable in and out of battle")
+SCOPE_BATTLE = ("仅限战斗中使用", "僅限戰鬥中使用", "can only be used in combat")
+
+
+def _split_scope(text):
+    """丹药说明末尾的使用范围拆成标签，正文只留效果。"""
+    raw = text or ""
+    low = raw.lower()
+    for phrase in SCOPE_BOTH:
+        if phrase.lower() in low:
+            return raw.replace(phrase, "").strip(" ·，,。\n"), "战斗内/外可用"
+    for phrase in SCOPE_BATTLE:
+        if phrase.lower() in low:
+            return raw.replace(phrase, "").strip(" ·，,。\n"), "仅限战斗"
+    return raw, ""
+
+
+def _item_extras(items, tables):
+    """按品类补五行与用途标签；五行只从配置里的真实来源推导，缺失就不显示。"""
+    elements = {_int(r.get("id")): _text(r.get("element_name"))
+                for r in _rows(tables.get("tbelement") or []) if isinstance(r, dict)}
+    materials = {}
+    for row in _rows(tables.get("tbalchemymaterial") or []):
+        if isinstance(row, dict):
+            materials[_int(row.get("id"))] = (_int(row.get("element_type")),
+                                             _int(row.get("spirit_value")))
+    herbs = {}
+    for row in _rows(tables.get("tbpillherb") or []):
+        if isinstance(row, dict) and row.get("item_id") is not None:
+            herbs[_int(row.get("item_id"))] = (_int(row.get("element")), _int(row.get("tier")),
+                                              bool(row.get("is_rare")))
+    skills = {_int(r.get("item_id")): r for r in _rows(tables.get("tbskill") or [])
+              if isinstance(r, dict) and _int(r.get("item_id"))}
+    passives = {_int(r.get("item_id")): r for r in _rows(tables.get("tbpassiveskill") or [])
+                if isinstance(r, dict) and _int(r.get("item_id"))}
+    attributes = {_int(r.get("id")): _text(r.get("name"))
+                  for r in _rows(tables.get("tbattribute") or []) if isinstance(r, dict)}
+    prototypes, outputs = {}, {}
+    for row in _rows(tables.get("tbalchemyprototype") or []):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        pid = _int(row.get("id"))
+        prototypes[pid] = row
+        elems = [_int(e.get("element_type")) for e in (row.get("effects") or [])
+                 if isinstance(e, dict) and _int(e.get("element_type"))]
+        element = elems[0] if elems else 0
+        for tier in row.get("score_tiers") or []:
+            oid = _int(tier.get("output_item_id")) if isinstance(tier, dict) else 0
+            if oid:
+                old = outputs.get(oid)
+                if old is None or (not old[0] and element):
+                    outputs[oid] = (element, pid)
+    for key, item in items.items():
+        iid = _int(key)
+        tid = item.get("type_id") or 0
+        element, tags, detail = 0, [], ""
+        if tid == 9 and iid in materials:
+            element, spirit = materials[iid]
+            if spirit:
+                tags.append("灵气 %d" % spirit)
+        elif tid in (21, 99) and iid in herbs:
+            element, tier, rare = herbs[iid]
+            if tier:
+                tags.append("%d 阶" % tier)
+            if rare:
+                tags.append("稀有")
+        elif tid == 8 and iid in prototypes:
+            proto = prototypes[iid]
+            elems = [_int(e.get("element_type")) for e in (proto.get("effects") or [])
+                     if isinstance(e, dict) and _int(e.get("element_type"))]
+            element = elems[0] if elems else 0
+            outs = []
+            for tier in proto.get("score_tiers") or []:
+                oid = _int(tier.get("output_item_id")) if isinstance(tier, dict) else 0
+                if oid and oid not in outs:
+                    outs.append(oid)
+            out_name = (items.get(str(outs[0])) or {}).get("name") if outs else ""
+            if out_name:
+                tags.append("可炼 %s" % out_name)
+            spirit = _int(proto.get("recommended_total_spirit"))
+            if spirit:
+                tags.append("推荐灵气 %d" % spirit)
+            tiers = [t for t in (proto.get("score_tiers") or []) if isinstance(t, dict)]
+            if tiers:
+                best = max(tiers, key=lambda t: _int(t.get("score_min")))
+                attrs = []
+                for attr in best.get("attributes") or []:
+                    if not isinstance(attr, dict):
+                        continue
+                    name = attributes.get(_int(attr.get("type"))) or ""
+                    if name:
+                        attrs.append("%s +%s" % (name, attr.get("value")))
+                if attrs:
+                    detail = "最高评价属性：" + "、".join(attrs)
+        elif tid in (16, 17) and iid in outputs:
+            element = outputs[iid][0]
+        elif tid == 95 and iid in skills:
+            element = _int(skills[iid].get("element"))
+        elif tid == 3 and iid in passives:
+            element = _int(passives[iid].get("element"))
+        if tid in (18, 19):
+            effect, scope = _split_scope(item.get("desc") or "")
+            if scope:
+                tags.append(scope)
+        else:
+            effect = "" if tid in LORE_TYPES else (item.get("desc") or "")
+        if item.get("can_gift"):
+            tags.append("可赠予NPC")
+        # 没有五行也没有用途标签的品类（如璞石、炼丹炉、缺少炼器配置的器胚），
+        # 退回到展示说明本身，避免行内只剩一个名字。
+        if not effect and not tags and not element:
+            effect = item.get("desc") or ""
+        item["element"] = element
+        item["element_name"] = elements.get(element, "")
+        item["tags"] = tags
+        item["detail"] = detail
+        item["effect"] = effect
+
+
 def build_items(tables):
     """NPC物品：名称、类型、品质、偷窃参数、索要模板、可赠私物与持有者的可偷状态。"""
     item_types = {}
@@ -107,10 +230,12 @@ def build_items(tables):
         items[str(row["id"])] = {
             "name": _text(row.get("itemName")) or ("物品 %s" % row["id"]),
             "type": item_types.get(str(row.get("itemType")), "") or "未分类",
+            "type_id": _int(row.get("itemType")),
             "quality": row.get("quality"),
             "price": row.get("price"),
-            # 物品说明：告诉玩家这玩意儿有什么用，是判断值不值得偷/要的依据。
+            # 物品说明：完整文案留给悬停，行内是否展示由 _item_extras 按品类决定。
             "desc": _plain(_text(row.get("itemDesc"))),
+            "can_gift": bool(row.get("canGift")),
             "steal": steal,
             "demand": bool(row.get("canDemand")),
             "demand_cost": _int(row.get("intimacy_deduction")),
@@ -164,6 +289,7 @@ def build_items(tables):
         }
     if not items:
         raise ValueError("物品配置为空")
+    _item_extras(items, tables)
     result = {"schema": SCHEMA, "items": items, "npcs": npcs, "intimacy": tiers,
               "spaces": build_spaces(tables), "realms": realms}
     result.update(_gift_pool_meta(tables))

@@ -11,6 +11,17 @@ let itemRenderState={groups:{},q:'',npcQ:''};
 let itemSort=store.get('worldapart.item.sort.v1','rate');
 let itemPage={};
 function fqClass(q){return 'fq'+(q==null||q===''?0:q)}
+const EL_NAMES={1:'金',2:'木',3:'水',4:'火',5:'土'};
+function elHtml(t){
+ if(!t||!t.element)return '';
+ const name=t.element_name||EL_NAMES[t.element]||'';
+ return name?'<span class="el e'+t.element+'">'+esc(name)+'</span>':'';
+}
+function tagHtml(t){return (t&&t.tags||[]).map(x=>'<span class="itag">'+esc(x)+'</span>').join('')}
+function itemTitle(t){
+ if(!t)return '';
+ return esc([t.desc,t.detail].filter(Boolean).join(' ｜ '));
+}
 function qualityLabel(q){return q==null||q===''?'未知品质':(Number(q)>0?'品质 '+q:'无品质')}
 function itemRateOf(o){return o.v.ok&&o.t.steal?o.t.steal.rate:-1}
 function itemSortOwners(owners){
@@ -159,8 +170,8 @@ function npcItemsHtml(uid,focus){
  const visible=shown.slice(0,limit),rest=shown.length-visible.length;
  const rows=visible.map(o=>{
   const cur=focusId&&o.key===focusId;
-  const desc=o.t.desc?'<span class="ni-desc" title="'+esc(o.t.desc)+'">'+esc(o.t.desc)+'</span>':'';
-  const name='<span class="ni-name"><span class="talent-name '+fqClass(o.t.quality)+'">'+esc(o.t.name)+'</span>'+desc+(cur?'<span class="badge steal">当前</span>':'')+'</span>';
+  const desc=o.t.effect?'<span class="ni-desc">'+esc(o.t.effect)+'</span>':'';
+  const name='<span class="ni-name" title="'+itemTitle(o.t)+'">'+elHtml(o.t)+'<span class="talent-name '+fqClass(o.t.quality)+'">'+esc(o.t.name)+'</span>'+tagHtml(o.t)+desc+(cur?'<span class="badge steal">当前</span>':'')+'</span>';
   const count='<span class="ni-n">'+(o.count>0?'×'+esc(o.count):'<i class="nil">缺</i>')+'</span>';
   const type='<span class="ni-type">'+esc(o.t.type||'未分类')+'</span>';
   let steal;
@@ -243,7 +254,7 @@ function renderItems(){
   const b=buckets[key];
   const inner=b.groups.map(group=>{
    const stat='可偷 '+group.stealable+' 处'+(group.bestRate?' · 最高 '+group.bestRate+'%':'')+' · 共 '+group.total+' 个';
-   return '<details class="item-group" data-item="'+esc(group.t.id)+'"><summary class="item-head"><span class="item-arrow">›</span><span class="item-title '+fqClass(group.t.quality)+'">'+hi(group.t.name,q)+'</span><span class="badge">'+esc(group.t.type||'未分类')+'</span><span class="badge">'+esc(qualityLabel(group.t.quality))+'</span><span class="item-stat">'+stat+'</span></summary><div class="owners"></div></details>';
+   return '<details class="item-group" data-item="'+esc(group.t.id)+'"><summary class="item-head" title="'+itemTitle(group.t)+'"><span class="item-arrow">›</span><span class="item-title '+fqClass(group.t.quality)+'">'+hi(group.t.name,q)+'</span>'+elHtml(group.t)+tagHtml(group.t)+'<span class="badge">'+esc(group.t.type||'未分类')+'</span><span class="badge">'+esc(qualityLabel(group.t.quality))+'</span><span class="item-stat">'+stat+'</span></summary><div class="owners"></div></details>';
   }).join('');
   return '<details class="qsec" open><summary><span class="qsec-arrow">›</span><span class="qsec-title '+fqClass(b.q)+'">'+esc(qualityLabel(b.q))+'</span><span class="badge">'+b.items+' 种</span><span class="qsec-meta">可偷 '+b.stealable+' 处 · 共 '+b.total+' 个</span></summary><div class="qsec-body">'+inner+'</div></details>';
  });
@@ -331,6 +342,13 @@ function initItems(){
   .ni-name{min-width:0;display:flex;align-items:baseline;gap:8px;overflow:hidden;white-space:nowrap}
   .ni-name .talent-name{flex:0 0 auto}
   .ni-name .ni-desc{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:#6b7480;font-size:12px;cursor:help}
+  .el{flex:0 0 auto;font-size:11px;line-height:1.5;padding:0 5px;border-radius:4px;border:1px solid transparent}
+  .el.e1{color:#e8c56a;background:rgba(232,197,106,.13);border-color:rgba(232,197,106,.32)}
+  .el.e2{color:#6edda2;background:rgba(110,221,162,.13);border-color:rgba(110,221,162,.32)}
+  .el.e3{color:#6fb7ff;background:rgba(111,183,255,.13);border-color:rgba(111,183,255,.32)}
+  .el.e4{color:#e4736b;background:rgba(228,115,107,.13);border-color:rgba(228,115,107,.32)}
+  .el.e5{color:#c9a06a;background:rgba(201,160,106,.13);border-color:rgba(201,160,106,.32)}
+  .itag{flex:0 0 auto;font-size:11px;line-height:1.5;padding:0 5px;border-radius:4px;color:#9aa3b2;background:#1b222c;border:1px solid #2b3542}
   .ni-n{text-align:right;color:#9aa3b2;font-size:12px;font-variant-numeric:tabular-nums}
   .ni-n .nil{color:#5d6673;font-style:normal;font-size:11px;border:1px dashed #3c4655;border-radius:4px;padding:0 4px}
   .ni-type{color:#8b93a1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -365,7 +383,7 @@ function initItems(){
   .qsec-meta{margin-left:auto;color:#778292;font-size:11px;font-weight:400}
   .qsec-body{padding:4px 12px 12px}
   @media(max-width:850px){.filter-bar.items{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-bar.items .filter-actions{grid-column:span 2}}
-  @media(max-width:720px){.ni-row{grid-template-columns:minmax(0,1fr) 36px 54px 56px 46px;gap:6px;padding:6px 6px}.ni-row .ni-type{display:none}.ni-name .badge{display:none}.ni-rule{margin-left:0;width:100%}.ni-sep{display:none}}
+  @media(max-width:720px){.ni-row{grid-template-columns:minmax(0,1fr) 36px 54px 56px 46px;gap:6px;padding:6px 6px}.ni-row .ni-type{display:none}.ni-name .badge{display:none}.ni-name .itag{display:none}.ni-rule{margin-left:0;width:100%}.ni-sep{display:none}}
   @media(max-width:560px){.filter-bar.items{grid-template-columns:1fr}.filter-bar.items .filter-actions{grid-column:span 1}.qsec-body{padding:4px 8px 8px}}
   </style>
   <div class="search-panel">
