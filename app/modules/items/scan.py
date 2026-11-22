@@ -47,6 +47,38 @@ def _gift_bucket(layer, limits):
     return "4"
 
 
+# 玩家与 NPC 的关系标签。存档里按 npcCfgId 记录，人物图鉴用的是同一份数据，
+# 这里并进物品页，玩家一眼能看出"这人是自己人还是陌生人"。
+# 道侣在三处可能有值：列表、单个 id、以及 npc_dao_ally 的盟友列表，都要收。
+RELATION_KEYS = (("dao_companion_npc_ids", "道侣"), ("dao_companion_npc_id", "道侣"),
+                 ("master_npc_id", "师尊"), ("disciple_npc_ids", "弟子"),
+                 ("friend_npc_ids", "朋友"), ("enemy_npc_ids", "仇人"))
+
+
+def _relations(player):
+    """返回 {npcCfgId: [关系标签]}；缺失字段一律当没有，不写死具体人物。"""
+    result = {}
+
+    def add(value, label):
+        ids = value if isinstance(value, (list, tuple)) else ([value] if value else [])
+        for raw in ids:
+            npc_id = _as_int(raw, 0)
+            if not npc_id:
+                continue
+            labels = result.setdefault(npc_id, [])
+            if label not in labels:
+                labels.append(label)
+
+    rel = player.get("npc_relation")
+    if isinstance(rel, dict):
+        for key, label in RELATION_KEYS:
+            add(rel.get(key), label)
+    ally = player.get("npc_dao_ally")
+    if isinstance(ally, dict):
+        add(ally.get("npc_ids"), "道侣")
+    return result
+
+
 def scan_items(obj, meta):
     """收集 NPC 背包持有关系；可赠礼按赠礼池 ∩ 背包实物 ∩ 非货架货计算。"""
     npc_meta = meta.get("npcs") or {}
@@ -56,6 +88,7 @@ def scan_items(obj, meta):
     gift_limits = meta.get("gift_bucket_limits") or []
     gift_per_npc = _as_int(meta.get("gift_per_npc_count"), 10)
     player = obj.get("playerModel") or {}
+    relations = _relations(player)
     player_layer = (player.get("combat") or {}).get("cultivate_layer_id")
     reward_state = player.get("ainpcChatReward") or {}
     gift_used_by_npc = {}
@@ -99,6 +132,10 @@ def scan_items(obj, meta):
             "location": location, "region": space_info.get("region") or "",
             "location_path": " / ".join(path) or location,
             "can_steal": bool(info.get("can_steal")),
+            # worldStatus 2 = 寿元已尽 / 已退隐：存档留着记录，世界里已经没有这个人，
+            # 偷、要、聊都不会生效（与人物图鉴「在世=可交互」同一口径）。
+            "gone": _as_int(npc.get("worldStatus"), 0) == 2,
+            "roles": relations.get(_as_int(cfg, 0)) or [],
             "intimacy": intimacy,
             "demand": list(info.get("demand") or []),
             "items": held,
@@ -145,9 +182,10 @@ def summary(module):
     rows = module.get("rows") or []
     catalog = {str(t["id"]): t for t in module.get("catalog") or []}
     pairs = sum(len(r["items"]) for r in rows)
-    stealable = sum(1 for r in rows if r["can_steal"]
+    alive = sum(1 for r in rows if not r.get("gone"))
+    stealable = sum(1 for r in rows if r["can_steal"] and not r.get("gone")
                     for item_id, _ in r["items"]
                     if (catalog.get(str(item_id)) or {}).get("steal"))
-    giftable = sum(len(r.get("gift") or []) for r in rows)
-    return "NPC物品：%d 位 NPC，%d 条持有记录，可偷 %d 条，可赠 %d 件" % (
-        len(rows), pairs, stealable, giftable)
+    giftable = sum(len(r.get("gift") or []) for r in rows if not r.get("gone"))
+    return "NPC物品：%d 位 NPC（在世 %d），%d 条持有记录，可偷 %d 条，可赠 %d 件" % (
+        len(rows), alive, pairs, stealable, giftable)

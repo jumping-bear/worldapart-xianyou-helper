@@ -2,7 +2,7 @@
    可切换到「按 NPC 看」的完整清单视角。 */
 (function(){
 const ITEM_KEY='worldapart.item.filters.v1';
-const ITEM_DEFAULTS={q:'',npc:'',region:'',location:'',type:'',quality:'',steal:'',demand:'',gift:''};
+const ITEM_DEFAULTS={q:'',npc:'',region:'',location:'',type:'',quality:'',steal:'',demand:'',gift:'',alive:'1',rel:''};
 let itemFilters=Object.assign({},ITEM_DEFAULTS,store.get(ITEM_KEY,{}));
 let itemView=store.get('worldapart.item.view.v1','item');
 if(itemView!=='npc')itemView='item';
@@ -48,7 +48,9 @@ function itemOwnersHtml(iid){
   const giftAble=(o.row.gift||[]).some(id=>String(id)===String(iid));
   const demandBadge=!inPool?'':(o.t.demand?'<span class="badge demand">索要 -'+esc(o.t.demand_cost||0)+' 好感</span>':'<span class="badge demand-absent">不可索要</span>');
   const giftBadge=giftAble?'<span class="badge gift">可赠</span>':'';
-  return '<details class="npc owner" data-uid="'+esc(o.row.uid)+'" data-item="'+esc(iid)+'"><summary><span class="who">'+hi(o.row.who,state.npcQ)+'</span>'+(o.row.realm?'<span class="badge">'+esc(o.row.realm)+'</span>':'')+badge+demandBadge+giftBadge+'<span class="badge">×'+esc(o.count)+'</span>'+rate+'<span class="location">'+esc(o.row.location_path||o.row.location||'未知地点')+'</span>'+stealDetailHtml(o.v.ok?o.t.steal:null)+'</summary><div class="slots"></div></details>';
+  const goneBadge=o.row.gone?'<span class="badge gone">已不在世</span>':'';
+  const relBadges=(o.row.roles||[]).map(r=>'<span class="badge rel">'+esc(r)+'</span>').join('');
+  return '<details class="npc owner" data-uid="'+esc(o.row.uid)+'" data-item="'+esc(iid)+'"><summary><span class="who">'+hi(o.row.who,state.npcQ)+'</span>'+(o.row.realm?'<span class="badge">'+esc(o.row.realm)+'</span>':'')+relBadges+goneBadge+badge+demandBadge+giftBadge+'<span class="badge">×'+esc(o.count)+'</span>'+rate+'<span class="location">'+esc(o.row.location_path||o.row.location||'未知地点')+'</span>'+stealDetailHtml(o.v.ok?o.t.steal:null)+'</summary><div class="slots"></div></details>';
  }).join('');
  const blocked=all.filter(o=>!o.v.ok).length;
  const labels={rate:'按成功率从高到低',count:'按持有数量从多到少',name:'按 NPC 名称排序'};
@@ -65,6 +67,7 @@ function itemIndex(){
  return itemCache;
 }
 function itemVerdict(row,t){
+ if(row.gone)return{ok:false,label:'已不在世'};
  if(!row.can_steal)return{ok:false,label:'NPC 不可偷'};
  if(!t.steal)return{ok:false,label:'物品不可偷'};
  return{ok:true,label:'可偷'};
@@ -127,6 +130,7 @@ function npcItemsHtml(uid,focus){
  for(const o of list){if(o.v.ok)st.steal++;if(o.demand)st.demand++;if(o.gift)st.gift++}
  const gm=DATA.modules.items||{},cycle=gm.gift_cycle_days||0,total=gm.gift_total_count||0,per=gm.gift_per_npc_count||0;
  const tips=[];
+ if(row.gone)tips.push('他已不在世（寿元已尽或已退隐），偷取、索要、聊天都不会生效，下面只是存档里留下的物品记录。');
  const both=list.filter(o=>o.gift&&o.demand).length;
  if(both)tips.push('有 <b>'+both+'</b> 件既能等他主动赠予、也能花好感索要，优先等赠礼更省。');
  if(st.gift){
@@ -138,6 +142,7 @@ function npcItemsHtml(uid,focus){
  const chanBtn=(key,label,num)=>'<button type="button" class="ni-chip'+(npcChannel===key?' on':'')+'" data-ch="'+key+'">'+label+' '+num+'</button>';
  const bar='<div class="ni-bar">'
   +'<span class="ni-title">他身上的 '+list.length+' 件</span>'
+  +(row.roles||[]).map(r=>'<span class="badge rel">'+esc(r)+'</span>').join('')
   +(row.intimacy!=null?'<span class="ni-k">好感 <b>'+esc(row.intimacy)+'</b>'+(intimacyName(row)?'（'+esc(intimacyName(row))+'）':'')+'</span>':'')
   +'<span class="ni-sep"></span>'
   +'<button type="button" class="ni-chip'+(npcChannel===''?' on':'')+'" data-ch="">全部</button>'
@@ -154,7 +159,8 @@ function npcItemsHtml(uid,focus){
  const visible=shown.slice(0,limit),rest=shown.length-visible.length;
  const rows=visible.map(o=>{
   const cur=focusId&&o.key===focusId;
-  const name='<span class="ni-name"><span class="talent-name '+fqClass(o.t.quality)+'">'+esc(o.t.name)+'</span>'+(cur?'<span class="badge steal">当前物品</span>':'')+'</span>';
+  const desc=o.t.desc?'<span class="ni-desc" title="'+esc(o.t.desc)+'">'+esc(o.t.desc)+'</span>':'';
+  const name='<span class="ni-name"><span class="talent-name '+fqClass(o.t.quality)+'">'+esc(o.t.name)+'</span>'+desc+(cur?'<span class="badge steal">当前</span>':'')+'</span>';
   const count='<span class="ni-n">'+(o.count>0?'×'+esc(o.count):'<i class="nil">缺</i>')+'</span>';
   const type='<span class="ni-type">'+esc(o.t.type||'未分类')+'</span>';
   let steal;
@@ -178,7 +184,12 @@ function npcItemsHtml(uid,focus){
  const more=rest?'<button type="button" class="ni-more" data-ni-more="'+esc(uid)+'">显示更多（还有 '+rest+' 件）</button>':'';
  return '<div class="npc-items" data-uid="'+esc(uid)+'">'+bar+tipHtml+grid+more+'</div>';
 }
+function npcKnown(row){return (row.roles||[]).length>0||Number(row.intimacy||0)>0}
 function npcPass(row,npcQ){
+ if(itemFilters.alive==='1'&&row.gone)return false;
+ if(itemFilters.alive==='0'&&!row.gone)return false;
+ if(itemFilters.rel==='1'&&!npcKnown(row))return false;
+ if(itemFilters.rel==='0'&&npcKnown(row))return false;
  if(itemFilters.region&&(row.region||'未知区域')!==itemFilters.region)return false;
  if(itemFilters.location&&(row.location||'未知地点')!==itemFilters.location)return false;
  if(npcQ&&!((row.who+' '+(row.realm||'')).toLowerCase().includes(npcQ)))return false;
@@ -266,7 +277,9 @@ function renderNpcs(){
  const list=Object.values(npcs).sort((a,b)=>b.stealable-a.stealable||b.total-a.total||String(a.row.who).localeCompare(String(b.row.who),'zh-CN'));
  const cards=list.map(g=>{
   const held=itemFilterOn?'符合 '+g.matched+' / 共 '+g.total+' 件':'共 '+g.total+' 件';
-  return '<details class="item-group npc-card" data-uid="'+esc(g.row.uid)+'"><summary class="item-head"><span class="item-arrow">›</span><span class="item-title">'+hi(g.row.who,npcQ)+'</span>'+(g.row.realm?'<span class="badge">'+esc(g.row.realm)+'</span>':'')+'<span class="badge steal">可偷 '+g.stealable+' 件</span>'+(g.demandable?'<span class="badge demand">可索要 '+g.demandable+' 件</span>':'')+(g.giftable?'<span class="badge gift">可赠 '+g.giftable+' 件</span>':'')+'<span class="item-stat">'+held+' · '+esc(g.row.location_path||g.row.location||'未知地点')+'</span></summary><div class="slots"></div></details>';
+  const goneBadge=g.row.gone?'<span class="badge gone">已不在世</span>':'';
+  const relBadges=(g.row.roles||[]).map(r=>'<span class="badge rel">'+esc(r)+'</span>').join('');
+  return '<details class="item-group npc-card'+(g.row.gone?' is-gone':'')+'" data-uid="'+esc(g.row.uid)+'"><summary class="item-head"><span class="item-arrow">›</span><span class="item-title">'+hi(g.row.who,npcQ)+'</span>'+(g.row.realm?'<span class="badge">'+esc(g.row.realm)+'</span>':'')+relBadges+goneBadge+'<span class="badge steal">可偷 '+g.stealable+' 件</span>'+(g.demandable?'<span class="badge demand">可索要 '+g.demandable+' 件</span>':'')+(g.giftable?'<span class="badge gift">可赠 '+g.giftable+' 件</span>':'')+'<span class="item-stat">'+held+' · '+esc(g.row.location_path||g.row.location||'未知地点')+'</span></summary><div class="slots"></div></details>';
  });
  itemRenderState={groups:{},q:q,npcQ:npcQ};
  $('iresult').textContent='筛选结果：'+list.length+' 位 NPC，共 '+list.reduce((s,g)=>s+g.total,0)+' 件物品（按 NPC 查看完整清单）';
@@ -309,14 +322,15 @@ function initItems(){
   .ni-rule>summary::before{content:'?  ';color:#6f7787}
   .ni-rule-body{margin-top:6px;line-height:1.75;color:#8b93a1;background:#12161c;border:1px solid #232b36;border-radius:8px;padding:8px 10px;max-width:640px}
   .ni-rule-body b{color:#cfd6e2;margin-right:2px}
-  .ni-grid{display:flex;flex-direction:column;gap:1px;max-width:760px}
+  .ni-grid{display:flex;flex-direction:column;gap:1px}
   .ni-row{display:grid;grid-template-columns:minmax(0,1fr) 44px 68px 64px 62px 50px;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;font-size:13px}
   .ni-row.hd{font-size:11px;color:#778292;padding:0 10px 5px;border-bottom:1px solid #232b36;border-radius:0}
   .ni-row:not(.hd):nth-child(odd){background:rgba(255,255,255,.016)}
   .ni-row:not(.hd):hover{background:#1b222c}
   .ni-row.focus{background:rgba(110,221,162,.11);box-shadow:inset 0 0 0 1px rgba(110,221,162,.32)}
-  .ni-name{min-width:0;display:flex;align-items:center;gap:6px;overflow:hidden;white-space:nowrap}
-  .ni-name .talent-name{overflow:hidden;text-overflow:ellipsis}
+  .ni-name{min-width:0;display:flex;align-items:baseline;gap:8px;overflow:hidden;white-space:nowrap}
+  .ni-name .talent-name{flex:0 0 auto}
+  .ni-name .ni-desc{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:#6b7480;font-size:12px;cursor:help}
   .ni-n{text-align:right;color:#9aa3b2;font-size:12px;font-variant-numeric:tabular-nums}
   .ni-n .nil{color:#5d6673;font-style:normal;font-size:11px;border:1px dashed #3c4655;border-radius:4px;padding:0 4px}
   .ni-type{color:#8b93a1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -327,8 +341,11 @@ function initItems(){
   .ni-c.gift{color:#9fc0ff;background:rgba(150,190,255,.13)}
   .ni-c .warn{color:#e4736b;font-style:normal;margin-left:2px}
   .ni-none{padding:10px 2px;color:#778292;font-size:12px}
-  .ni-more{display:block;width:100%;max-width:760px;margin:7px 0 2px;background:#1b222c;border:1px dashed #35404f;border-radius:8px;color:#9aa3b2;padding:8px;font-size:12px;cursor:pointer;font-family:inherit}
+  .ni-more{display:block;width:100%;margin:7px 0 2px;background:#1b222c;border:1px dashed #35404f;border-radius:8px;color:#9aa3b2;padding:8px;font-size:12px;cursor:pointer;font-family:inherit}
   .ni-more:hover{background:#25303d;color:#c6cfda}
+  .badge.gone{background:#2a2d33;color:#98a1ae;border:1px solid #3a4150}
+  .badge.rel{background:rgba(240,180,95,.14);color:#f0b45f;border:1px solid rgba(240,180,95,.3)}
+  .npc-card.is-gone .item-title{color:#8b93a1}
   .badge.demand{background:rgba(110,221,162,.14);color:#6edda2;border:1px solid rgba(110,221,162,.35)}
   .badge.gift{background:rgba(150,190,255,.14);color:#9fc0ff;border:1px solid rgba(150,190,255,.35)}
   .badge.demand-absent{background:transparent;color:#8b93a1;border:1px dashed #4a5563}
@@ -362,6 +379,8 @@ function initItems(){
    </div>
   </div>
   <div class="filter-bar items">
+   <label class="filter-field"><span>在世状态</span><select id="ialive"><option value="1">只看在世（可交互）</option><option value="">全部（含已不在世）</option><option value="0">只看已不在世</option></select></label>
+   <label class="filter-field"><span>关系</span><select id="irel"><option value="">全部关系</option><option value="1">只看有交情</option><option value="0">只看没交情</option></select></label>
    <label class="filter-field"><span>品质</span><select id="iquality">${qualityOptions()}</select></label>
    <label class="filter-field"><span>类型</span><select id="itype">${opts(types,'类型')}</select></label>
    <label class="filter-field"><span>区域</span><select id="iregion">${opts(regions,'区域')}</select></label>
@@ -385,7 +404,7 @@ function initItems(){
  $('iview-item').addEventListener('click',()=>{itemView='item';store.set('worldapart.item.view.v1',itemView);applyView();renderList()});
  $('iview-npc').addEventListener('click',()=>{itemView='npc';store.set('worldapart.item.view.v1',itemView);applyView();renderList()});
  $('iregion').value=itemFilters.region||'';updateItemLocations();
- for(const key of ['q','npc','location','type','quality','steal','demand','gift']){
+ for(const key of ['alive','rel','q','npc','location','type','quality','steal','demand','gift']){
   const node=$('i'+key);node.value=itemFilters[key]??'';
   node.addEventListener(node.tagName==='INPUT'?'input':'change',()=>{itemFilters[key]=node.value;saveAndRender()});
  }

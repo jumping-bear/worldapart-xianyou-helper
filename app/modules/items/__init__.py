@@ -7,7 +7,7 @@ from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "items", "NPC物品"
 KEY, LABEL_EN = "items", "NPC Items"
-ORDER, SELECT, SCHEMA = 60, "latest", 23  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 60, "latest", 28  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "items_meta.json"
 TABLES = frozenset({
     "tbnpcbasecfg", "tbspace", "tbcultivaterealm", "tbitem", "tbsteal", "tbitemtype",

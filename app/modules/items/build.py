@@ -1,8 +1,20 @@
 # -*- coding: utf-8 -*-
 """NPC物品：配置表 → 模块快照（自 meta_update.py 原样搬入）。"""
+import re
+
 from meta_update import (
     SCHEMA, _int, _rows, _text, build_realms, build_spaces,
 )
+
+# 物品说明里带游戏富文本标记（<color=#ffc600>…</color>、<b>…</b>，以及只给颜色的
+# <#7fc368>），展示前要剥掉，否则玩家看到的就是一堆尖括号。只吃掉带标签名或
+# 十六进制色的尖括号，避免误伤正常文案。
+_RICH_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9_]*(?:=[^<>]{0,40})?/?>|<#[0-9A-Fa-f]{3,8}>")
+
+
+def _plain(text):
+    """去掉富文本标记与多余空白，得到可直接展示的一行说明。"""
+    return " ".join(_RICH_TAG.sub("", str(text or "")).split())
 
 
 def _constant_values(tables):
@@ -97,6 +109,8 @@ def build_items(tables):
             "type": item_types.get(str(row.get("itemType")), "") or "未分类",
             "quality": row.get("quality"),
             "price": row.get("price"),
+            # 物品说明：告诉玩家这玩意儿有什么用，是判断值不值得偷/要的依据。
+            "desc": _plain(_text(row.get("itemDesc"))),
             "steal": steal,
             "demand": bool(row.get("canDemand")),
             "demand_cost": _int(row.get("intimacy_deduction")),
