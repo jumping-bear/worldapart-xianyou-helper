@@ -239,65 +239,89 @@ def scan(obj, meta_obj, state=None):
             "note": "修为满 + 阶段材料即可突破，无失败风险",
         }
 
-    # 当前阶段突破材料的妖兽刷新情况
+    # 当前阶段突破材料 + 当前境界助道灵物的妖兽刷新情况
     stage_block = phase_preview or preview
     stage_ids = {_int(entry.get("id")) for entry in (stage_block or {}).get("materials") or []}
+    aux_ids = {_int(opt.get("id")) for opt in realm.get("optional") or []}
     monsters = None
-    if stage_ids:
+    if stage_ids or aux_ids:
         monster_teams = meta_obj.get("monster_teams") or {}
         space_names = meta_obj.get("space_names") or {}
         stage_teams = {key: team for key, team in monster_teams.items()
                        if set(_int(m) for m in team.get("mats") or []) & stage_ids}
+        # 助道灵物同样由妖兽掉落，单独统计，避免被当成阶段突破材料计入缺口。
+        aux_teams = {key: team for key, team in monster_teams.items()
+                     if set(_int(m) for m in team.get("mats") or []) & aux_ids}
         spaces = (obj or {}).get("spaces") or {}
-        current_uid = (obj or {}).get("currentSavedSpaceUuid") or ""
-        current_space = spaces.get(current_uid) or {}
-        current_space_id = _int(current_space.get("spaceId"))
         spawns = []
-        rare_here = []
+        aux_spawns = []
+        rare_spawns = []
+        refresh_dates = {}
         for uid, space in spaces.items():
             if not isinstance(space, dict):
                 continue
             state = space.get("interactState") or {}
+            cd = state.get("monster_born_cd_until")
+            if isinstance(cd, dict):
+                key = (_int(cd.get("year")), _int(cd.get("month")), _int(cd.get("day")))
+                refresh_dates[key] = refresh_dates.get(key, 0) + 1
             monster = state.get("monster") or {}
             team_id = _int(monster.get("monster_team_id"))
             team_any = monster_teams.get(str(team_id))
-            if team_any and team_any.get("rare") and uid == current_uid:
-                space_id = _int(space.get("spaceId"))
-                rare_here.append({
+            space_id = _int(space.get("spaceId"))
+            space_name = space_names.get(str(space_id)) or ("地点 #%s" % space_id)
+            if team_any and team_any.get("rare"):
+                rare_spawns.append({
                     "team": team_id, "name": team_any.get("name"), "rare": True,
-                    "space": space_id,
-                    "space_name": space_names.get(str(space_id)) or ("地点 #%s" % space_id),
-                    "current": True,
+                    "space": space_id, "space_name": space_name,
                     "mats": sorted(set(_int(m) for m in team_any.get("mats") or [])),
                 })
             team = stage_teams.get(str(team_id))
-            if not team:
-                continue
-            space_id = _int(space.get("spaceId"))
-            spawns.append({
-                "team": team_id, "name": team.get("name"), "rare": bool(team.get("rare")),
-                "space": space_id,
-                "space_name": space_names.get(str(space_id)) or ("地点 #%s" % space_id),
-                "current": uid == current_uid,
-                "mats": sorted(set(_int(m) for m in team.get("mats") or []) & stage_ids),
-            })
-        here = [row for row in spawns if row.get("current")]
-        elsewhere = [row for row in spawns if not row.get("current")]
-        elsewhere.sort(key=lambda row: (0 if row.get("rare") else 1, row.get("space_name") or ""))
+            if team:
+                spawns.append({
+                    "team": team_id, "name": team.get("name"), "rare": bool(team.get("rare")),
+                    "space": space_id, "space_name": space_name,
+                    "mats": sorted(set(_int(m) for m in team.get("mats") or []) & stage_ids),
+                })
+            aux_team = aux_teams.get(str(team_id))
+            if aux_team:
+                aux_spawns.append({
+                    "team": team_id, "name": aux_team.get("name"), "rare": bool(aux_team.get("rare")),
+                    "space": space_id, "space_name": space_name,
+                    "mats": sorted(set(_int(m) for m in aux_team.get("mats") or []) & aux_ids),
+                })
+        spawns.sort(key=lambda row: (0 if row.get("rare") else 1, row.get("space_name") or ""))
+        rare_spawns.sort(key=lambda row: row.get("space_name") or "")
+        aux_spawns.sort(key=lambda row: (0 if row.get("rare") else 1, row.get("space_name") or ""))
         teams = [{"id": team.get("id"), "name": team.get("name"), "rare": bool(team.get("rare")),
                   "weight": _int(team.get("weight")), "mats": sorted(
                       set(_int(m) for m in team.get("mats") or []) & stage_ids)}
                  for team in stage_teams.values()]
         teams.sort(key=lambda row: (0 if row.get("rare") else 1, row.get("id") or 0))
+        aux_teams_out = [{"id": team.get("id"), "name": team.get("name"),
+                          "rare": bool(team.get("rare")),
+                          "weight": _int(team.get("weight")), "mats": sorted(
+                              set(_int(m) for m in team.get("mats") or []) & aux_ids)}
+                         for team in aux_teams.values()]
+        aux_teams_out.sort(key=lambda row: (0 if row.get("rare") else 1, row.get("id") or 0))
         covered = set().union(*(set(team["mats"]) for team in teams)) if teams else set()
+        aux_covered = set().union(*(set(team["mats"]) for team in aux_teams_out)) if aux_teams_out else set()
+        refresh_until = ""
+        if refresh_dates:
+            day = max(refresh_dates, key=refresh_dates.get)
+            if day[0] or day[1] or day[2]:
+                refresh_until = "%d年%d月%d日" % day
         monsters = {
             "stage_label": (stage_block or {}).get("label") or "",
             "stage_mats": sorted(stage_ids),
-            "current_space": {"id": current_space_id,
-                              "name": space_names.get(str(current_space_id)) or "未知地点"},
-            "here": here, "elsewhere": elsewhere[:12], "teams": teams[:12],
-            "rare_here": rare_here,
+            "spawns": spawns, "rare_spawns": rare_spawns,
+            "teams": teams[:12],
             "missing": sorted(stage_ids - covered),
+            "aux_mats": sorted(aux_ids),
+            "aux_spawns": aux_spawns,
+            "aux_teams": aux_teams_out[:12],
+            "aux_covered": sorted(aux_covered),
+            "refresh_until": refresh_until,
             "spawn_count": len(spawns),
         }
 
@@ -455,7 +479,9 @@ def enrich(module, meta_obj, state=None):
             return [(catalog.get(str(_int(item))) or {}).get("name") or ("#%s" % item) for item in ids or []]
         monsters["stage_mat_names"] = names(monsters.get("stage_mats"))
         monsters["missing_names"] = names(monsters.get("missing"))
-        for key in ("here", "elsewhere", "teams", "rare_here"):
+        monsters["aux_mat_names"] = names(monsters.get("aux_mats"))
+        monsters["aux_covered_names"] = names(monsters.get("aux_covered"))
+        for key in ("spawns", "rare_spawns", "teams", "aux_spawns", "aux_teams"):
             for row in monsters.get(key) or []:
                 row["mats_names"] = names(row.get("mats"))
     module["realms"] = meta_obj.get("realms") or []

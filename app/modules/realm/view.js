@@ -115,49 +115,65 @@ function noSourceWarn(mats){
 
 function monsterHtml(mo){
   if(!mo)return '';
-  var here=mo.here||[],elsewhere=mo.elsewhere||[],teams=mo.teams||[],rareHere=mo.rare_here||[];
-  var space=(mo.current_space||{}).name||'未知地点';
+  var spawns=mo.spawns||[],rare=mo.rare_spawns||[],teams=mo.teams||[];
+  var auxSpawns=mo.aux_spawns||[],auxTeams=mo.aux_teams||[];
   var stageMats=(mo.stage_mat_names||[]).join('、')||'—';
-  function row(item,current){
+  var auxMats=(mo.aux_mat_names||[]).join('、')||'—';
+  function row(item){
     var mats=(item.mats_names||[]).join('、');
-    return `<div class="rmon-row${current?' now':''}${item.rare?' rare':''}">
-      <span class="rmon-space">${current?'当前地图':esc(item.space_name||'')}</span>
+    return `<div class="rmon-row${item.rare?' rare':''}">
+      <span class="rmon-space">${esc(item.space_name||'')}</span>
       <b>${esc(item.name||'')}</b>
       <span class="rmon-tag${item.rare?' rare':''}">${item.rare?'稀有':'普通'}</span>
       <span class="rmon-mat">掉落 ${esc(mats)}</span>
     </div>`;
   }
-  var body=here.length?here.map(function(x){return row(x,true)}).join(''):
-    `<div class="rmon-none">当前地图「${esc(space)}」没有相关妖兽刷新</div>`;
-  var rareBlock=rareHere.length?rareHere.map(function(x){return row(x,true)}).join(''):
-    `<div class="rmon-none">当前地图「${esc(space)}」没有稀有妖兽刷新</div>`;
-  var other=elsewhere.length?`<div class="rmon-sub">其他地图正在刷新</div>`+
-    elsewhere.slice(0,6).map(function(x){return row(x,false)}).join(''):'';
-  var empty='';
-  if(!teams.length){
-    empty=`<div class="rmon-none">当前阶段材料没有妖兽掉落，主要靠拍卖 / 赛事 / 任务 / 秘境等其他途径。</div>`;
-  }else if(!here.length&&!elsewhere.length){
-    empty=`<div class="rmon-none">会掉落的 ${teams.length} 支妖兽队伍在存档里都没有刷新记录：${esc(teams.map(function(t){return t.name}).slice(0,4).join('、'))}</div>`;
+  function rows(list){return list.map(function(x){return row(x)}).join('')}
+  function teamNames(list,limit){
+    var seen={},out=[];
+    (list||[]).forEach(function(t){
+      var name=t.name||'';
+      if(!name||seen[name])return;
+      seen[name]=1;out.push(name);
+    });
+    return out.slice(0,limit||4);
   }
-  var missing=(mo.missing_names||[]).length?
+  var rareBlock=rare.length?rows(rare):
+    `<div class="rmon-none">所有地图当前都没有稀有妖兽刷新</div>`;
+  var body='';
+  if(spawns.length)body=rows(spawns);
+  else if(!teams.length)body=`<div class="rmon-none">当前阶段材料没有妖兽掉落，主要靠拍卖 / 赛事 / 任务 / 秘境等其他途径。</div>`;
+  else body=`<div class="rmon-none">会掉落的 ${teams.length} 支妖兽队伍在存档里都没有刷新记录：${esc(teamNames(teams).join('、'))}</div>`;
+  var missing=(teams.length&&(mo.missing_names||[]).length)?
     `<div class="rmon-miss">没有妖兽掉落的阶段材料：${esc(mo.missing_names.join('、'))}</div>`:'';
-  var hasHere=here.length||rareHere.length;
-  var stateCls=hasHere?'ok':'idle';
-  var stateText=hasHere?'当前地图有刷新':'当前地图无相关刷新';
-  var count=elsewhere.length?`<span class="rmon-count">其他地图 ${elsewhere.length} 处</span>`:'';
-  return `<details class="rmon"${hasHere?' open':''}>
+  var auxBlock='';
+  if(auxTeams.length){
+    var shown={};rare.forEach(function(x){shown[x.team+'|'+x.space]=1});
+    var auxNow=auxSpawns.filter(function(x){return !shown[x.team+'|'+x.space]});
+    var auxBody=auxNow.length?rows(auxNow):
+      `<div class="rmon-none">${auxSpawns.length?'会掉助道灵物的稀有妖兽已在上面列出':
+        '会掉助道灵物的 '+auxTeams.length+' 支妖兽队伍在存档里都没有刷新记录：'+esc(teamNames(auxTeams).join('、'))}</div>`;
+    auxBlock=`<div class="rmon-sub">助道灵物 · 妖兽刷新</div>${auxBody}`+
+      `<div class="rmon-miss">可从妖兽获得的助道灵物：${esc((mo.aux_covered_names||[]).join('、')||auxMats)}；其余助道灵物主要来自拍卖 / 任务 / 商店等途径。</div>`;
+  }
+  var total=spawns.length+rare.length+auxSpawns.length;
+  var stateCls=total?'ok':'idle';
+  var stateText=total?'有刷新':'无刷新';
+  var refresh=mo.refresh_until?`<span class="rmon-count">下一轮刷新 ${esc(mo.refresh_until)}</span>`:'';
+  return `<details class="rmon"${total?' open':''}>
     <summary class="rmon-head">
       <b>妖兽刷新</b>
-      <span class="rmon-sum">${esc(space)} · ${esc(stageMats)}</span>
+      <span class="rmon-sum">全地图 · ${esc(stageMats)}</span>
       <span class="rmon-state ${stateCls}">${stateText}</span>
-      ${count}
+      ${refresh}
     </summary>
     <div class="rmon-body">
-      <div class="rmon-sub">当前地图稀有妖兽</div>
+      <div class="rmon-sub">稀有妖兽（全地图）</div>
       ${rareBlock}
       <div class="rmon-sub">当前阶段材料 · 妖兽刷新</div>
-      ${body}${other}${empty}${missing}
-      <div class="rmon-note">「正在刷新」来自存档里各场景的妖兽状态；普通妖兽也会掉阶段材料，稀有妖兽掉的是助道材料。</div>
+      ${body}${missing}
+      ${auxBlock}
+      <div class="rmon-note">每个场景从自己的候选妖兽里按权重抽取（候选稀有权重 20、普通 80，只有一个候选的场景固定刷它），同一轮所有场景共用一个刷新日期；妖兽被击败后要等下一轮刷新才会重新出现。助道灵物不计入突破材料缺口。</div>
     </div>
   </details>`;
 }
