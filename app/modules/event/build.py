@@ -101,12 +101,13 @@ def _self_check(node, self_id):
     return index in ("任务目标未激活", "任务目标激活中")
 
 
-def _gate_text(node, attrs, quest_names, realms, layer_phases, layer_numbers, self_id=0):
+def _gate_text(node, attrs, quest_names, realms, layer_phases, layer_numbers, self_id=0,
+               ignore_family=False):
     """统一走 acquire：奇遇与支线对同一表达式永远得到同一句人话。"""
     return acquire.gate_text(node, {
         "attrs": attrs, "quest_names": quest_names,
         "realms": realms, "layer_phases": layer_phases,
-        "layer_local": layer_numbers,
+        "layer_local": layer_numbers, "ignore_family": ignore_family,
     }, self_id)
 
 
@@ -1036,6 +1037,78 @@ def _ending_requirements(tree):
     return out
 
 
+def _longest_common(a, b):
+    """两个名称共有的最长连续片段，用来把「温养地火小脉」对到「记下地火小脉」。"""
+    best = 0
+    for i in range(len(a)):
+        for j in range(i + 3, len(a) + 1):
+            if a[i:j] in b:
+                best = max(best, j - i)
+    return best
+
+
+def _waited_followups(family, quests):
+    """找出同系列里需要等待游戏日再回来领取的隐藏委托。"""
+    out = []
+    for quest_id, quest in quests.items():
+        if quest_id // 10000 != family or not quest.get("hidden") \
+                or _int(quest.get("type")) != 3:
+            continue
+        text = _plain(quest.get("description")) + "\n" + "\n".join(
+            _plain(obj.get("description")) for obj in (quest.get("objectives") or [])
+            if isinstance(obj, dict))
+        match = re.search(r"等待\s*(\d+)\s*个?游戏日", text)
+        if match:
+            out.append((quest_id, quest, _int(match.group(1))))
+    return out
+
+
+def _attach_followups(event, quests, outcomes, ending_rewards):
+    """把隐藏后续结局挂到母奇遇上，但不并入主结局数量。
+
+    规则只看数据：同系列（id 前三段相同）里被跳过的隐藏结算任务，
+    其结局只要带奖励或结算详情，就视为母奇遇的后续产出；
+    若同系列还有「等待 N 个游戏日」的隐藏委托，就把它作为触发说明。
+    """
+    if not outcomes:
+        return
+    waited = _waited_followups(event["id"] // 10000, quests)
+    stage_quest, stage_quest_row, days = waited[0] if waited else (0, {}, 0)
+    name = _plain((stage_quest_row or {}).get("name")) or ""
+    trigger_ending, score = None, 0
+    if name:
+        for ending in event.get("endings") or []:
+            common = _longest_common(name, ending.get("title") or "")
+            if common > score:
+                trigger_ending, score = ending, common
+    trigger_path = []
+    if trigger_ending and score >= 3:
+        trigger_path = [step for step in (trigger_ending.get("path") or [])
+                        if step and step != "结束"]
+    followups = []
+    for outcome_quest, rows in outcomes:
+        for row in rows:
+            drop_id = _int(row.get("reward_drop_id"))
+            detail = _lines(row.get("detail_lines"))
+            if not drop_id and not detail:
+                continue
+            rewards, reward_mode = ending_rewards(drop_id) if drop_id else ([], "all")
+            followups.append({
+                "name": name or (_plain(row.get("title")) or "后续委托"),
+                "stage_quest": stage_quest, "outcome_quest": outcome_quest,
+                "ending": _int(row.get("id")),
+                "title": _plain(row.get("title")) or ("结局 %s" % row.get("id")),
+                "summary": _plain(row.get("summary")),
+                "detail": detail,
+                "wait_days": days, "trigger_path": trigger_path,
+                "trigger_title": (trigger_ending or {}).get("title") or "",
+                "rewards": rewards or [], "reward_mode": reward_mode,
+                "location": (event.get("location") or {}).get("path") or [],
+            })
+    if followups:
+        event["followups"] = followups
+
+
 def build_event(tables):
     """奇遇只读元数据：结局、奖励、地点、选项条件、探索属性与剧情路线树。"""
     ending_rows = [r for r in _rows(tables["tbrandomeventending"]) if isinstance(r, dict)]
@@ -1185,6 +1258,25 @@ def build_event(tables):
         if isinstance(row, dict) and row.get("id") is not None:
             active_spaces.setdefault(_int(row.get("id")), []).append(_int(row.get("spaceId")))
 
+    # 部分奇遇所在场景要加入对应宗门才能进（如镇岳宗·灵矿场）。
+    # 门槛写在「前往场景」交互动作的开放条件里，不在事件自身的开启条件中。
+    sect_names = {_int(row.get("id")): _plain(row.get("sectName"))
+                  for row in _rows(tables.get("tbsect")) if isinstance(row, dict)}
+    space_sect = {}
+    for row in _rows(tables.get("tbinteractaction")):
+        if not isinstance(row, dict):
+            continue
+        call, _index, args = _call_parts(row.get("interactExpr") or {})
+        if call != "前往场景":
+            continue
+        spaces_in_call = [value for value in _const_args(args) if isinstance(value, int)]
+        cond_call, _cond_index, cond_args = _call_parts(row.get("openConditionExpr") or {})
+        cond_values = [value for value in _const_args(cond_args) if isinstance(value, int)]
+        if not spaces_in_call or cond_call not in _OP_NAMES or not cond_values:
+            continue
+        if acquire._left_key(cond_args[0]) == ("玩家", "宗门"):
+            space_sect[spaces_in_call[0]] = _int(cond_values[-1])
+
     place_names = sorted(
         ((info["name"], int(space_id)) for space_id, info in spaces.items()
          if len(info.get("name") or "") >= 2),
@@ -1194,13 +1286,18 @@ def build_event(tables):
         info = spaces.get(str(space_id)) or {}
         if not info:
             return None
-        return {
+        location = {
             "space": _int(space_id), "name": info.get("name") or "",
             "path": info.get("path") or [info.get("name") or ""],
             "region": info.get("region") or info.get("name") or "",
             "realm": _int(info.get("realm_id")), "spot": spot or "",
             "conf": conf, "via": via,
         }
+        sect = space_sect.get(_int(space_id))
+        if sect:
+            location["sect"] = sect
+            location["sect_name"] = sect_names.get(sect) or ("宗门 %s" % sect)
+        return location
 
     def direct_location(quest_id, stage_ids, text):
         hits = []
@@ -1261,20 +1358,28 @@ def build_event(tables):
                     unlock_trees.append(tree)
             node = acquire.resolve_aliases(node, cond_aliases)
             action_text = _gate_text(node, attrs, quest_names, realms, layer_phases,
-                                     layer_numbers, quest_id)
+                                     layer_numbers, quest_id, ignore_family=True)
             text = acquire.combine(" 且 ".join(unlock_parts), action_text)
             if text:
                 interact_open[quest_id] = acquire.combine(interact_open.get(quest_id), text)
             action_tree = acquire.collect(node, {"quest_names": quest_names,
                                                  "realms": realms, "layer_phases": layer_phases,
-                                                 "layer_local": layer_numbers}, quest_id)
+                                                 "layer_local": layer_numbers,
+                                                 "ignore_family": True}, quest_id)
             trees = unlock_trees + ([action_tree] if action_tree else [])
             if trees:
                 interact_checks[quest_id] = ({"mode": "all", "parts": trees}
                                              if len(trees) > 1 else trees[0])
 
-    def event_open(quest_id, quest):
+    def event_open(quest_id, quest, location=None):
         """奇遇开启条件与支线共用同一套字段优先级：接取条件 > 触发表达式 > 对话选项 > 交互点。"""
+        sect = (location or {}).get("sect")
+        sect_text = ""
+        sect_tree = None
+        if sect:
+            sect_name = (location or {}).get("sect_name") or ("宗门 %s" % sect)
+            sect_text = "加入「%s」" % sect_name
+            sect_tree = {"kind": "sect", "need": _int(sect)}
         cond_row = cond_rows.get(str(_int(quest.get("acqCondition")))) or {}
         base_text, base_tree = "", None
         if cond_row:
@@ -1291,6 +1396,9 @@ def build_event(tables):
             """接取条件与地点/交互门槛同时成立才算开启，不能只取其中一个。"""
             if base_text and text.startswith("无额外开启条件"):
                 text = ""
+            if sect_tree:
+                text = acquire.combine(text, sect_text)
+                checks = _merge_checks(checks, sect_tree)
             return {"kind": kind, "text": acquire.combine(base_text, text), "source": source,
                     "checks": _merge_checks(base_tree, checks)}
 
@@ -1430,6 +1538,7 @@ def build_event(tables):
             memoria_ids[quest_id] = _int(row.get("id"))
     resolved = {}
     hidden_settlements = 0
+    hidden_outcomes = {}
     dialogue_ids = {key[0] for key in dialogues}
     for quest_id in sorted(events):
         rows = events[quest_id]
@@ -1445,6 +1554,7 @@ def build_event(tables):
         # 委托类（type=3）且完全没有对话的条目是付款/领取后的记账记录，不作为奇遇展示。
         if not tree and quest_id not in dialogue_ids and _int(quest.get("type")) == 3:
             hidden_settlements += 1
+            hidden_outcomes.setdefault(quest_id // 10000, []).append((quest_id, rows))
             continue
         # 有旁白、但所有节点都没有选项：纯旁白事件，进入后直接结算。
         narration_only = bool(tree) and not any(
@@ -1469,7 +1579,7 @@ def build_event(tables):
         resolved[quest_id] = location
         result.append({
             "id": quest_id, "name": names[quest_id], "desc": desc,
-            "open": event_open(quest_id, quest),
+            "open": event_open(quest_id, quest, location),
             "one_off": bool(quest.get("oneOff")), "parent": parents[quest_id],
             "endings": endings, "dialogue": {str(key): value for key, value in dialogue_texts.items()
                                              if key // 100 == quest_id // 100},
@@ -1495,6 +1605,9 @@ def build_event(tables):
         event["realm_name"] = realms.get(str(realm)) or ("境界%s" % realm if realm else "未知境界")
         key = (location or {}).get("conf") or "unknown"
         stats[key] = stats.get(key, 0) + 1
+        _attach_followups(event, quests,
+                          hidden_outcomes.get(event["id"] // 10000) or [],
+                          ending_rewards)
     stats["events"] = len(result)
     stats["endings"] = sum(len(event["endings"]) for event in result)
     stats["endings_with_rewards"] = sum(
@@ -1520,6 +1633,7 @@ def build_event(tables):
             # 开启条件的判定明细要能叫出任务名，不能把「任务 11143」甩给玩家。
             "quest_names": {str(quest_id): _plain(row.get("name")) or ("任务 %s" % quest_id)
                             for quest_id, row in quests.items()},
+            "sect_names": {str(sect_id): name for sect_id, name in sect_names.items()},
             "grade_names": EVENT_GRADE_NAMES, "grade_hint": EVENT_GRADE_HINT,
             "stats": stats}
 

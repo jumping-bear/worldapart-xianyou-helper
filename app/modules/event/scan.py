@@ -183,6 +183,8 @@ def scan_event(obj, meta):
         "realms": realms, "layer_phases": meta.get("layer_phases") or {},
         "layer_local": meta.get("layer_numbers") or {},
         "game_time": game_time,
+        "sect_id": _event_int(player.get("current_sect_id")),
+        "sects": meta.get("sect_names") or {},
     }
     # 存档结算可能挂在合成/重复键下（例如石中剑的结局记在 5045999），
     # 必须按 ending → 所属奇遇 归属，不能只查 settlements[event.id]。
@@ -267,18 +269,43 @@ def scan_event(obj, meta):
         for ending in endings:
             if ending.get("id") in history_endings:
                 ending["history_got"] = True
+        # 历史账本只作旧存档展示，不能参与当前完成判定：玩家读回旧档后，
+        # 旧时间线（或其他存档分支）的结局会一直留在这里，造成误判为已达成。
         achieved = bool(got_endings) or completed or memory_got or repeat_done \
-            or quest_done or bool(history_endings)
+            or quest_done
         known_endings = {ending.get("id") for ending in endings}
+        location = event.get("location") or {}
+        sect_id = _event_int(location.get("sect"))
+        followups = []
+        for followup in event.get("followups") or []:
+            item = dict(followup)
+            stage = quest_states.get(_event_int(item.get("stage_quest")), -1)
+            outcome = quest_states.get(_event_int(item.get("outcome_quest")), -1)
+            if outcome in (2, 3):
+                label = "已领取"
+            elif outcome in (1, 6):
+                label = "可领取"
+            elif stage in (1, 6):
+                label = "等待中"
+            elif stage in (2, 3):
+                label = "可领取"
+            else:
+                label = "未接取"
+            item["state_label"] = label
+            item["got"] = outcome in (2, 3)
+            followups.append(item)
         row = {key: value for key, value in event.items() if key != "dialogue"}
         row.update({
             "endings": endings, "achieved": achieved,
+            "followups": followups,
+            "sect": sect_id, "sect_name": location.get("sect_name") or "",
+            "sect_ok": (not sect_id) or sect_id == open_ctx.get("sect_id"),
             "open_status": acquire.evaluate(
                 (event.get("open") or {}).get("checks"), open_ctx)[0],
             "open_checks": acquire.evaluate(
                 (event.get("open") or {}).get("checks"), open_ctx)[1],
             "history_only": bool(history_endings) and not (
-                got_endings or completed or memory_got or repeat_done),
+                got_endings or completed or memory_got or repeat_done or quest_done),
             "memory_got": memory_got,
             "memory_only": memory_got and not (got_endings or completed or repeat_done),
             "quest_done": quest_done,

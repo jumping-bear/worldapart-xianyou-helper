@@ -7,7 +7,7 @@ from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "event", "奇遇"
 KEY, LABEL_EN = "event", "Encounters"
-ORDER, SELECT, SCHEMA = 40, "latest", 52  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 40, "latest", 54  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "event_meta.json"
 TABLES = frozenset({
     "tbrandomeventending", "tbrewarddrop", "tbquest", "tbitem", "tbitemtype",
@@ -16,7 +16,7 @@ TABLES = frozenset({
     "tbspaceactiveevent", "tbinteractaction", "tbspaceinteractui", "tbdialogue",
     "tbgameactionflow", "tbinteractattribute", "tbconditionexpr", "tbpillherb",
     "tbpillrecipe", "tbalchemymaterial", "tbnpcitemdemandholdtemplate",
-    "tbmemoriaentry", "tbnpcbasecfg", "tbinitialspacenpc",
+    "tbmemoriaentry", "tbnpcbasecfg", "tbinitialspacenpc", "tbsect",
 })
 
 

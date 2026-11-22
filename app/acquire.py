@@ -177,6 +177,9 @@ def gate_text(node, ctx, self_id=0):
             return "境界达到%s" % _realm_label(ctx, value)
         if left[0] == "玩家" and left[1] in ("达到修炼层数", "修炼层数") and value is not None:
             return "修为达到%s" % _layer_label(ctx, value)
+        if left[0] == "玩家" and left[1] == "宗门" and value is not None:
+            name = (ctx.get("sects") or {}).get(str(_int(value))) or value
+            return "加入「%s」" % name
         if left[1] == "灵石" and value is not None:
             return "灵石 %s %s" % (op.replace(">=", "≥").replace("<=", "≤"), value)
         if not left[1]:
@@ -189,6 +192,10 @@ def gate_text(node, ctx, self_id=0):
             return "境界达到%s" % _realm_label(ctx, values[-1])
     if call == "条件" and index in _SELF_STATES and values:
         quest_id = _int(values[0])
+        # 同一奇遇/任务系列内的状态条件属于阶段路由，不是给玩家的外部门槛。
+        if ctx.get("ignore_family") and self_id \
+                and quest_id // 10000 == _int(self_id) // 10000:
+            return ""
         name = (ctx.get("quest_names") or {}).get(quest_id) or ("任务 %s" % quest_id)
         return {"任务提交": "完成「%s」", "任务持有": "正在进行「%s」",
                 "任务接取": "已接取「%s」", "任务进行中": "「%s」正在进行"}[index] % name
@@ -285,6 +292,8 @@ def collect(node, ctx, self_id=0):
             return {"kind": "realm", "need": _int(value)}
         if left[0] == "玩家" and left[1] in ("达到修炼层数", "修炼层数") and value is not None:
             return {"kind": "layer", "need": _int(value)}
+        if left[0] == "玩家" and left[1] == "宗门" and value is not None:
+            return {"kind": "sect", "need": _int(value)}
         if left[1] == "灵石" and value is not None:
             return {"kind": "money", "need": _int(value)}
         if left[1] == "当前场景Id" or left[0] == "当前场景":
@@ -300,7 +309,11 @@ def collect(node, ctx, self_id=0):
         if player_key in ("修炼阶段", "境界"):
             return {"kind": "realm", "need": _int(values[-1])}
     if call == "条件" and index in _SELF_STATES and values:
-        return {"kind": "quest", "quest": _int(values[0]), "mode": index}
+        quest_id = _int(values[0])
+        if ctx.get("ignore_family") and self_id \
+                and quest_id // 10000 == _int(self_id) // 10000:
+            return None
+        return {"kind": "quest", "quest": quest_id, "mode": index}
     if call == "随机事件" and index:
         return {"kind": "unknown", "text": gate_text(node, ctx, self_id)}
     text = gate_text(node, ctx, self_id)
@@ -360,6 +373,14 @@ def evaluate(tree, ctx):
         return ("pass" if cur >= need else "fail"), [
             {"text": "修为达到%s" % label,
              "cur": cur, "need": need, "ok": cur >= need}]
+    if kind == "sect":
+        need = _int(tree.get("need"))
+        cur = _int(ctx.get("sect_id"))
+        name = (ctx.get("sects") or {}).get(str(need)) or need
+        ok = cur == need
+        return ("pass" if ok else "fail"), [
+            {"text": "加入「%s」" % name, "cur": cur or "未加入宗门",
+             "need": name, "ok": ok}]
     if kind == "money":
         need = _int(tree.get("need"))
         cur = _int(ctx.get("money"))

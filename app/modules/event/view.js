@@ -88,13 +88,16 @@ function initEvent(){
  const HI_QUALITY=3;
  const hiRewardsOf=r=>{
   const seen={};
-  (r.endings||[]).forEach(e=>{
-   if(e.got||e.history_got)return;
+  const take=e=>{
+   if(e.got)return;
    (e.rewards||[]).forEach(x=>{
     if(x.name==='灵石'||(x.quality||0)<HI_QUALITY||x.owned)return;
     if(!seen[x.name])seen[x.name]=x;
    });
-  });
+  };
+  (r.endings||[]).forEach(take);
+  // 后续委托的奖励也是这条奇遇的真实产出，同样参与外层高品质物品提示。
+  (r.followups||[]).forEach(take);
   return Object.values(seen).sort((a,b)=>(b.quality||0)-(a.quality||0)||a.name.localeCompare(b.name,'zh'));
  };
  const hiChips=(list,limit)=>list.slice(0,limit).map(x=>`<span class="ev-hi-chip f${x.quality||0}" title="${esc(x.desc||'')}">${esc(x.name)}</span>`).join('')+
@@ -104,8 +107,8 @@ function initEvent(){
  const hiPending=(()=>{const seen={};topRows.forEach(r=>hiRewardsOf(r).forEach(x=>{seen[x.name]=x}));
   return Object.keys(seen).map(k=>seen[k]).sort((a,b)=>(b.quality||0)-(a.quality||0));})();
  const cards=
-  `<div class="card"><div class="k">奇遇达成</div><div class="v">${stats.achieved||0} <span>/ ${stats.events||0}</span></div>${stats.history?`<div class="s">含历史记录 ${stats.history} 个</div>`:''}${stats.memory?`<div class="s">含回忆收录 ${stats.memory} 个</div>`:''}</div>`+
-  `<div class="card"><div class="k">当前境界可做</div><div class="v">${realmRows.filter(r=>!r.achieved).length} <span>/ ${realmRows.length}</span></div><div class="s">${esc(st.current_realm_name||'当前境界')} 还未达成</div></div>`+
+  `<div class="card"><div class="k">奇遇达成</div><div class="v">${stats.achieved||0} <span>/ ${stats.events||0}</span></div>${stats.history?`<div class="s">旧存档记录 ${stats.history} 个（未计入）</div>`:''}${stats.memory?`<div class="s">含回忆收录 ${stats.memory} 个</div>`:''}</div>`+
+  `<div class="card"><div class="k">当前境界可做</div><div class="v">${realmRows.filter(r=>!r.achieved&&r.sect_ok!==false).length} <span>/ ${realmRows.length}</span></div><div class="s">${esc(st.current_realm_name||'当前境界')} 还未达成</div></div>`+
   `<div class="card"><div class="k">属性门槛不足</div><div class="v">${gateRows.length} <span>个</span></div><div class="s">出发前优先补属性</div></div>`+
   `<div class="card"><div class="k">未拿高品质</div><div class="v">${hiPending.length} <span>种</span></div><div class="s">${hiPending.length?('最值：'+esc(hiPending[0].name)):'暂无品质 ≥3 的未拿奖励'}</div></div>`+
   `<div class="card"><div class="k">奖励图鉴</div><div class="v">${catalog.length} <span>种</span></div><div class="s">未拥有 ${catalog.filter(x=>!x.owned).length} 种</div></div>`;
@@ -177,6 +180,7 @@ function initEvent(){
    (nested&&r.branch_selected?'<span class="badge ok">已选此分支</span>':'')+
    (nested&&r.branch_closed?'<span class="badge off">未选分支</span>':'')+
    (!nested&&r.parent&&byId[r.parent]?`<span class="badge">隶属 ${esc(byId[r.parent].name)}</span>`:'')+
+   (r.sect&&r.sect_ok===false?`<span class="badge off">需入${esc(r.sect_name)}</span>`:'')+
    `<span class="badge ${confCls((r.location||{}).conf)}">${confName((r.location||{}).conf)}</span>`;
   const condHtml=conds.length?(()=>{
    const groups={};conds.forEach(c=>{(groups[c.opt]=groups[c.opt]||[]).push(c)});
@@ -196,6 +200,14 @@ function initEvent(){
     ? '<div class="evline muted">纯旁白事件：配置里没有选项，进入后直接结算。</div>'
     : ((!(r.choices||[]).length && !r.tree)
       ? '<div class="evline muted">这条奇遇没有可选分支，剧情自动推进。</div>' : '');
+  const followupHtml=(r.followups||[]).length?`<div class="evfollow"><div class="evbranch-head">后续委托 · 不计入主线结局</div>`+
+   r.followups.map(f=>`<div class="evline"><b>${esc(f.name)}</b>`+
+    `<span class="badge ${f.got?'ok':f.state_label==='可领取'?'warn':f.state_label==='未接取'?'off':''}">${esc(f.state_label||'')}</span>`+
+    (f.trigger_path.length?`<div class="muted small">触发：${f.trigger_path.map(esc).join(' → ')}</div>`:'')+
+    `<div class="muted small">${f.wait_days?`等待 ${f.wait_days} 个游戏日 · `:''}回 ${esc((f.location||[]).join(' · '))} 领取</div>`+
+    `<div class="small">后续结局「${esc(f.title)}」${(f.detail||[]).length?` · ${f.detail.map(esc).join(' · ')}`:''}</div>`+
+    ((f.rewards||[]).length?`<div class="efchips">${rewardsHtml(f.rewards,f.got,'all')}</div>`:'')+
+    `</div>`).join('')+`</div>`:'';
   const body=endings.map(e=>`<div class="eend${e.got?' got':''}"><div class="eend-head">`+
    `<span class="egrade ${gradeCls(e.grade)}">${esc(e.grade_name||gradeName(e.grade))}</span>`+
    `<span class="eend-title">${esc(e.title)}</span>`+
@@ -214,7 +226,7 @@ function initEvent(){
   const hi=hiRewardsOf(r);
   const hiHtml=hi.length?`<span class="ev-hi" title="未拥有的高品质奖励（品质 ≥3）">${hiChips(hi,3)}</span>`:'';
   return `<details class="ev${nested?' evbranch':''}${r.branch_selected?' branch-done':''}${r.branch_closed?' branch-closed':''}" data-event="${r.id}"${state.focus===r.id?' open':''}><summary><span class="evname">${esc(r.name)}</span>${hiHtml}${badges}<span class="evloc">${esc(locText(r))}</span></summary>`+
-   `<div class="evbody">${r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:''}${(r.open&&r.open.text)?`<div class="evline"><b>开启条件</b>${esc(r.open.text)}</div>`:''}${repeatHint}${memoryHint}${closedHint}${condHtml}${grants}${picked}${unknown}${noChoice}<div>${body}</div>${tree}${branchHtml}</div></details>`;
+   `<div class="evbody">${r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:''}${(r.open&&r.open.text)?`<div class="evline"><b>开启条件</b>${esc(r.open.text)}</div>`:''}${repeatHint}${memoryHint}${closedHint}${condHtml}${grants}${picked}${unknown}${noChoice}<div>${body}</div>${followupHtml}${tree}${branchHtml}</div></details>`;
  }
  function itemCard(x){
   const sources=(x.sources||[]).slice().sort((a,b)=>(b.got?1:0)-(a.got?1:0)||(b.expected||0)-(a.expected||0));
@@ -365,7 +377,7 @@ function initEvent(){
   ` 当前角色属性：${Object.values(attrs).map(a=>`${esc(a.name)} Lv${a.level}（${a.exp}/${a.next||'—'}）`).join(' · ')||'未读取到探索属性'}；灵石 ${money}。`+
   ` 结局的「达成路径」来自配置里的设计备注，共 ${metaStats.endings_with_path||0}/${stats.endings||0} 条；静态能连到结局的分支共 ${metaStats.tree_endings||0} 条，其余由游戏结算判定。`+
   ` 奇遇按地点境界分组；配置里没有“角色境界高于某值就关闭奇遇”的硬条件，能否再遇到主要取决于还能不能回到该地点。`+
-  ` 历史达成按角色保存在本地，不写入游戏存档。</div>`;
+  ` 历史达成来自旧存档，按角色保存在本地，不写入游戏存档，也不计入当前完成数。</div>`;
  $('evq').value=state.q;
  $('evq').oninput=e=>{state.q=e.target.value;state.focus=0;store.set(EVENT_FILTER_KEY,state);renderAll()};
  $('evmode').onclick=e=>{const b=e.target.closest('[data-mode]');if(!b)return;state.mode=b.dataset.mode;state.focus=0;store.set(EVENT_FILTER_KEY,state);renderAll()};
