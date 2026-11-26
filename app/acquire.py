@@ -55,6 +55,63 @@ def _realm_label(ctx, realm_id):
     return "「%s」" % ((ctx.get("realms") or {}).get(str(realm_id)) or ("境界 %s" % realm_id))
 
 
+_QUEST_STATE_LABELS = {1: "进行中", 2: "已完成", 3: "已提交", 5: "已放弃", 6: "待提交"}
+
+
+def quest_state_label(state):
+    """存档 questComponent.quests[id].state 的玩家可读状态。"""
+    if state is None or _int(state, -1) < 0:
+        return "未获得"
+    return _QUEST_STATE_LABELS.get(_int(state), "状态 %s" % state)
+
+
+def _quest_name(ctx, quest_id):
+    names = ctx.get("quest_names") or {}
+    return names.get(quest_id) or names.get(str(quest_id)) or ("任务 %s" % quest_id)
+
+
+def _merge_quest_pending(parts):
+    """把「已接取 X」+「X 不在进行中」合并成“目标已完成或待提交”。"""
+    skip = set()
+    for index, text in enumerate(parts):
+        match = re.fullmatch(r"已接取「(.+?)」", text)
+        if match and ("「%s」不在进行中" % match.group(1)) in parts:
+            skip.add(parts.index("「%s」不在进行中" % match.group(1)))
+    out = []
+    for index, text in enumerate(parts):
+        if index in skip:
+            continue
+        match = re.fullmatch(r"已接取「(.+?)」", text)
+        if match and ("「%s」不在进行中" % match.group(1)) in parts:
+            out.append("已接取「%s」，目标已完成或待提交" % match.group(1))
+        else:
+            out.append(text)
+    return out
+
+
+def _merge_quest_submit_or(parts):
+    """「完成 X」与「已接取 X，目标已完成待提交」是同一件事的两种状态，合并展示。"""
+    flags = {}
+    for text in parts:
+        match = re.fullmatch(r"完成「(.+?)」", text)
+        if match:
+            flags.setdefault(match.group(1), set()).add("submit")
+        match = re.fullmatch(r"已接取「(.+?)」，目标已完成或待提交", text)
+        if match:
+            flags.setdefault(match.group(1), set()).add("pending")
+    out = []
+    for text in parts:
+        match = re.fullmatch(r"完成「(.+?)」", text)
+        if match and "pending" in flags.get(match.group(1), set()):
+            out.append("完成「%s」（已提交或已完成）" % match.group(1))
+            continue
+        match = re.fullmatch(r"已接取「(.+?)」，目标已完成或待提交", text)
+        if match and "submit" in flags.get(match.group(1), set()):
+            continue
+        out.append(text)
+    return out
+
+
 def _is_self(node, self_id):
     """任务目标未激活 / 非（已提交自身）是自检，不是给玩家的门槛。"""
     call, index, args = _call_parts(node)
@@ -162,12 +219,23 @@ def gate_text(node, ctx, self_id=0):
             if text and text not in parts:
                 parts.append(text)
         if logic in _LOGIC_OR:
+            parts = _merge_quest_submit_or(parts)
             squashed = _squash_month_texts(parts)
             if squashed:
                 return squashed
+        else:
+            parts = _merge_quest_pending(parts)
         return _join_logic(parts, logic)
     if _is_self(node, self_id):
         return ""
+    if call in _NOT or index in _NOT:
+        inner = args[0] if args else None
+        inner_call, inner_index, inner_args = _call_parts(inner) if inner is not None else (None, None, [])
+        inner_values = _const_args(inner_args)
+        if (inner_call == "任务进行中" or inner_index == "任务进行中") and inner_values:
+            return "「%s」不在进行中" % _quest_name(ctx, _int(inner_values[0]))
+        text = gate_text(inner, ctx, self_id) if inner is not None else ""
+        return ("不满足：%s" % text) if text else ""
     op = call if call in _OP_NAMES else (index if index in _OP_NAMES else "")
     values = _const_args(args)
     if op and len(args) >= 2:
@@ -196,9 +264,17 @@ def gate_text(node, ctx, self_id=0):
         if ctx.get("ignore_family") and self_id \
                 and quest_id // 10000 == _int(self_id) // 10000:
             return ""
-        name = (ctx.get("quest_names") or {}).get(quest_id) or ("任务 %s" % quest_id)
-        return {"任务提交": "完成「%s」", "任务持有": "正在进行「%s」",
-                "任务接取": "已接取「%s」", "任务进行中": "「%s」正在进行"}[index] % name
+        return {"任务提交": "完成「%s」", "任务持有": "已接取「%s」",
+                "任务接取": "曾接取「%s」", "任务进行中": "「%s」正在进行"}[index] \
+            % _quest_name(ctx, quest_id)
+    if call in _SELF_STATES and values:
+        quest_id = _int(values[0])
+        if ctx.get("ignore_family") and self_id \
+                and quest_id // 10000 == _int(self_id) // 10000:
+            return ""
+        return {"任务提交": "完成「%s」", "任务持有": "已接取「%s」",
+                "任务接取": "曾接取「%s」", "任务进行中": "「%s」正在进行"}[call] \
+            % _quest_name(ctx, quest_id)
     if call == "随机事件" and index:
         return "需先触发剧情「%s」" % index
     text = index if isinstance(index, str) and index else ""
@@ -248,16 +324,42 @@ def _join_logic(parts, logic):
     return (" 或 " if logic in _LOGIC_OR else " 且 ").join(cleaned)
 
 
+def _split_top(text, sep=" 且 "):
+    """按顶层分隔符拆句，括号内的「且」不拆。"""
+    parts, depth, buf, index = [], 0, "", 0
+    while index < len(text):
+        char = text[index]
+        if char in "（(":
+            depth += 1
+        elif char in "）)":
+            depth = max(0, depth - 1)
+        if depth == 0 and text.startswith(sep, index):
+            parts.append(buf.strip())
+            buf = ""
+            index += len(sep)
+            continue
+        buf += char
+        index += 1
+    parts.append(buf.strip())
+    return [part for part in parts if part]
+
+
 def combine(*parts):
-    """多来源门槛合并：去掉空值、自检与重复。"""
-    out = []
+    """多来源门槛合并：按顶层「且」拆句去重，OR 子句补括号。"""
+    out, seen = [], set()
     for part in parts:
         text = (part or "").strip()
-        if not text or text in out:
+        if not text:
             continue
-        if text in ("条件", "非", "玩家 >= 1"):
-            continue
-        out.append(text)
+        for clause in _split_top(text):
+            if clause in ("条件", "非", "玩家 >= 1"):
+                continue
+            if " 或 " in clause and not (clause.startswith("（") and clause.endswith("）")):
+                clause = "（%s）" % clause
+            if clause in seen:
+                continue
+            seen.add(clause)
+            out.append(clause)
     return " 且 ".join(out)
 
 
@@ -283,6 +385,12 @@ def collect(node, ctx, self_id=0):
         return {"mode": "any" if logic in _LOGIC_OR else "all", "parts": parts}
     if _is_self(node, self_id):
         return None
+    if call in _NOT or index in _NOT:
+        inner = args[0] if args else None
+        part = collect(inner, ctx, self_id) if inner is not None else None
+        if not part:
+            return None
+        return {"kind": "not", "part": part}
     op = call if call in _OP_NAMES else (index if index in _OP_NAMES else "")
     values = _const_args(args)
     if op and len(args) >= 2:
@@ -314,6 +422,12 @@ def collect(node, ctx, self_id=0):
                 and quest_id // 10000 == _int(self_id) // 10000:
             return None
         return {"kind": "quest", "quest": quest_id, "mode": index}
+    if call in _SELF_STATES and values:
+        quest_id = _int(values[0])
+        if ctx.get("ignore_family") and self_id \
+                and quest_id // 10000 == _int(self_id) // 10000:
+            return None
+        return {"kind": "quest", "quest": quest_id, "mode": call}
     if call == "随机事件" and index:
         return {"kind": "unknown", "text": gate_text(node, ctx, self_id)}
     text = gate_text(node, ctx, self_id)
@@ -330,12 +444,35 @@ def evaluate(tree, ctx):
         states = [state for state, _ in results]
         if tree["mode"] == "any":
             if "pass" in states:
-                return "pass", checks
+                # OR 只要有一条成立，其它未走分支的失败项不能当成“为什么没触发”。
+                passing = [items for state, items in results if state == "pass"]
+                return "pass", [check for items in passing for check in items]
             return ("unknown" if "unknown" in states else "fail"), checks
         if "fail" in states:
             return "fail", checks
         return ("unknown" if "unknown" in states else "pass"), checks
     kind = tree.get("kind")
+    if kind == "not":
+        inner = tree.get("part") or {}
+        if inner.get("kind") == "quest" and inner.get("mode") == "任务进行中":
+            quest_id = _int(inner.get("quest"))
+            quests = ctx.get("quests") or {}
+            state = _int(quests.get(quest_id, quests.get(str(quest_id), -1)), -1)
+            ok = state != 1
+            return ("pass" if ok else "fail"), [{
+                "text": "「%s」不在进行中" % _quest_name(ctx, quest_id),
+                "cur": quest_state_label(state), "need": "非进行中", "ok": ok}]
+        state, checks = evaluate(inner, ctx)
+        flipped = {"pass": "fail", "fail": "pass", "unknown": "unknown"}[state]
+        items = []
+        for check in checks:
+            item = dict(check)
+            if item.get("ok") is not None:
+                item["ok"] = not item["ok"]
+            item["text"] = "不满足：%s" % (item.get("text") or "条件")
+            items.append(item)
+        return flipped, items
+
     if kind == "time":
         game = ctx.get("game_time") or {}
         if not game:
@@ -362,17 +499,20 @@ def evaluate(tree, ctx):
         need = _int(tree.get("need"))
         cur = _int(ctx.get("realm"))
         name = (ctx.get("realms") or {}).get(str(need)) or need
+        cur_name = (ctx.get("realms") or {}).get(str(cur)) or ("境界 %s" % cur)
         return ("pass" if cur >= need else "fail"), [
-            {"text": "境界达到「%s」" % name, "cur": cur, "need": need, "ok": cur >= need}]
+            {"text": "境界达到「%s」" % name, "cur": cur, "cur_label": cur_name,
+             "need": need, "ok": cur >= need}]
     if kind == "layer":
         need = _int(tree.get("need"))
         cur = _int(ctx.get("layer"))
         name = (ctx.get("layer_phases") or {}).get(str(need)) or ""
         local = _layer_local(ctx, need)
         label = ("「%s」（第 %s 层）" % (name, local)) if name else ("第 %s 层" % local)
+        cur_name = (ctx.get("layer_phases") or {}).get(str(cur)) or ("第 %s 层" % _layer_local(ctx, cur))
         return ("pass" if cur >= need else "fail"), [
             {"text": "修为达到%s" % label,
-             "cur": cur, "need": need, "ok": cur >= need}]
+             "cur": cur, "cur_label": cur_name, "need": need, "ok": cur >= need}]
     if kind == "sect":
         need = _int(tree.get("need"))
         cur = _int(ctx.get("sect_id"))
@@ -388,18 +528,22 @@ def evaluate(tree, ctx):
             {"text": "灵石 ≥ %s" % need, "cur": cur, "need": need, "ok": cur >= need}]
     if kind == "quest":
         quest_id = _int(tree.get("quest"))
-        state = (ctx.get("quests") or {}).get(quest_id)
+        quests = ctx.get("quests") or {}
+        state = quests.get(quest_id, quests.get(str(quest_id), -1))
+        state = _int(state, -1)
         mode = tree.get("mode")
-        if mode in ("任务提交",):
-            ok = state in (2, 3)
-        elif mode in ("任务持有", "任务进行中"):
-            ok = state in (1, 6)
+        name = _quest_name(ctx, quest_id)
+        if mode == "任务提交":
+            ok, label, need = state == 3, "完成「%s」" % name, "已提交"
+        elif mode == "任务持有":
+            ok, label, need = state in (1, 2, 6), "已接取「%s」" % name, "已接取"
+        elif mode == "任务进行中":
+            ok, label, need = state == 1, "「%s」正在进行" % name, "进行中"
         elif mode == "任务接取":
-            ok = state is not None
+            ok, label, need = state >= 0, "曾接取「%s」" % name, "接取过"
         else:
-            ok = state in (2, 3)
-        name = (ctx.get("quest_names") or {}).get(quest_id) or ("任务 %s" % quest_id)
-        return ("pass" if ok else "fail"), [
-            {"text": "完成「%s」" % name, "cur": "已完成" if ok else "未完成",
-             "need": "完成", "ok": ok}]
+            ok, label, need = state in (2, 3), "完成「%s」" % name, "已完成"
+        return ("pass" if ok else "fail"), [{
+            "text": label, "cur": quest_state_label(state),
+            "need": need, "ok": ok}]
     return "unknown", [{"text": tree.get("text") or "条件", "ok": None}]

@@ -111,6 +111,120 @@ def _gate_text(node, attrs, quest_names, realms, layer_phases, layer_numbers, se
     }, self_id)
 
 
+_QUEST_STATE_CALLS = {"任务提交", "任务持有", "任务接取", "任务进行中"}
+
+
+def _walk_expr(node):
+    """遍历表达式节点，兼容 list/dict 两种写法。"""
+    if isinstance(node, list):
+        for item in node:
+            yield from _walk_expr(item)
+        return
+    if not isinstance(node, dict):
+        return
+    yield node
+    for key in ("func", "arguments", "target", "index", "args"):
+        value = node.get(key)
+        if value is not None:
+            yield from _walk_expr(value)
+
+
+def _is_accept_call(name):
+    return isinstance(name, str) and "接取" in name and "任务" in name
+
+
+def _accept_ids(node):
+    """表达式里“接取任务(X)”指向的任务 id；不写死具体任务。"""
+    ids = set()
+    for item in _walk_expr(node or {}):
+        call, index, args = _call_parts(item)
+        if _is_accept_call(call) or _is_accept_call(index):
+            ids.update(_int(value) for value in _const_args(args)
+                       if isinstance(value, int))
+    return ids
+
+
+def _quest_refs(node):
+    """收集 [(任务id, 状态, 是否被非包裹)]，兼容 条件.任务提交 / 任务触发.任务提交。"""
+    refs, seen = [], set()
+
+    def visit(current, negated=False):
+        if isinstance(current, list):
+            for item in current:
+                visit(item, negated)
+            return
+        if not isinstance(current, dict):
+            return
+        call, index, args = _call_parts(current)
+        if call in ("非", "!", "not") or index in ("非", "!", "not"):
+            for arg in args:
+                visit(arg, not negated)
+            return
+        state = None
+        if call == "条件" and index in _QUEST_STATE_CALLS:
+            state = index
+        elif call in _QUEST_STATE_CALLS:
+            state = call
+        elif call == "任务触发" and index in _QUEST_STATE_CALLS:
+            state = index
+        if state:
+            for value in _const_args(args):
+                if isinstance(value, int):
+                    key = (_int(value), state, negated)
+                    if key not in seen:
+                        seen.add(key)
+                        refs.append(key)
+            return
+        for key in ("func", "arguments", "target", "index", "args"):
+            value = current.get(key)
+            if value is not None:
+                visit(value, negated)
+
+    visit(node)
+    return refs
+
+
+def _flag_refs(node):
+    """随机事件剧情标记（非任务），例如「祭坛可进入」。"""
+    flags, seen = [], set()
+
+    def visit(current):
+        if isinstance(current, list):
+            for item in current:
+                visit(item)
+            return
+        if not isinstance(current, dict):
+            return
+        call, index, _args = _call_parts(current)
+        if call == "随机事件" and index and index not in seen:
+            seen.add(index)
+            flags.append(index)
+        for key in ("func", "arguments", "target", "index", "args"):
+            value = current.get(key)
+            if value is not None:
+                visit(value)
+
+    visit(node)
+    return flags
+
+
+_TRIGGER_NOTES = {
+    "enter_scene": "进入场景时判定；已在场景内需要先离开再进入，等到对应月份不会补判",
+    "quest": "完成指定任务后判定",
+    "realm": "境界达到后判定",
+    "layer": "修为达到后判定",
+    "trigger": "满足触发条件时判定",
+    "interaction": "到地点交互时判定",
+    "dialogue": "对话选择时接取",
+    "none": "到地点即可触发",
+    "unknown": "触发方式待确认",
+}
+
+
+def _trigger_note(open_info):
+    return _TRIGGER_NOTES.get((open_info or {}).get("kind"), "")
+
+
 def _internal_only_cond(cond):
     """选项条件是否只是奇遇自身的状态自检（不构成玩家门槛）。"""
     text = cond.get("text") or ""
@@ -1331,9 +1445,165 @@ def build_event(tables):
     quest_names = {quest_id: _plain((row or {}).get("name")) or ("任务 %s" % quest_id)
                    for quest_id, row in quests.items()}
 
+    # 前置任务“怎么拿到”：对话选项 / 场景交互 / 任务流程。
+    # 全部从当前配置反查，不写死任务 id；游戏更新新增入口时会自动跟随。
+    dialogue_carriers = {}
+    for owner_id, owner in quests.items():
+        for objective in owner.get("objectives") or []:
+            if not isinstance(objective, dict):
+                continue
+            flow = flows.get(_int(objective.get("activeFlowId"))) or {}
+            call, index, args = _call_parts(flow.get("action") or {})
+            if index != "指定场景播放剧情" and call != "指定场景播放剧情":
+                continue
+            values = _const_args(args)
+            if len(values) >= 2 and isinstance(values[1], int):
+                dialogue_carriers.setdefault(_int(values[1]), []).append(owner_id)
+
+    accept_sources = {}
+
+    def add_accept_source(quest_id, item):
+        slot = accept_sources.setdefault(_int(quest_id), [])
+        if item not in slot:
+            slot.append(item)
+
+    for (dialogue_id, sub_id), row in dialogues.items():
+        if not isinstance(row, dict):
+            continue
+        options = [option for option in (row.get("options") or []) if isinstance(option, dict)]
+        accepted = [(_text(option.get("optionText")), _accept_ids(option.get("optionExpr")))
+                    for option in options]
+        accepted = [(text, ids) for text, ids in accepted if ids]
+        if not accepted:
+            continue
+        for text, ids in accepted:
+            others = [{"option": other_text, "quests": sorted(other_ids)}
+                      for other_text, other_ids in accepted
+                      if other_text and other_text != text]
+            for quest_id in ids:
+                carriers = dialogue_carriers.get(dialogue_id) or []
+                carrier = next((qid for qid in carriers if quest_names.get(qid)), 0)
+                carrier_name = quest_names.get(carrier) or ""
+                if carrier_name and text:
+                    obtain = "在「%s」剧情中选「%s」" % (carrier_name, text)
+                elif text:
+                    obtain = "在剧情对话中选「%s」" % text
+                else:
+                    obtain = "在剧情对话中接取"
+                add_accept_source(quest_id, {
+                    "kind": "dialogue", "dialogue": dialogue_id, "sub": sub_id,
+                    "option": text, "carrier": carrier, "carrier_name": carrier_name,
+                    "text": obtain, "alternatives": others,
+                })
+
+    for row in _rows(tables.get("tbinteractaction")):
+        if not isinstance(row, dict):
+            continue
+        ids = _accept_ids(row.get("interactExpr"))
+        if not ids:
+            continue
+        action_id = _int(row.get("id"))
+        action_text = _text(row.get("textInteract")) or "场景交互"
+        ui_rows = ui_by_action.get(action_id, [])
+        for quest_id in ids:
+            if not ui_rows:
+                add_accept_source(quest_id, {
+                    "kind": "interact", "action": action_id, "scene": 0, "scene_name": "",
+                    "action_text": action_text, "unlock": "",
+                    "text": "在场景中触发「%s」" % action_text,
+                })
+                continue
+            for ui in ui_rows:
+                scene_id = _int(ui.get("spaceId"))
+                scene = spaces.get(str(scene_id)) or {}
+                scene_name = scene.get("name") or ""
+                unlock = ""
+                if ui.get("unlockConditionExpr"):
+                    unlock = _gate_text(ui.get("unlockConditionExpr"), attrs, quest_names,
+                                        realms, layer_phases, layer_numbers, quest_id)
+                text = ("在%s触发「%s」" % (scene_name, action_text)) if scene_name \
+                    else ("触发「%s」" % action_text)
+                if unlock:
+                    text += "（%s后出现）" % unlock
+                add_accept_source(quest_id, {
+                    "kind": "interact", "action": action_id, "scene": scene_id,
+                    "scene_name": scene_name, "action_text": action_text,
+                    "unlock": unlock, "text": text,
+                })
+
+    flow_carriers = {}
+    for owner_id, owner in quests.items():
+        for objective in owner.get("objectives") or []:
+            if isinstance(objective, dict):
+                flow_carriers.setdefault(_int(objective.get("activeFlowId")), owner_id)
+    for flow_id, row in flows.items():
+        if not isinstance(row, dict):
+            continue
+        ids = _accept_ids(row.get("action"))
+        if not ids:
+            continue
+        owner = flow_carriers.get(flow_id) or 0
+        owner_name = quest_names.get(owner) or ""
+        text = ("在「%s」流程中接取" % owner_name) if owner_name else "随任务流程接取"
+        for quest_id in ids:
+            add_accept_source(quest_id, {"kind": "flow", "flow": flow_id,
+                                         "carrier": owner, "carrier_name": owner_name,
+                                         "text": text})
+
+    def prereq_items(nodes, self_id=0, self_name=""):
+        """把开启条件里引用到的任务/剧情标记整理成玩家可读的前置说明。"""
+        quest_modes, flags = {}, []
+        head = self_name.split("·", 1)[0].strip() if "·" in self_name else ""
+        for node in nodes:
+            for quest_id, state, _negated in _quest_refs(node):
+                if self_id and quest_id == _int(self_id):
+                    continue
+                row = quests.get(quest_id) or {}
+                # 同系列 hidden 阶段任务（温养/已领之类的内部记账）不是玩家前置；
+                # 但「母奇遇·分支」里的母奇遇（如 第一件法宝 → 第一件法宝·白火认主）要保留。
+                if row.get("hidden") and self_id and quest_id // 10000 == _int(self_id) // 10000:
+                    if not head or (quest_names.get(quest_id) or "") != head:
+                        continue
+                quest_modes.setdefault(quest_id, set()).add(state)
+            for flag in _flag_refs(node):
+                if flag not in flags:
+                    flags.append(flag)
+        out = []
+        for quest_id in sorted(quest_modes):
+            row = quests.get(quest_id) or {}
+            sources = accept_sources.get(quest_id) or []
+            alternatives = []
+            for source in sources:
+                for alt in source.get("alternatives") or []:
+                    if alt not in alternatives:
+                        alternatives.append(alt)
+            obtain = [source.get("text") for source in sources if source.get("text")]
+            hidden = bool(row.get("hidden"))
+            quest_type = _int(row.get("type"))
+            if not obtain:
+                obtain = ["获取方式待确认（当前配置没有识别到接取入口）"] \
+                    if hidden or quest_type == 3 or quest_id not in quests \
+                    else ["随主线 / 任务流程推进"]
+            out.append({
+                "type": "quest", "quest": quest_id,
+                "name": quest_names.get(quest_id) or ("任务 %s" % quest_id),
+                "hidden": hidden,
+                "quest_type": quest_type,
+                "missing": quest_id not in quests,
+                "modes": sorted(quest_modes[quest_id]),
+                "obtain": obtain,
+                "alternatives": alternatives,
+            })
+        for flag in flags:
+            out.append({"type": "flag", "name": flag,
+                        "note": "剧情标记（非任务），需在对应场景完成前置剧情"})
+        return out
+
+
     # 场景交互点的开启条件（例：先完成某主线才出现），奇遇也从这里取，和支线同源。
     interact_open = {}
     interact_checks = {}
+    interact_nodes = {}
     for row in _rows(tables.get("tbinteractaction")):
         if not isinstance(row, dict):
             continue
@@ -1347,6 +1617,7 @@ def build_event(tables):
             unlock_trees = []
             for unlock in ui_unlock.get(action_id, []):
                 unlock = acquire.resolve_aliases(unlock, cond_aliases)
+                interact_nodes.setdefault(quest_id, []).append(unlock)
                 text = _gate_text(unlock, attrs, quest_names, realms, layer_phases,
                                   layer_numbers, quest_id)
                 if text:
@@ -1357,6 +1628,7 @@ def build_event(tables):
                 if tree:
                     unlock_trees.append(tree)
             node = acquire.resolve_aliases(node, cond_aliases)
+            interact_nodes.setdefault(quest_id, []).append(node)
             action_text = _gate_text(node, attrs, quest_names, realms, layer_phases,
                                      layer_numbers, quest_id, ignore_family=True)
             text = acquire.combine(" 且 ".join(unlock_parts), action_text)
@@ -1381,7 +1653,7 @@ def build_event(tables):
             sect_text = "加入「%s」" % sect_name
             sect_tree = {"kind": "sect", "need": _int(sect)}
         cond_row = cond_rows.get(str(_int(quest.get("acqCondition")))) or {}
-        base_text, base_tree = "", None
+        base_text, base_tree, cond_expr = "", None, None
         if cond_row:
             cond_expr = acquire.resolve_aliases(cond_row.get("condition"), cond_aliases)
             base_text = _gate_text(cond_expr, attrs, quest_names,
@@ -1391,6 +1663,11 @@ def build_event(tables):
                                          "realms": realms, "layer_phases": layer_phases,
                                          "layer_local": layer_numbers},
                                         quest_id)
+        trigger = acquire.resolve_aliases(quest.get("triggerExpr") or {}, cond_aliases)
+        _name, call, targs = _call_parts(trigger)
+        prereq_nodes = ([cond_expr] if cond_expr is not None else []) \
+            + (interact_nodes.get(quest_id) or []) + [trigger]
+        prereqs = prereq_items(prereq_nodes, quest_id, names.get(quest_id) or "")
 
         def _ret(kind, text, source, checks):
             """接取条件与地点/交互门槛同时成立才算开启，不能只取其中一个。"""
@@ -1400,15 +1677,14 @@ def build_event(tables):
                 text = acquire.combine(text, sect_text)
                 checks = _merge_checks(checks, sect_tree)
             return {"kind": kind, "text": acquire.combine(base_text, text), "source": source,
-                    "checks": _merge_checks(base_tree, checks)}
+                    "checks": _merge_checks(base_tree, checks), "prereqs": prereqs,
+                    "trigger_note": _trigger_note({"kind": kind})}
 
         def _merge_checks(*trees):
             items = [tree for tree in trees if tree]
             if not items:
                 return None
             return {"mode": "all", "parts": items} if len(items) > 1 else items[0]
-        trigger = acquire.resolve_aliases(quest.get("triggerExpr") or {}, cond_aliases)
-        _name, call, targs = _call_parts(trigger)
         nums = [value for value in _const_args(targs) if isinstance(value, (int, float))]
         if _name == "任务触发" and call == "进入场景" and nums:
             info = spaces.get(str(_int(nums[0]))) or {}
@@ -1619,6 +1895,10 @@ def build_event(tables):
         1 for event in result for ending in event["endings"] if ending["path"])
     stats["tree_endings"] = sum(len((event.get("tree") or {}).get("endings") or []) for event in result)
     stats["narration_only"] = sum(1 for event in result if event["narration_only"])
+    stats["prereq_events"] = sum(1 for event in result if (event.get("open") or {}).get("prereqs"))
+    stats["prereq_unresolved"] = sum(
+        1 for event in result for item in ((event.get("open") or {}).get("prereqs") or [])
+        if item.get("missing") or any("待确认" in text for text in item.get("obtain") or []))
     stats["hidden_settlements"] = hidden_settlements
     phases = {}
     for row in _rows(tables["tbcultivaterealm"]):
