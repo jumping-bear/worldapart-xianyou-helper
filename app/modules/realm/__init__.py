@@ -7,12 +7,12 @@ from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "realm", "境界修为"
 KEY, LABEL_EN = "realm", "Cultivation"
-ORDER, SELECT, SCHEMA = 12, "latest", 13  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 12, "latest", 14  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "realm_meta.json"
 TABLES = frozenset({
     "tbcultivaterealm", "tbcultivatephase", "tbcultivatelayer",
     "tbitem", "tbitemtype", "tbattribute",
-    "tbsourceroute", "tbmappoi",
+    "tbsourceroute", "tbmappoi", "tbpillrecipe",
     "tbrewarddrop",
     "tbauctionvenue", "tbauctionitempool",
     "tbtournamentreward",

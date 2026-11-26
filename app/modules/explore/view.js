@@ -3,7 +3,7 @@
 const UI_KEY='worldapart.explore.ui.v3';
 const DEFAULTS={view:'attr',attr:0,q:'',type:'',range:'',stamina:0,commission:0};
 let ui=Object.assign({},DEFAULTS,store.get(UI_KEY,{}));
-if(ui.view!=='place')ui.view='attr';
+if(ui.view!=='place'&&ui.view!=='task')ui.view='attr';
 let ATTR_NAMES={};
 
 function save(){store.set(UI_KEY,ui)}
@@ -129,13 +129,13 @@ function statusHtml(r){
 
 function controlsHtml(r){
   const types=typesOf(r.entries||[]);
+  const tasks=(r.commissions||[]).length;
   const typeOpts=['<option value="">全部互动</option>'].concat(types.map(t=>`<option value="${esc(t)}"${ui.type===t?' selected':''}>${esc(t)}</option>`)).join('');
   const rangeOpts=[['','全部经验']].concat((r.ranges||[]).map(([lo,hi])=>[lo+'-'+hi,lo+'–'+hi])).map(([v,l])=>`<option value="${v}"${ui.range===v?' selected':''}>${l}</option>`).join('');
   return `<div class="ex-controls">
-    <div class="ex-seg"><button type="button" data-view="attr" class="${ui.view==='attr'?'on':''}">按属性</button><button type="button" data-view="place" class="${ui.view==='place'?'on':''}">按位置</button></div>
+    <div class="ex-seg"><button type="button" data-view="attr" class="${ui.view==='attr'?'on':''}">按属性</button><button type="button" data-view="place" class="${ui.view==='place'?'on':''}">按位置</button>${tasks?`<button type="button" data-view="task" class="${ui.view==='task'?'on':''}">委托目标 ${fmt(tasks)}</button>`:''}</div>
     <input id="ex-q" value="${esc(ui.q)}" placeholder="搜索 NPC / 场景 / 互动 / 委托">
     <button type="button" id="ex-match" class="ex-match${ui.commission?' on':''}">可顺路委托 ${fmt((r.totals||{}).matched_tasks)}</button>
-    ${n((r.totals||{}).tasks)?`<button type="button" class="ex-link" id="ex-tasks-jump">接取点 ${fmt((r.totals||{}).tasks)}</button>`:''}
    </div>
    <details class="ex-adv"><summary>筛选条件 <span>互动类型 / 经验区间 / 精力</span></summary>
     <div class="ex-adv-grid">
@@ -150,16 +150,14 @@ function tasksHtml(r){
   const list=r.commissions||[];
   if(!list.length)return '';
   const matched=list.filter(c=>c.matched).length;
-  return `<details class="ex-tasks" id="ex-tasks"><summary>本月委托目标 ${list.length} 条 <span>${matched} 条可顺路 · 含接取地点</span></summary>
-   <div class="ex-task-list">${list.map(c=>`<div class="ex-task">
+  return `<div class="ex-task-list">${list.map(c=>`<div class="ex-task">
     <div><b>${esc(c.name)}</b><span>${esc(c.kind)} · ${esc(c.action)}</span>
      <div class="ex-task-place">接取：${esc(c.board_place)}（${esc(c.board_npc)}）${c.board_enabled?'':' · 未开放'}</div>
      <div class="ex-task-place">目标：${esc(c.target_place||'未识别地点')}（${esc(c.npc_name)}）</div>
     </div>
     <div>${c.matched?'<span class="ex-tag mid">可顺路</span>':'<span class="ex-tag">接取后可做</span>'}${c.accepted?'<span class="ex-tag hi">进行中</span>':''}</div>
    </div>`).join('')}</div>
-   <div class="ex-task-note">切磋类委托接取后可直接在 NPC 菜单完成；疏经导脉/说服类委托接取后会在目标 NPC 上临时开启对应入口，不需要等本月抽取。</div>
-  </details>`;
+   <div class="ex-task-note">本月 ${list.length} 条委托，${matched} 条与本月入口动作一致可顺路完成。切磋类委托接取后可直接在 NPC 菜单完成；疏经导脉/说服类委托接取后会在目标 NPC 上临时开启对应入口，不需要等本月抽取。</div>`;
 }
 
 function rulesHtml(r){
@@ -185,6 +183,14 @@ function paintBody(panel,r){
   const body=panel.querySelector('#ex-body');
   const count=panel.querySelector('#ex-count');
   if(!body||!count)return;
+  if(ui.view==='task'){
+    // 委托就在原位展开：不跳到底部，接取点与目标点始终同屏
+    const list=r.commissions||[];
+    const matched=list.filter(c=>c.matched).length;
+    count.textContent=`本月委托 ${list.length} 条 · ${matched} 条可顺路 · 含接取地点与目标地点`;
+    body.innerHTML=list.length?tasksHtml(r):'<div class="empty">当前存档没有可接的城镇/宗门委托</div>';
+    return;
+  }
   const list=filterList(r);
   const scope=ui.attr?(r.entries||[]).filter(e=>n(e.attr)===n(ui.attr)):(r.entries||[]);
   const total=scope.length;
@@ -204,7 +210,7 @@ function renderExplore(DATA){
   const warnings=(r.warnings||[]).slice(0,5);
   const warnHtml=warnings.length?`<div class="ex-warn">${warnings.map(esc).join('<br>')}${(r.warnings||[]).length>5?`<br>另有 ${(r.warnings||[]).length-5} 条提示`:''}</div>`:'';
   panel.innerHTML=sourceHtml(m)+statusHtml(r)+warnHtml+controlsHtml(r)+
-    '<div id="ex-count" class="ex-count"></div><div id="ex-body"></div>'+tasksHtml(r)+rulesHtml(r);
+    '<div id="ex-count" class="ex-count"></div><div id="ex-body"></div>'+rulesHtml(r);
 
   panel.querySelectorAll('[data-view]').forEach(btn=>{
     btn.onclick=function(){
@@ -234,13 +240,6 @@ function renderExplore(DATA){
     ui.commission=ui.commission?0:1;save();
     match.classList.toggle('on',!!ui.commission);
     paintBody(panel,r);
-  };
-  const jump=panel.querySelector('#ex-tasks-jump');
-  if(jump)jump.onclick=function(){
-    const box=panel.querySelector('#ex-tasks');
-    if(!box)return;
-    box.open=true;
-    try{box.scrollIntoView({behavior:'smooth',block:'center'})}catch(e){}
   };
   paintBody(panel,r);
 }

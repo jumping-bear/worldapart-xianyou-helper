@@ -10,7 +10,7 @@ let filters=Object.assign({},DEFAULTS,store.get(KEY,{}));
 function catValue(t){return t.category===null||t.category===undefined||t.category===''?'':String(t.category)}
 function categoryLabel(t){const value=catValue(t),name=t.category_name||'';return value?(name||`分类 ${value}`):'未分类'}
 function talentText(t){return [t.name,t.effect,t.hover,t.trigger].map(v=>String(v||'')).join('\n').toLowerCase()}
-function talentBadges(t,m){const quality=t.quality==null?'未知品质':qName(t.quality),cat=categoryLabel(t),realm=(m.realms||{})[String(t.realm_id??0)]||`境界 ${t.realm_id??0}`;return `<span class="badge">${esc(quality)}</span><span class="badge category-badge">${esc(cat)}</span><span class="badge">${esc(realm)}</span>`}
+function talentBadges(t,m){const quality=t.quality==null?'未知品质':qName(t.quality),cat=categoryLabel(t),realm=(m.realms||{})[String(t.realm_id??0)]||'未识别境界';return `<span class="badge">${esc(quality)}</span><span class="badge category-badge">${esc(cat)}</span><span class="badge">${esc(realm)}</span>`}
 function statusOf(row){
  if(row.present&&!row.gone)return {cls:'talent-live',label:'在世'};
  if(row.present&&row.gone)return {cls:'talent-gone',label:'已离世'};
@@ -40,31 +40,33 @@ function initTalent(){
   let label=v,value=v;
   if(kind==='分类'){const sample=talents.find(t=>catValue(t)===v)||{category:v};label=categoryLabel(sample);value=v}
   if(kind==='品质'){label=v?qName(v):'未知品质';value=v||'__unknown__'}
-  if(kind==='境界')label=(m.realms||{})[v]||`境界 ${v}`;
+  if(kind==='境界')label=(m.realms||{})[v]||'未识别境界';
   return `<option value="${esc(value)}">${esc(label)}</option>`
  }).join('');
- const advancedKeys=['unlocked','dao','region','location'];
+ const advancedKeys=['category','quality','realm','unlocked','dao','region','location'];
  const advancedCount=advancedKeys.filter(key=>filters[key]!=='').length;
  $('talent').innerHTML=sourceHtml(m)+`
-  <div class="talent-stats">
-   <div class="talent-stat"><b>${stats.present||0}</b><span>在世可拜访</span></div>
-   <div class="talent-stat"><b>${stats.gone||0}</b><span>已离世</span></div>
-   <div class="talent-stat"><b>${stats.absent||0}</b><span>不在当前世界</span></div>
-   <div class="talent-stat"><b>${talents.length}</b><span>天赋总数</span></div>
-  </div>
-  <div class="talent-dao-hint" id="tdao">${daoHint(m)}</div>
   <div class="search-panel"><div class="search-fields">
    <label class="search-field search-hero"><span>找天赋</span><input id="fq" placeholder="输入天赋名称、效果、悬停或触发描述关键词" value="${esc(filters.q)}"></label>
    <label class="search-field"><span>找 NPC（可选）</span><input id="fnpc" placeholder="输入 NPC 名称，与天赋条件叠加" value="${esc(filters.npc)}"></label>
   </div></div>
+  <div class="talent-meta">
+   <div class="talent-stats">
+    <span><b>${stats.present||0}</b> 在世可拜访</span>
+    <span><b>${stats.gone||0}</b> 已离世</span>
+    <span><b>${stats.absent||0}</b> 不在当前世界</span>
+    <span><b>${talents.length}</b> 个天赋</span>
+   </div>
+   <div class="talent-dao-hint" id="tdao">${daoHint(m)}</div>
+  </div>
   <div class="filter-bar talent-filter-bar">
-   <label class="filter-field"><span>天赋品质</span><select id="fquality">${opts(qualities,'品质')}</select></label>
-   <label class="filter-field"><span>天赋分类</span><select id="fcategory">${opts(categories,'分类')}</select></label>
-   <label class="filter-field"><span>天赋境界</span><select id="frealm">${opts(realms,'境界')}</select></label>
    <label class="talent-check"><input type="checkbox" id="fvisitable"${filters.visitable?' checked':''}><span>只看可拜访</span></label>
    <div class="filter-actions"><button type="button" id="fclear" class="filter-button">清空筛选</button></div>
   </div>
   <details id="fadvanced" class="advanced-filters"${advancedCount?' open':''}><summary>更多筛选 <span id="fadvancedcount" class="filter-count">${advancedCount?`（${advancedCount}）`:''}</span></summary><div class="advanced-grid">
+   <label><span>天赋品质</span><select id="fquality">${opts(qualities,'品质')}</select></label>
+   <label><span>天赋分类</span><select id="fcategory">${opts(categories,'分类')}</select></label>
+   <label><span>天赋境界</span><select id="frealm">${opts(realms,'境界')}</select></label>
    <label><span>解锁状态</span><select id="funlocked"><option value="">全部解锁状态</option><option value="1">已解锁</option><option value="0">未解锁</option></select></label>
    <label><span>同道状态</span><select id="fdao"><option value="">全部同道状态</option><option value="1">已同道</option><option value="0">未同道</option></select></label>
    <label><span>区域</span><select id="fregion">${opts(regions,'区域')}</select></label>
@@ -122,7 +124,7 @@ function slotHtml(s,t,m,q,hl){
   return `<div class="slot${hl?'':' slot-dim'}"><div class="slot-head"><span class="muted">槽位 ${esc(s.slot_id??'?')}</span><span class="talent-name muted">随机天赋（尚未生成）</span><span class="lock">未解锁</span></div></div>`;
  }
  const name=t.name||'未识别天赋';
- const req=s.required_realm?`<div class="condition">槽位要求：${esc((m.realms||{})[String(s.required_realm)]||('境界 '+s.required_realm))}</div>`:'';
+ const req=s.required_realm?`<div class="condition">槽位要求：${esc((m.realms||{})[String(s.required_realm)]||'未识别境界')}</div>`:'';
  const conditions=(s.conditions||[]).length?`<div class="condition">解锁条件：${s.conditions.map(esc).join('；')}</div>`:'';
  const effect=t.effect?`<div class="effect">${hi(t.effect||'暂无效果说明',q)}</div>`:'';
  const extras=[];

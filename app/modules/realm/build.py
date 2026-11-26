@@ -20,7 +20,7 @@ CONF_RANK = {"none": 0, "mechanic": 1, "derived": 2, "official": 3}
 
 
 def _item_name(row):
-    return _plain(row.get("itemName")) or ("#%s" % row.get("id"))
+    return _plain(row.get("itemName")) or "未识别物品"
 
 
 def _pct(value):
@@ -77,6 +77,9 @@ def _drop_index(tables):
 def _route_data(tables):
     pois = {str(_int(row.get("id"))): _text(row.get("showName"))
             for row in _rows(tables.get("tbmappoi")) if isinstance(row, dict)}
+    # trackType=2 指向丹方，取丹方名；取不到就只说「炼丹配方」，不外露配方编号。
+    recipes = {str(_int(row.get("id"))): _text(row.get("name"))
+               for row in _rows(tables.get("tbpillrecipe")) if isinstance(row, dict)}
     routes = {}
     for row in _rows(tables.get("tbsourceroute")):
         if not isinstance(row, dict):
@@ -87,7 +90,7 @@ def _route_data(tables):
         if track_type == 1:
             detail = pois.get(str(track_param), "")
         elif track_type == 2:
-            detail = "配方 #%s" % track_param if track_param else ""
+            detail = recipes.get(str(track_param), "") or "炼丹配方"
         routes[str(_int(row.get("id")))] = {
             "label": _plain(row.get("des")), "detail": detail}
     return routes
@@ -288,7 +291,7 @@ def _monster_catalog(tables, material_ids, resolve):
     monsters = {}
     for row in _rows(tables.get("tbmonster")):
         if isinstance(row, dict) and row.get("id") is not None:
-            monsters[_int(row.get("id"))] = _plain(row.get("name")) or ("妖兽 #%s" % row.get("id"))
+            monsters[_int(row.get("id"))] = _plain(row.get("name")) or "未识别妖兽"
     out = {}
     for row in _rows(tables.get("tbmonsterteam")):
         if not isinstance(row, dict):
@@ -297,7 +300,7 @@ def _monster_catalog(tables, material_ids, resolve):
         if not mats:
             continue
         names = [monsters.get(_int(mid)) for mid in row.get("monsters") or [] if monsters.get(_int(mid))]
-        name = "、".join(names) or ("妖兽队伍 #%s" % row.get("id"))
+        name = "、".join(names) or "未识别妖兽队伍"
         out[str(_int(row.get("id")))] = {
             "id": _int(row.get("id")), "name": name,
             "rare": bool(row.get("isRare")), "boss": bool(row.get("isBoss")),
@@ -310,7 +313,7 @@ def _monster_catalog(tables, material_ids, resolve):
 def _space_names(tables):
     out = {}
     for space_id, info in build_spaces(tables).items():
-        name = info.get("name") or ("地点 #%s" % space_id)
+        name = info.get("name") or "未识别地点"
         region = info.get("region") or ""
         out[space_id] = ("%s·%s" % (region, name)) if region and region != name else name
     return out
@@ -344,7 +347,7 @@ def _sources(tables, material_ids, monster_teams=None):
         row = items.get(item_id) or {}
         for route_id in row.get("sourceRoutes") or []:
             info = routes.get(str(_int(route_id))) or {}
-            label = info.get("label") or ("途径 #%s" % route_id)
+            label = info.get("label") or "未识别途径"
             detail = info.get("detail") or ""
             if detail and detail in label:
                 detail = ""
@@ -408,7 +411,7 @@ def _sources(tables, material_ids, monster_teams=None):
     for row in _rows(tables.get("tbrandomeventending")):
         if not isinstance(row, dict):
             continue
-        title = _plain(row.get("title")) or ("结局 #%s" % row.get("id"))
+        title = _plain(row.get("title")) or "未记录结局"
         event_id = _int(row.get("event_quest_id"))
         event_name = quest_names.get(event_id) or ""
         for item_id in resolve(row.get("reward_drop_id")):
@@ -440,7 +443,7 @@ def _sources(tables, material_ids, monster_teams=None):
         if not rewards:
             continue
         kind = quest_types.get(_int(row.get("type"))) or "任务"
-        name = _plain(row.get("name")) or ("任务 #%s" % row.get("id"))
+        name = _plain(row.get("name")) or "未识别任务"
         module = "hongchen" if "红尘" in kind else ("quest" if "支线" in kind else "")
         for item_id in rewards:
             add(item_id, "quest", "%s · %s" % (kind, name), "", "derived",
@@ -620,11 +623,11 @@ def build(tables):
     npc_names = {}
     for row in _rows(tables.get("tbnpcbasecfg")):
         if isinstance(row, dict) and row.get("id") is not None:
-            npc_names[str(_int(row.get("id")))] = _text(row.get("npcName")) or ("#%s" % row.get("id"))
+            npc_names[str(_int(row.get("id")))] = _text(row.get("npcName")) or "未识别人物"
     venues = {}
     for row in _rows(tables.get("tbauctionvenue")):
         if isinstance(row, dict) and row.get("id") is not None:
-            venues[str(_int(row.get("id")))] = _text(row.get("venue_name")) or ("拍卖行 %s" % row.get("id"))
+            venues[str(_int(row.get("id")))] = _text(row.get("venue_name")) or "未识别拍卖行"
 
     return {
         "schema": SCHEMA,

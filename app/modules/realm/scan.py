@@ -269,7 +269,7 @@ def scan(obj, meta_obj, state=None):
             team_id = _int(monster.get("monster_team_id"))
             team_any = monster_teams.get(str(team_id))
             space_id = _int(space.get("spaceId"))
-            space_name = space_names.get(str(space_id)) or ("地点 #%s" % space_id)
+            space_name = space_names.get(str(space_id)) or "未识别地点"
             if team_any and team_any.get("rare"):
                 rare_spawns.append({
                     "team": team_id, "name": team_any.get("name"), "rare": True,
@@ -418,15 +418,15 @@ def enrich(module, meta_obj, state=None):
 
     def decorate(entry):
         entry = dict(entry)
-        entry["name"] = (catalog.get(str(entry["id"])) or {}).get("name") or ("#%s" % entry["id"])
+        entry["name"] = (catalog.get(str(entry["id"])) or {}).get("name") or "未识别物品"
         held = []
         for item in entry.get("held") or []:
             held.append({"cfg": item.get("cfg"), "count": item.get("count"),
-                         "name": npc_names.get(str(item.get("cfg"))) or ("#%s" % item.get("cfg"))})
+                         "name": npc_names.get(str(item.get("cfg"))) or "未识别人物"})
         entry["held"] = held
         auction = []
         for item in entry.get("auction") or []:
-            auction.append({"venue": venues.get(str(item.get("venue"))) or ("拍卖行 %s" % item.get("venue")),
+            auction.append({"venue": venues.get(str(item.get("venue"))) or "未识别拍卖行",
                             "qty": item.get("qty")})
         entry["auction"] = auction
         return entry
@@ -449,10 +449,10 @@ def enrich(module, meta_obj, state=None):
         row["held"] = []
         for item in state_row.get("held") or []:
             row["held"].append({"cfg": item.get("cfg"), "count": item.get("count"),
-                                "name": npc_names.get(str(item.get("cfg"))) or ("#%s" % item.get("cfg"))})
+                                "name": npc_names.get(str(item.get("cfg"))) or "未识别人物"})
         row["auction"] = []
         for item in state_row.get("auction") or []:
-            row["auction"].append({"venue": venues.get(str(item.get("venue"))) or ("拍卖行 %s" % item.get("venue")),
+            row["auction"].append({"venue": venues.get(str(item.get("venue"))) or "未识别拍卖行",
                                    "qty": item.get("qty")})
         state_names = meta_obj.get("quest_states") or {}
         saved = module.get("quest_state") or {}
@@ -476,7 +476,7 @@ def enrich(module, meta_obj, state=None):
     monsters = module.get("monsters")
     if isinstance(monsters, dict):
         def names(ids):
-            return [(catalog.get(str(_int(item))) or {}).get("name") or ("#%s" % item) for item in ids or []]
+            return [(catalog.get(str(_int(item))) or {}).get("name") or "未识别物品" for item in ids or []]
         monsters["stage_mat_names"] = names(monsters.get("stage_mats"))
         monsters["missing_names"] = names(monsters.get("missing"))
         monsters["aux_mat_names"] = names(monsters.get("aux_mats"))

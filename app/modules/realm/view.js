@@ -159,9 +159,10 @@ function monsterHtml(mo){
   }
   var total=spawns.length+rare.length+auxSpawns.length;
   var stateCls=total?'ok':'idle';
-  var stateText=total?'有刷新':'无刷新';
+  // 结论放在摘要行：不展开也知道本轮有没有刷，展开才看具体在哪张图。
+  var stateText=total?`已刷新 ${total} 支`:'本轮无刷新';
   var refresh=mo.refresh_until?`<span class="rmon-count">下一轮刷新 ${esc(mo.refresh_until)}</span>`:'';
-  return `<details class="rmon"${total?' open':''}>
+  return `<details class="rmon">
     <summary class="rmon-head">
       <b>妖兽刷新</b>
       <span class="rmon-sum">全地图 · ${esc(stageMats)}</span>
