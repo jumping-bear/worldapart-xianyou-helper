@@ -18,7 +18,7 @@ function initEvent(){
  const confName=c=>c==='exact'?'位置确定':c==='inferred'?'位置推断':'位置未定';
  const confCls=c=>c==='exact'?'loc-exact':c==='inferred'?'loc-inferred':'loc-unknown';
  const locText=r=>{const l=r.location;if(!l)return '位置未定';const path=((l.path&&l.path.length)?l.path:[l.name]).join(' / ');return (l.spot?l.spot+' · ':'')+path};
- const itemName=id=>itemNames[id]||('物品 '+id);
+ const itemName=id=>itemNames[id]||'未识别物品';
  const cmp=(a,op,b)=>{if(a===null||a===undefined)return null;switch(op){case'>=':return a>=b;case'>':return a>b;case'<=':return a<=b;case'<':return a<b;case'==':return a===b;case'!=':return a!==b;default:return null}};
  const condPass=c=>{
   if(!c||!c.checks||!c.checks.length)return null;
@@ -37,7 +37,7 @@ function initEvent(){
   for(const n of Object.values((r.tree||{}).nodes||{})){
    for(const o of n.options||[])for(const c of o.conds||[])for(const k of c.checks||[]){
     let value=null,label='';
-    if(k.t==='attr'){const a=attrs[k.a]||{};value=a.level||0;label=`${a.name||('属性'+k.a)} ${k.op} ${k.v}级（当前 ${value} 级）`}
+    if(k.t==='attr'){const a=attrs[k.a]||{};value=a.level||0;label=`${a.name||'未识别属性'} ${k.op} ${k.v}级（当前 ${value} 级）`}
     else if(k.t==='money'){value=money;label=`灵石 ${k.op} ${k.v}（当前 ${value}）`}
     else continue;
     const opt=o.t||'继续',key=opt+'|'+label;
@@ -47,7 +47,7 @@ function initEvent(){
   }
   return list;
  };
- const checkText=k=>k.t==='attr'?`${(attrs[k.a]||{}).name||('属性'+k.a)} ${k.op} ${k.v}级`:k.t==='money'?`灵石 ${k.op} ${k.v}`:`物品 ${k.i} ${k.op} ${k.v}`;
+ const checkText=k=>k.t==='attr'?`${(attrs[k.a]||{}).name||'未识别属性'} ${k.op} ${k.v}级`:k.t==='money'?`灵石 ${k.op} ${k.v}`:`未识别物品 ${k.op} ${k.v}`;
  const condBrief=c=>((c&&c.checks&&c.checks.length)?c.checks.map(checkText).join(' 且 '):((c&&c.text)||''));
  const groupPass=list=>{let ok=true,known=false;for(const c of list||[]){const p=condPass(c);if(p===null)continue;known=true;ok=ok&&p}return known?ok:null};
  // 不同结局要满足的条件直接写在结局旁边，不用再展开“完整对话分支”里找。
@@ -62,13 +62,13 @@ function initEvent(){
    `<span class="cchip ${x.ok===true?'ok':x.ok===false?'bad':'unk'}">${x.ok===true?'✓':x.ok===false?'✗':'?'} ${esc(x.text)}</span>`).join('<span class="muted small">或</span>')+
    (rows.length>3?`<span class="cchip unk">等 ${rows.length} 条走法</span>`:'')+`</div>`;
  };
- const rewardChip=(x,got)=>`<span class="efchip fq${x.quality||0}${got?' got':''}" title="${esc((x.desc||'')+' · 掉率 '+x.chance+'%')}">${esc(x.name)} ×${x.min===x.max?x.min:x.min+'-'+x.max}${x.chance>=100?'':'<i>'+x.chance+'%</i>'}<span class="q">品质${x.quality||0}</span></span>`;
+ const rewardChip=(x,got)=>`<span class="efchip ${qClass(x.quality,'fq')}${got?' got':''}" title="${esc((x.desc||'')+' · 掉率 '+x.chance+'%')}">${esc(x.name)} ×${x.min===x.max?x.min:x.min+'-'+x.max}${x.chance>=100?'':'<i>'+x.chance+'%</i>'}<span class="q">${qName(x.quality||0)}</span></span>`;
  const chanceOf=x=>{const n=Number(x&&x.chance);return isFinite(n)?n:0};
  // “随机其一”掉落池：同一掉落池里多项 chance 均 <100 且合计 ≈100（允许浮点误差）。
  const isDropPool=rs=>rs&&rs.length>1&&rs.every(x=>chanceOf(x)<100)&&Math.abs(rs.reduce((a,x)=>a+chanceOf(x),0)-100)<=0.5;
  const commonSuffix=names=>{if(!names.length)return '';let s=names[0];for(const n of names.slice(1)){let i=0;const m=Math.min(s.length,n.length);while(i<m&&s[s.length-1-i]===n[n.length-1-i])i++;s=s.slice(s.length-i);if(!s)break}return s};
  const poolChip=(rs,got)=>{
-  const names=rs.map(x=>x.name||('物品 '+x.item));
+  const names=rs.map(x=>x.name||'未识别物品');
   const suffix=commonSuffix(names);
   const pool=(suffix&&suffix.length>=2)?('随机'+suffix):'随机其一';
   const shorts=(suffix&&suffix.length>=2)?names.map(n=>n.endsWith(suffix)?n.slice(0,n.length-suffix.length):n):names;
@@ -81,11 +81,11 @@ function initEvent(){
   const qs=rs.map(x=>x.quality||0);
   const q=qs.every(v=>v===qs[0])?qs[0]:0;
   const title=rs.map(x=>`${x.name} · 掉率 ${chanceOf(x)}%${x.desc?'：'+x.desc:''}`).join('\n');
-  return `<span class="efchip fq${q}${got?' got':''}" title="${esc(title)}">${esc(pool)}${count}（${rs.length} 选 1）：${labels.map(esc).join(' / ')}${uniform?` · 各 ${chances[0]}%`:''}<span class="q">${qs.every(v=>v===qs[0])?'品质'+qs[0]:'随机其一'}</span></span>`;
+  return `<span class="efchip ${qClass(q,'fq')}${got?' got':''}" title="${esc(title)}">${esc(pool)}${count}（${rs.length} 选 1）：${labels.map(esc).join(' / ')}${uniform?` · 各 ${chances[0]}%`:''}<span class="q">${qs.every(v=>v===qs[0])?qName(qs[0]):'随机其一'}</span></span>`;
  };
  const rewardsHtml=(rs,got,mode)=>mode==='one'&&isDropPool(rs)?poolChip(rs,got):rs.map(x=>rewardChip(x,got)).join('');
  // 未达成结局里、品质 ≥3（紫品起）且还没拥有的奖励：先把值钱的东西亮出来。
- const HI_QUALITY=3;
+ // 阈值见 shell 的 HI_QUALITY
  const hiRewardsOf=r=>{
   const seen={};
   const take=e=>{
@@ -100,7 +100,7 @@ function initEvent(){
   (r.followups||[]).forEach(take);
   return Object.values(seen).sort((a,b)=>(b.quality||0)-(a.quality||0)||a.name.localeCompare(b.name,'zh'));
  };
- const hiChips=(list,limit)=>list.slice(0,limit).map(x=>`<span class="ev-hi-chip f${x.quality||0}" title="${esc(x.desc||'')}">${esc(x.name)}</span>`).join('')+
+ const hiChips=(list,limit)=>list.slice(0,limit).map(x=>`<span class="ev-hi-chip ${qClass(x.quality,'f')}" title="${esc(x.desc||'')}">${esc(x.name)}</span>`).join('')+
   (list.length>limit?`<span class="ev-hi-more">+${list.length-limit}</span>`:'');
  const realmRows=topRows.filter(r=>Number(r.realm||0)===Number(st.current_realm||0));
  const gateRows=topRows.filter(r=>!r.achieved&&groupMembers(r).some(m=>condSummary(m).some(c=>c.gate&&c.ok===false)));
@@ -136,13 +136,13 @@ function initEvent(){
     shown.join('')+(more?`<span class="cchip unk">+${more} 条条件</span>`:'')+(o.multi?'<span class="effchip">结果随机</span>':'')+(o.note?`<span class="effchip note" title="这个选项始终可选；条件只决定走哪段结果">${esc(o.note)}</span>`:'')+(o.eff||[]).map(e=>`<span class="effchip">${esc(e)}</span>`).join('')+`</div>`;
    if(o.to&&o.to.startsWith('e:')){
     const eid=+o.to.slice(2),e=(r.endings||[]).find(x=>x.id===eid);
-    html+=`<div class="tend">结局：${e?`<b>${esc(e.title)}</b><span class="egrade ${gradeCls(e.grade)}">${esc(e.grade_name||gradeName(e.grade))}</span>${rewardsHtml(e.rewards,e.got,e.reward_mode)}`:'#'+eid}</div>`;
+    html+=`<div class="tend">结局：${e?`<b>${esc(e.title)}</b><span class="egrade ${gradeCls(e.grade)}">${esc(e.grade_name||gradeName(e.grade))}</span>${rewardsHtml(e.rewards,e.got,e.reward_mode)}`:'未记录结局'}</div>`;
    }else if(o.to){
     html+=`<div class="tbranch">${treeHtml(r,o.to,seen,depth+1)}</div>`;
    }
    (o.after||[]).forEach(tid=>{
     const eid=+tid.slice(2),e=(r.endings||[]).find(x=>x.id===eid);
-    html+=`<div class="tend">结算结局：${e?`<b>${esc(e.title)}</b>${rewardsHtml(e.rewards,e.got,e.reward_mode)}`:'#'+eid}</div>`;
+    html+=`<div class="tend">结算结局：${e?`<b>${esc(e.title)}</b>${rewardsHtml(e.rewards,e.got,e.reward_mode)}`:'未记录结局'}</div>`;
    });
    // 同文案选项合并后，条件满足时走的那段仍然要展开，不能丢分支。
    (o.alts||[]).forEach(a=>{
@@ -150,11 +150,11 @@ function initEvent(){
     let inner='';
     if(a.to&&a.to.startsWith('e:')){
      const eid=+a.to.slice(2),e=(r.endings||[]).find(x=>x.id===eid);
-     inner=`<div class="tend">结局：${e?`<b>${esc(e.title)}</b>${rewardsHtml(e.rewards,e.got,e.reward_mode)}`:'#'+eid}</div>`;
+     inner=`<div class="tend">结局：${e?`<b>${esc(e.title)}</b>${rewardsHtml(e.rewards,e.got,e.reward_mode)}`:'未记录结局'}</div>`;
     }else if(a.to){inner=treeHtml(r,a.to,seen,depth+1)}
     (a.after||[]).forEach(tid=>{
      const eid=+tid.slice(2),e=(r.endings||[]).find(x=>x.id===eid);
-     inner+=`<div class="tend">结算结局：${e?`<b>${esc(e.title)}</b>${rewardsHtml(e.rewards,e.got,e.reward_mode)}`:'#'+eid}</div>`;
+     inner+=`<div class="tend">结算结局：${e?`<b>${esc(e.title)}</b>${rewardsHtml(e.rewards,e.got,e.reward_mode)}`:'未记录结局'}</div>`;
     });
     if(inner)html+=`<div class="tbranch alt"><div class="talt-h">条件满足：${esc(lab)}</div>${inner}</div>`;
    });
@@ -210,7 +210,7 @@ function initEvent(){
   const grants=(r.grants||[]).length?`<div class="evline"><b>实际所得</b>${r.grants.map(g=>`${esc(itemName(g.item))} ×${g.count}${g.delivered?'':'（未交付）'}`).join(' · ')}</div>`:'';
   const picked=(r.choices||[]).length?`<div class="evline"><b>选择记录</b>${r.choices.map(c=>esc(c.text)+(c.count>1?`<span class="muted">（累计选 ${c.count} 次）</span>`:'')).join(' · ')}</div>`+
    `<div class="muted small">括号里是存档累计点击次数，不是奖励倍数。</div>`:'';
-  const unknown=r.unknown_ending?`<div class="evline"><b>结局</b>#${r.ending}（配置未收录）</div>`:'';
+  const unknown=r.unknown_ending?`<div class="evline"><b>结局</b>未记录结局（配置未收录）</div>`:'';
   const repeatHint=r.repeat?`<div class="evline muted">${esc(r.repeat.label)}：自身血 ${r.repeat.own} 次 / 野兽 ${r.repeat.beast} 次${r.repeat.ending_title?`，最近结算「${esc(r.repeat.ending_title)}」`:''}。存档只保留累计次数与最近一次结算，逐次选择没有记录。</div>`:'';
   const memoryHint=r.memory_only?'<div class="evline muted">回忆里已收录这条奇遇，但存档没有留下结局结算记录（可重复奇遇的结算会被重置）。</div>':'';
   const closedHint=r.branch_closed?'<div class="evline muted">母奇遇已因其它分支达成，此分支不再计入未完成。</div>':'';
@@ -264,8 +264,8 @@ function initEvent(){
   const useHint=t=>({'炼丹药材':'可作炼丹配方材料','炼丹成品':'成品丹药，可用于服用、任务或 NPC 求购','炼器材料':'可作炼器材料','NPC 求购':'NPC 会收购，或任务需要它'}[t]||t);
   const reasons=(x.reasons||[]).map(t=>`<span class="reason" title="评分理由">${esc(t)}</span>`).join('');
   const uses=(x.use||[]).length?`<div class="reasons">${x.use.map(t=>`<span class="reason use" title="${esc(useHint(t))}">${esc(t)}</span>`).join('')}</div>`:'';
-  return `<details class="ev"><summary><span class="evname fq${x.quality||0}">${esc(x.name)}</span>`+
-   `<span class="badge">品质 ${x.quality||0} · ${esc(x.type||'物品')}</span>`+
+  return `<details class="ev"><summary><span class="evname ${qClass(x.quality,'fq')}">${esc(x.name)}</span>`+
+   `<span class="badge">${esc(qName(x.quality||0))} · ${esc(x.type||'物品')}</span>`+
    `<span class="badge ${x.owned?'ok':'off'}">${x.owned?'已拥有 '+x.owned:'未拥有'}</span>`+
    `<span class="badge score">参考价值 ${x.score||0}</span>`+
    srcBadge+
@@ -314,7 +314,7 @@ function initEvent(){
  const typeList=[...new Set(catalog.map(x=>x.type||'未分类'))].sort((a,b)=>a.localeCompare(b,'zh'));
  function renderItemChips(){
   $('evitemq').innerHTML='<span class="chip-label">品质</span><button class="chip'+(state.itemQuality===''?' on':'')+'" data-itemq="">全部</button>'+
-   qualityList.map(q=>`<button class="chip${String(state.itemQuality)===String(q)?' on':''}" data-itemq="${q}">品质 ${q}</button>`).join('');
+   qualityList.map(q=>`<button class="chip${String(state.itemQuality)===String(q)?' on':''}" data-itemq="${q}">${esc(qName(q))}</button>`).join('');
   const sel=$('evitemtype');
   if(sel)sel.innerHTML='<option value="">全部类别</option>'+typeList.map(t=>`<option value="${esc(t)}"${state.itemType===t?' selected':''}>${esc(t)}</option>`).join('');
   document.querySelectorAll('#evitemuse [data-isort]').forEach(b=>b.classList.toggle('on',b.dataset.isort===state.itemSort));
@@ -367,8 +367,8 @@ function initEvent(){
  }
  const realmNames=[...new Set(topRows.map(r=>r.realm_name||'未知境界'))];
  const realmList=[...new Set(topRows.map(r=>String(r.realm||0)))];
- host.innerHTML=sourceHtml(m)+`<div class="notice"><b>境界提示：</b>奇遇绑定所在地点，配置里没有“境界高就关闭低阶奇遇”的硬限制；突破后低境界奇遇仍需回到对应地点才会遇到。当前境界的奇遇建议先清。</div>`+`<div class="notice"><b>分支归并：</b>同一母奇遇下的子奇遇折叠在母奇遇里；任一分支被选择或达成，整条奇遇即视为完成，其余未选分支不再计入未达成。无法确定父子关系的奇遇仍单独展示。</div>`+`<div class="cards">${cards}</div>`+
-  `<div class="legend"><span>物品品质(0-5)：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span><span>越靠右越稀有</span></div>`+
+ host.innerHTML=sourceHtml(m)+`<details class="evnotes"><summary>规则说明 · 境界限制与分支归并</summary><div class="notice"><b>境界提示：</b>奇遇绑定所在地点，配置里没有“境界高就关闭低阶奇遇”的硬限制；突破后低境界奇遇仍需回到对应地点才会遇到。当前境界的奇遇建议先清。</div><div class="notice"><b>分支归并：</b>同一母奇遇下的子奇遇折叠在母奇遇里；任一分支被选择或达成，整条奇遇即视为完成，其余未选分支不再计入未达成。无法确定父子关系的奇遇仍单独展示。</div></details>`+`<div class="cards">${cards}</div>`+
+  `<div class="legend"><span>物品品质：</span>${QUALITY_NAMES.map((n,i)=>`<span><i style="background:var(--q${i})"></i>${n}</span>`).join('')}<span>越靠右越稀有</span></div>`+
   `<div class="legend"><span>结局品级：</span><span><i style="background:#8ee6b3"></i>上品</span><span><i style="background:#b9d9ff"></i>中品</span><span><i style="background:#e88b82"></i>下品</span><span>只代表结局平均奖励高低，具体看掉落</span></div>`+
   `<div class="chips event-chips" id="evgoals"><span class="chip-label">我想…</span>`+
    `<button class="chip" data-goal="check">出发前检查</button>`+

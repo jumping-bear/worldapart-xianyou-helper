@@ -116,7 +116,7 @@ def _items(tables):
         if not isinstance(row, dict) or row.get("id") is None:
             continue
         out[str(row["id"])] = {
-            "name": _text(row.get("itemName")) or ("物品 %s" % row["id"]),
+            "name": _text(row.get("itemName")) or ("未识别物品"),
             "type": types.get(str(row.get("itemType")), "") or "未分类",
             "quality": row.get("quality"),
             "price": _int(row.get("price")),

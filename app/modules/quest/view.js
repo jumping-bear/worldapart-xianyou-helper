@@ -51,14 +51,14 @@ function initQuest(){
  const rewardChips=(r,limit)=>{
    const list=(r.rewards||[]).filter(x=>x.name!=='灵石');
    const stone=r.reward_stone||0,cap=limit||3;
-   let out=list.slice(0,cap).map(x=>`<span class="sq-rw f${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}</span>`);
+   let out=list.slice(0,cap).map(x=>`<span class="sq-rw ${qClass(x.quality,'f')}" title="${esc(rewardTip(x))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}</span>`);
    if(list.length>cap)out.push(`<span class="sq-rw more">+${list.length-cap}</span>`);
    if(stone)out.push(`<span class="sq-stone">灵石 ${stone}</span>`);
    return out.join('');
  };
  const isStone=x=>x&&x.name==='灵石';
  // 未完成任务里的高品质奖励：支线首页优先展示这些，而不是“还能拿多少灵石”。
- const hiReward=x=>!isStone(x)&&(Number(x.quality)||0)>=4;
+ const hiReward=x=>!isStone(x)&&(Number(x.quality)||0)>=HI_QUALITY_STRICT;
  const hiOfQuest=r=>r&&!r.done&&sk(r)!=='unpicked'?(r.rewards||[]).filter(hiReward):[];
  const hiOfLine=line=>{
    const seen={},out=[];
@@ -67,7 +67,7 @@ function initQuest(){
    }));
    return out.sort((a,b)=>(b.quality||0)-(a.quality||0)||String(a.name).localeCompare(String(b.name),'zh-CN'));
  };
- const hiChip=(x,extra)=>`<span class="sq-hi f${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)}${extra||''}</span>`;
+ const hiChip=(x,extra)=>`<span class="sq-hi ${qClass(x.quality,'f')}" title="${esc(rewardTip(x))}">${esc(x.name)}${extra||''}</span>`;
  const hay=(r)=>[r.name,r.desc,r.group,(r.giver||{}).name,locText(r),
    (r.objectives||[]).map(o=>o.text).join(' '),
    (r.rewards||[]).map(x=>x.name).join(' '),
@@ -163,7 +163,7 @@ function initQuest(){
        (gaps.length?`<div class="sq-gap"><b>还差</b>${gaps.map(g=>`<span>${esc(g)}</span>`).join('')}</div>`:'')
      : `<div class="sq-muted">${esc(r.open_text||r.cond_text||r.trigger_text||r.trigger_line||((r.prereq||[]).length?'完成上面的前置后自动出现':'剧情到这里自动出现，不需要额外条件'))}</div>`;
    const rewards=(r.rewards||[]).length
-     ? `<div class="sq-rwlist">${r.rewards.map(x=>`<span class="sq-rw f${x.quality||0}" title="${esc(rewardTip(x))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}<i>${esc((x.sources||[]).join('/'))}</i></span>`).join('')}</div>`
+     ? `<div class="sq-rwlist">${r.rewards.map(x=>`<span class="sq-rw ${qClass(x.quality,'f')}" title="${esc(rewardTip(x))}">${esc(x.name)}×${x.min===x.max?x.min:x.min+'-'+x.max}<i>${esc((x.sources||[]).join('/'))}</i></span>`).join('')}</div>`
      : `<div class="sq-muted">剧情向，无固定奖励</div>`;
    return howHtml(r)+sameNameHtml(r)+`<div class="sq-sec">触发条件</div>${cond}`+
      (r.desc?`<div class="sq-sec">这一段剧情</div><div class="sq-desc">${linkify(r.desc)}</div>`:'')+
@@ -455,7 +455,7 @@ function initQuest(){
    `<div class="card"><div class="k">未拿高品质</div><div class="v">${hiPending.length} <span>种</span></div><div class="s">${hiPending.length?('最值：'+esc(hiPending[0].name)):'暂无品质 ≥4 的奖励'}</div></div>`+
    `<div class="card"><div class="k">隐藏任务</div><div class="v">${stats.hidden||0} <span>个</span></div><div class="s">不会显示在游戏任务面板</div></div>`+
    `</div>`;
- const legend=`<div class="legend"><span>物品品质(0-5)：</span><span><i style="background:#b4bdca"></i>品质0</span><span><i style="background:#a8dfb4"></i>品质1</span><span><i style="background:#a6cff0"></i>品质2</span><span><i style="background:#cbb2ee"></i>品质3</span><span><i style="background:#f0d38a"></i>品质4</span><span><i style="background:#f0a6a6"></i>品质5</span></div>`;
+ const legend=`<div class="legend"><span>物品品质：</span>${QUALITY_NAMES.map((n,i)=>`<span><i style="background:var(--q${i})"></i>${n}</span>`).join('')}</div>`;
  const chipCount=v=>v==='all'?rows.length
    :(v==='unverified'?rows.filter(r=>(r.entry_unverified||r.legacy)&&!r.done).length
      :v==='ready'?rows.filter(r=>sk(r)==='ready'&&!r.entry_unverified).length

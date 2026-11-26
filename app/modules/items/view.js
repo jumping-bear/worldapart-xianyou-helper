@@ -10,7 +10,7 @@ let itemCache=null;
 let itemRenderState={groups:{},q:'',npcQ:''};
 let itemSort=store.get('worldapart.item.sort.v1','rate');
 let itemPage={};
-function fqClass(q){return 'fq'+(q==null||q===''?0:q)}
+function fqClass(q){return qClass(q,'fq')}
 const EL_NAMES={1:'金',2:'木',3:'水',4:'火',5:'土'};
 function elHtml(t){
  if(!t||!t.element)return '';
@@ -22,7 +22,7 @@ function itemTitle(t){
  if(!t)return '';
  return esc([t.desc,t.detail].filter(Boolean).join(' ｜ '));
 }
-function qualityLabel(q){return q==null||q===''?'未知品质':(Number(q)>0?'品质 '+q:'无品质')}
+function qualityLabel(q){return q==null||q===''?'未知品质':qName(q)}
 function itemRateOf(o){return o.v.ok&&o.t.steal?o.t.steal.rate:-1}
 function itemSortOwners(owners){
  const list=owners.slice();
@@ -116,14 +116,14 @@ function npcItemsHtml(uid,focus){
  const entries=new Map();
  for(const pair of row.items||[]){
   const key=String(pair[0]);
-  const t=cat[key]||{name:'物品 #'+key,quality:null,type:''};
+  const t=cat[key]||{name:'未识别物品',quality:null,type:''};
   const count=pair[1]||1;
   if(entries.has(key))entries.get(key).count+=count;
   else entries.set(key,{t:t,count:count});
  }
  for(const key of demandSet){
   if(entries.has(key))continue;
-  entries.set(key,{t:cat[key]||{name:'物品 #'+key,quality:null,type:''},count:0});
+  entries.set(key,{t:cat[key]||{name:'未识别物品',quality:null,type:''},count:0});
  }
  const list=[];
  for(const [key,o] of entries){
@@ -309,7 +309,7 @@ function initItems(){
  function qualityOptions(){
   const vals=[...new Set(catalog.map(t=>t.quality==null?'__unknown__':String(t.quality)))];
   const known=vals.filter(v=>v!=='__unknown__').sort((a,b)=>Number(b)-Number(a));
-  let out='<option value="">全部品质</option>'+known.map(v=>'<option value="'+v+'">品质 '+v+'</option>').join('');
+  let out='<option value="">全部品质</option>'+known.map(v=>'<option value="'+v+'">'+esc(qName(v))+'</option>').join('');
   if(vals.includes('__unknown__'))out+='<option value="__unknown__">未知品质</option>';
   return out;
  }
