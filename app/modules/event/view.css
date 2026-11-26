@@ -19,3 +19,22 @@
 #evopen .chip i{font-style:normal;color:#8b93a1;margin-left:5px;font-size:10px}
 #evopen .chip.on i{color:#c9f5dd}
 .effchip.note{border-color:#4c5d74;background:#18202b;color:#a9c4de;cursor:help}
+
+/* 前置任务：任务名可能不在任务列表，必须把“怎么拿到”一起写出来 */
+.evprereq{margin:2px 0 6px}
+.evprereqs{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.evprereq-item{padding:7px 9px;border:1px solid #2b3340;border-radius:7px;background:#151a21}
+.evprereq-item.ok{border-color:#3d735b}
+.evprereq-item.bad{border-color:#5c3535;background:#1f1616}
+.evprereq-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.evprereq-obtain{color:#c9d3e0;font-size:12px;line-height:1.7;margin-top:3px}
+.evprereq-warn{color:#e0a6a0;font-size:11px;line-height:1.7;margin-top:2px}
+
+/* 未开启时逐项对照存档，直接回答“为什么没触发” */
+.evwhy{margin:4px 0 8px}
+.evwhy>summary{cursor:pointer;color:#8b93a1;font-size:11px;line-height:1.8}
+.evchecks{display:flex;flex-direction:column;gap:3px;margin-top:5px}
+.evcheck{font-size:11px;line-height:1.7;padding:3px 8px;border-radius:5px;background:#141920;border:1px solid #242c37}
+.evcheck.ok{border-color:#2f5b47;color:#b7e6cc}
+.evcheck.bad{border-color:#5c3535;color:#f0b6b0}
+.evcheck.info{border-color:#3a4658;color:#a9b7c8}

@@ -294,16 +294,39 @@ def scan_event(obj, meta):
             item["state_label"] = label
             item["got"] = outcome in (2, 3)
             followups.append(item)
+        prereqs = []
+        for item in (event.get("open") or {}).get("prereqs") or []:
+            entry = dict(item)
+            if entry.get("type") == "quest":
+                quest_id = _event_int(entry.get("quest"))
+                state = quest_states.get(quest_id, -1)
+                entry["state"] = state
+                entry["state_label"] = acquire.quest_state_label(state)
+                entry["ok"] = state in (2, 3)
+                entry["held"] = state in (1, 2, 6)
+                entry["in_progress"] = state == 1
+                other = []
+                for alt in entry.get("alternatives") or []:
+                    ids = alt.get("quests") or []
+                    if any(quest_states.get(_event_int(other_id), -1) in (1, 2, 3, 6)
+                           for other_id in ids):
+                        text = alt.get("option") or ""
+                        if text and text not in other:
+                            other.append(text)
+                entry["other_branch"] = other
+            prereqs.append(entry)
+        open_status, open_checks = acquire.evaluate(
+            (event.get("open") or {}).get("checks"), open_ctx)
         row = {key: value for key, value in event.items() if key != "dialogue"}
         row.update({
             "endings": endings, "achieved": achieved,
             "followups": followups,
+            "prereqs": prereqs,
             "sect": sect_id, "sect_name": location.get("sect_name") or "",
             "sect_ok": (not sect_id) or sect_id == open_ctx.get("sect_id"),
-            "open_status": acquire.evaluate(
-                (event.get("open") or {}).get("checks"), open_ctx)[0],
-            "open_checks": acquire.evaluate(
-                (event.get("open") or {}).get("checks"), open_ctx)[1],
+            "open_status": open_status,
+            "open_checks": open_checks,
+            "open_blockers": [check for check in open_checks if check.get("ok") is False],
             "history_only": bool(history_endings) and not (
                 got_endings or completed or memory_got or repeat_done or quest_done),
             "memory_got": memory_got,

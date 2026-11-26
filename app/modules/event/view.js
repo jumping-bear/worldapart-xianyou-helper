@@ -168,9 +168,27 @@ function initEvent(){
   const conds=condSummary(r);
   const branches=nested?[]:(childrenOf[r.id]||[]);
   const os=r.open_status;
+  const prereqs=r.prereqs||[];
+  const prereqGap=prereqs.some(p=>p.type==='quest'&&!p.ok);
+  const prereqHtml=prereqs.length?`<div class="evline evprereq"><b>前置</b><div class="evprereqs">`+
+   prereqs.map(p=>{
+    if(p.type==='flag')return `<div class="evprereq-item"><div class="evprereq-head"><span class="cchip unk">?</span><b>${esc(p.name)}</b><span class="muted small">剧情标记（非任务）</span></div><div class="evprereq-obtain">${esc(p.note||'需在对应场景完成前置剧情')}</div></div>`;
+    const hidden=p.hidden?'<span class="cchip unk">隐藏任务</span>':'';
+    const obtain=(p.obtain||[]).map(esc).join('；');
+    const alt=(p.other_branch||[]).length?`<div class="evprereq-warn">当前存档走的是「${esc(p.other_branch.join('」「'))}」分支，不会获得本任务</div>`:'';
+    return `<div class="evprereq-item ${p.ok?'ok':'bad'}"><div class="evprereq-head"><span class="cchip ${p.ok?'ok':'bad'}">${p.ok?'✓':'✗'}</span><b>${esc(p.name)}</b>${hidden}<span class="muted small">当前：${esc(p.state_label||'未获得')}</span></div>`+
+     `<div class="evprereq-obtain">获取：${obtain||'随任务流程推进'}</div>${alt}</div>`;
+   }).join('')+`</div></div>`:'';
+  const triggerHint=(r.open&&r.open.trigger_note)?`<div class="evline muted small">${esc(r.open.trigger_note)}</div>`:'';
+  const whyHtml=(!r.achieved&&os!=='pass'&&((r.open_blockers||[]).length||(r.open&&r.open.trigger_note)))?
+   `<details class="evwhy"><summary>为什么没触发（对照当前存档）</summary><div class="evchecks">`+
+   (r.open_blockers||[]).map(c=>`<div class="evcheck bad">✗ ${esc(c.text)}${c.cur!==undefined?`<span class="muted small"> · 当前：${esc(String(c.cur_label||c.cur))}</span>`:''}</div>`).join('')+
+   (r.open&&r.open.trigger_note?`<div class="evcheck info">ⓘ ${esc(r.open.trigger_note)}</div>`:'')+
+   (r.one_off?`<div class="evcheck info">ⓘ 一次性奇遇：触发并完成后不再出现</div>`:'')+
+   `</div></details>`:'';
   const openBadge=os==='pass'?'<span class="badge ok">已开启</span>':
    os==='unknown'?'<span class="badge">待确认</span>':'<span class="badge off">未开启</span>';
-  const badges=openBadge+`<span class="badge ${r.achieved?'ok':'off'}">${r.achieved?(r.memory_only?'回忆已收录':(r.achieved_via_branch?'分支达成':'已达成')):'未达成'}</span>`+
+  const badges=openBadge+(prereqGap&&!r.achieved?'<span class="badge off">前置未满足</span>':'')+`<span class="badge ${r.achieved?'ok':'off'}">${r.achieved?(r.memory_only?'回忆已收录':(r.achieved_via_branch?'分支达成':'已达成')):'未达成'}</span>`+
    `<span class="badge">${r.memory_only?'结局未记录':'结局 '+got+'/'+endings.length}</span>`+
    `<span class="badge">${r.one_off?'一次性':'可重复'}</span>`+
    (r.repeat?`<span class="badge">${esc(r.repeat.label)}</span>`:'')+
@@ -226,7 +244,7 @@ function initEvent(){
   const hi=hiRewardsOf(r);
   const hiHtml=hi.length?`<span class="ev-hi" title="未拥有的高品质奖励（品质 ≥3）">${hiChips(hi,3)}</span>`:'';
   return `<details class="ev${nested?' evbranch':''}${r.branch_selected?' branch-done':''}${r.branch_closed?' branch-closed':''}" data-event="${r.id}"${state.focus===r.id?' open':''}><summary><span class="evname">${esc(r.name)}</span>${hiHtml}${badges}<span class="evloc">${esc(locText(r))}</span></summary>`+
-   `<div class="evbody">${r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:''}${(r.open&&r.open.text)?`<div class="evline"><b>开启条件</b>${esc(r.open.text)}</div>`:''}${repeatHint}${memoryHint}${closedHint}${condHtml}${grants}${picked}${unknown}${noChoice}<div>${body}</div>${followupHtml}${tree}${branchHtml}</div></details>`;
+   `<div class="evbody">${r.desc?`<div class="evdesc">${esc(r.desc)}</div>`:''}${(r.open&&r.open.text)?`<div class="evline"><b>开启条件</b>${esc(r.open.text)}</div>`:''}${triggerHint}${prereqHtml}${whyHtml}${repeatHint}${memoryHint}${closedHint}${condHtml}${grants}${picked}${unknown}${noChoice}<div>${body}</div>${followupHtml}${tree}${branchHtml}</div></details>`;
  }
  function itemCard(x){
   const sources=(x.sources||[]).slice().sort((a,b)=>(b.got?1:0)-(a.got?1:0)||(b.expected||0)-(a.expected||0));
@@ -377,7 +395,8 @@ function initEvent(){
   ` 当前角色属性：${Object.values(attrs).map(a=>`${esc(a.name)} Lv${a.level}（${a.exp}/${a.next||'—'}）`).join(' · ')||'未读取到探索属性'}；灵石 ${money}。`+
   ` 结局的「达成路径」来自配置里的设计备注，共 ${metaStats.endings_with_path||0}/${stats.endings||0} 条；静态能连到结局的分支共 ${metaStats.tree_endings||0} 条，其余由游戏结算判定。`+
   ` 奇遇按地点境界分组；配置里没有“角色境界高于某值就关闭奇遇”的硬条件，能否再遇到主要取决于还能不能回到该地点。`+
-  ` 历史达成来自旧存档，按角色保存在本地，不写入游戏存档，也不计入当前完成数。</div>`;
+  ` 历史达成来自旧存档，按角色保存在本地，不写入游戏存档，也不计入当前完成数。`+
+  (stats.prereq_events?` 前置解析：${stats.prereq_events} 个奇遇有前置任务${stats.prereq_unresolved?`，其中 ${stats.prereq_unresolved} 条获取方式待确认`:''}。`:'')+`</div>`;
  $('evq').value=state.q;
  $('evq').oninput=e=>{state.q=e.target.value;state.focus=0;store.set(EVENT_FILTER_KEY,state);renderAll()};
  $('evmode').onclick=e=>{const b=e.target.closest('[data-mode]');if(!b)return;state.mode=b.dataset.mode;state.focus=0;store.set(EVENT_FILTER_KEY,state);renderAll()};
