@@ -10,7 +10,7 @@ let filters=Object.assign({},DEFAULTS,store.get(KEY,{}));
 function catValue(t){return t.category===null||t.category===undefined||t.category===''?'':String(t.category)}
 function categoryLabel(t){const value=catValue(t),name=t.category_name||'';return value?(name||`分类 ${value}`):'未分类'}
 function talentText(t){return [t.name,t.effect,t.hover,t.trigger].map(v=>String(v||'')).join('\n').toLowerCase()}
-function talentBadges(t,m){const quality=t.quality==null?'未知品质':`品质 ${t.quality}`,cat=categoryLabel(t),realm=(m.realms||{})[String(t.realm_id??0)]||`境界 ${t.realm_id??0}`;return `<span class="badge">${esc(quality)}</span><span class="badge category-badge">${esc(cat)}</span><span class="badge">${esc(realm)}</span>`}
+function talentBadges(t,m){const quality=t.quality==null?'未知品质':qName(t.quality),cat=categoryLabel(t),realm=(m.realms||{})[String(t.realm_id??0)]||`境界 ${t.realm_id??0}`;return `<span class="badge">${esc(quality)}</span><span class="badge category-badge">${esc(cat)}</span><span class="badge">${esc(realm)}</span>`}
 function statusOf(row){
  if(row.present&&!row.gone)return {cls:'talent-live',label:'在世'};
  if(row.present&&row.gone)return {cls:'talent-gone',label:'已离世'};
@@ -39,7 +39,7 @@ function initTalent(){
  const opts=(values,kind)=>`<option value="">全部${kind}</option>`+values.map(v=>{
   let label=v,value=v;
   if(kind==='分类'){const sample=talents.find(t=>catValue(t)===v)||{category:v};label=categoryLabel(sample);value=v}
-  if(kind==='品质'){label=v?`品质 ${v}`:'未知品质';value=v||'__unknown__'}
+  if(kind==='品质'){label=v?qName(v):'未知品质';value=v||'__unknown__'}
   if(kind==='境界')label=(m.realms||{})[v]||`境界 ${v}`;
   return `<option value="${esc(value)}">${esc(label)}</option>`
  }).join('');
@@ -121,14 +121,14 @@ function slotHtml(s,t,m,q,hl){
  if(!t||t.id===undefined){
   return `<div class="slot${hl?'':' slot-dim'}"><div class="slot-head"><span class="muted">槽位 ${esc(s.slot_id??'?')}</span><span class="talent-name muted">随机天赋（尚未生成）</span><span class="lock">未解锁</span></div></div>`;
  }
- const name=t.name||`天赋 #${s.talent_id}`;
+ const name=t.name||'未识别天赋';
  const req=s.required_realm?`<div class="condition">槽位要求：${esc((m.realms||{})[String(s.required_realm)]||('境界 '+s.required_realm))}</div>`:'';
  const conditions=(s.conditions||[]).length?`<div class="condition">解锁条件：${s.conditions.map(esc).join('；')}</div>`:'';
  const effect=t.effect?`<div class="effect">${hi(t.effect||'暂无效果说明',q)}</div>`:'';
  const extras=[];
  if(t.hover)extras.push(`<div class="talent-extra">悬停说明：${hi(t.hover,q)}</div>`);
  if(t.trigger)extras.push(`<div class="talent-extra">触发说明：${hi(t.trigger,q)}</div>`);
- return `<div class="slot${hl?'':' slot-dim'}"><div class="slot-head"><span class="muted">槽位 ${esc(s.slot_id??'?')}</span><span class="talent-name q${esc(t.quality??0)}">${hi(name,q)}</span>${talentBadges(t,m)}<span class="lock ${s.unlocked?'on':''}">${s.unlocked?'已解锁':'未解锁'}</span></div>${effect}${req}${conditions}${extras.join('')}</div>`;
+ return `<div class="slot${hl?'':' slot-dim'}"><div class="slot-head"><span class="muted">槽位 ${esc(s.slot_id??'?')}</span><span class="talent-name ${qClass(t.quality,'q')}">${hi(name,q)}</span>${talentBadges(t,m)}<span class="lock ${s.unlocked?'on':''}">${s.unlocked?'已解锁':'未解锁'}</span></div>${effect}${req}${conditions}${extras.join('')}</div>`;
 }
 /* NPC 面板：完整列出该 NPC 的所有天赋槽位，命中项高亮、其余变暗。 */
 function npcCard(row,m,talentMap,q,npcQ){
@@ -144,13 +144,15 @@ function npcCard(row,m,talentMap,q,npcQ){
 function talentCard(t,holders,m,talentMap,q,npcQ){
  const match=talentMatches(t,q);
  const liveCount=holders.filter(h=>h.row.present&&!h.row.gone).length;
- const name=t.name||(`天赋 #${t.id}`);
+ const name=t.name||'未识别天赋';
  const effect=t.effect?`<div class="effect">${hi(t.effect||'暂无效果说明',q)}</div>`:'';
  const extras=[];
  if(t.hover)extras.push(`<div class="talent-extra">悬停说明：${hi(t.hover,q)}</div>`);
  if(t.trigger)extras.push(`<div class="talent-extra">触发说明：${hi(t.trigger,q)}</div>`);
  const body=`<div class="talent-detail">${effect}${extras.join('')}<div class="talent-holder-note">${holders.length?`拥有此天赋的 NPC（在世 ${liveCount} 位）：`:'暂无 NPC 拥有此天赋'}</div><div class="npc-holders">${holders.map(h=>npcCard(h.row,m,talentMap,q,npcQ)).join('')}</div></div>`;
- return `<details class="talent-card${match?'':' talent-dim'}"><summary><span class="talent-name q${esc(t.quality??0)}">${hi(name,q)}</span>${talentBadges(t,m)}<span class="talent-holder-count">${holders.length} 位 NPC</span></summary>${body}</details>`;
+ // 搜到天赋就直接展开，让“在谁身上、在哪”同屏可见，不用再点一次
+ const open=(q&&match)?' open':'';
+ return `<details class="talent-card${match?'':' talent-dim'}"${open}><summary><span class="talent-name ${qClass(t.quality,'q')}">${hi(name,q)}</span>${talentBadges(t,m)}<span class="talent-holder-count">${holders.length} 位 NPC</span></summary>${body}</details>`;
 }
 function renderTalentList(){
  const m=DATA.modules.talent;

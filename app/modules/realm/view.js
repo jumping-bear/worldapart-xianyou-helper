@@ -3,7 +3,7 @@
 var KEY='worldapart.realm.v1';
 var state=Object.assign({q:'',filter:'all',realm:0,expandAll:0,aux:{}},store.get(KEY,{}));
 function save(){store.set(KEY,state)}
-function qcls(q){return 'q'+Math.max(1,Math.min(5,Number(q)||1))}
+function qcls(q){return qClass(q,'q')}
 function pctText(value){return Math.round(Number(value)||0)+'%'}
 function fmtYears(days,years){
   var y=Number(years)||0,d=Number(days)||0;
@@ -12,6 +12,7 @@ function fmtYears(days,years){
   return d+' 天';
 }
 var KIND={official:'官方',quest:'任务',monster:'妖兽',auction:'拍卖',tournament:'赛事',worldboss:'镇劫',explore:'秘宝',shop:'商店',event:'奇遇',steal:'偷窃',unknown:'缺来源'};
+var SPAWNED={};
 var CONFTIP={official:'游戏内标注的获取途径',derived:'由掉落表反推的获取途径',mechanic:'机制可行，但需要 NPC 恰好持有',none:'配置里没有正常获取途径'};
 var MOD_LABEL={quest:'任务页',hongchen:'红尘页',event:'奇遇页'};
 var MOD_PAGE={quest:'任务',hongchen:'红尘',event:'奇遇'};
@@ -99,7 +100,7 @@ function rewardText(r){
   var d=r.delta||{},names=(DATA.modules.realm||{}).attr_names||{};
   Object.keys(d).forEach(function(k){
     var v=Number(d[k])||0;if(!v||k==='999')return;
-    bits.push((names[k]||('属性'+k))+' +'+v);
+    bits.push((names[k]||'未识别属性')+' +'+v);
   });
   return bits.join(' · ');
 }
@@ -108,7 +109,7 @@ function noSourceWarn(mats){
   var names=(mats||[]).filter(function(e){
     var cat=(DATA.modules.realm.byId||{})[e.id]||{};
     return !cat.has_source;
-  }).map(function(e){return e.name||('#'+e.id)});
+  }).map(function(e){return e.name||'未识别'});
   if(!names.length)return '';
   return `<div class="rwarn">注意：${esc(names.join('、'))} 在当前游戏配置里没有获取途径，可能尚未投放；如果背包或 NPC 处已有，请先保留。</div>`;
 }
@@ -223,7 +224,7 @@ function auxItems(){
     var cat=byId[opt.id]||{};
     var src=(cat.sources||[]).filter(function(s){return s.kind!=='steal'&&s.kind!=='unknown'})[0];
     return {
-      id:opt.id, name:cat.name||('#'+opt.id), bonus:Number(opt.bonus)||0,
+      id:opt.id, name:cat.name||'未识别', bonus:Number(opt.bonus)||0,
       attrs:(opt.attrs||[]).filter(function(a){return a&&a.name}),
       owned:Number(cat.owned)||0, has:!!cat.has_source,
       src:src?src.label:''
@@ -334,6 +335,11 @@ function matCard(row){
   else avail.push('NPC 持有：无');
   if(row.auction&&row.auction.length)avail.push('本期拍卖：'+row.auction.map(function(a){return esc(a.venue)+'×'+a.qty}).join('、'));
   else avail.push('本期拍卖：未刷出');
+  var srcKinds=[];
+  (row.sources||[]).forEach(function(s){
+    var k=s.kind==='steal'?'':KIND[s.kind];
+    if(k&&srcKinds.indexOf(k)<0)srcKinds.push(k);
+  });
   var badges='';
   if(row.current)badges+=`<span class="rm-badge need">当前缺 ${Math.max(0,(row.need||1)-row.owned)}</span>`;
   if(row.optional)badges+=`<span class="rm-badge optional">本境界辅材</span>`;
@@ -345,6 +351,9 @@ function matCard(row){
   }
   if(row.auction&&row.auction.length)badges+=`<span class="rm-badge auction">本期拍卖</span>`;
   if(row.held&&row.held.length)badges+=`<span class="rm-badge steal">NPC持有</span>`;
+  if((row.sources||[]).some(function(s){return s.kind==='monster'})){
+    badges+=`<span class="rm-badge ${SPAWNED[row.name]?'spawn':'nospawn'}">妖兽${SPAWNED[row.name]?'已刷新':'未刷新'}</span>`;
+  }
   if(!row.has_source)badges+=`<span class="rm-badge none">无来源</span>`;
   else if(row.best_conf==='official')badges+=`<span class="rm-badge official">官方途径</span>`;
   else badges+=`<span class="rm-badge derived">反推途径</span>`;
@@ -356,6 +365,7 @@ function matCard(row){
       <span class="rm-name">${hi(row.name,state.q||'')}</span>
       <span class="rm-type">${esc(row.type_label||'')}</span>
       <span class="rm-used">${esc(used[0]||'')}</span>
+      <span class="rm-src" title="获取途径">${esc(srcKinds.join(' · ')||'无正常来源')}</span>
       <span class="rm-badges">${badges}</span>
     </summary>
     <div class="rmbody">
@@ -372,6 +382,12 @@ function matCard(row){
 
 function renderMats(){
   var m=DATA.modules.realm,host=$('realm-mats');if(!m||!host)return;
+  // 妖兽刷新集合：材料行直接标“妖兽已刷新/未刷新”，不用展开也不必去上面找
+  SPAWNED={};
+  var mo=m.monsters||{};
+  (mo.spawns||[]).concat(mo.rare_spawns||[]).forEach(function(s){
+    (s.mats_names||[]).forEach(function(n){SPAWNED[n]=true});
+  });
   var rows=m.materials||[];
   var q=(state.q||'').trim().toLowerCase();
   var selectedRealm=Number(state.realm)||0;
@@ -421,7 +437,7 @@ function renderRoadmap(m){
       var dots=(phase.layers||[]).map(function(lid){
         var info=(m.layers||{})[String(lid)]||{};
         var cls=lid===Number(current)?'now':(rank[String(lid)]<rank[current]?'past':'');
-        var mat=(phase.mats||[]).map(function(x){return ((m.byId||{})[x.id]||{}).name||('#'+x.id)}).join('、');
+        var mat=(phase.mats||[]).map(function(x){return ((m.byId||{})[x.id]||{}).name||'未识别'}).join('、');
         var tip=phase.name+' '+(info.layer||'')+' 层 · 修为 '+(info.exp||0)+(mat?' · 阶段材料：'+mat:'');
         return `<i class="rdot ${cls}" title="${esc(tip)}"></i>`;
       }).join('');

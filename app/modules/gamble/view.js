@@ -2,14 +2,22 @@
 (function () {
   'use strict';
   var KEY = 'worldapart.gamble.v2';
-  var QLABEL = { 1: '白', 2: '绿', 3: '蓝', 4: '紫', 5: '橙' };
+  // 品质名与档位来自快照（meta.qualities），不再写死在页面里。
+  // 璞石是 1 起编号（白=1…橙=5），与物品品质的 0 起编号是两套，见 output.py 说明。
+  var QUALITIES = [];
+  function qTiers() {
+    var out = [];
+    for (var i = 1; i <= QUALITIES.length; i++) out.push(i);
+    return out;
+  }
+  function qName(q) { return QUALITIES[Number(q) - 1] || ''; }
 
   function fmt(n) {
     n = Number(n || 0);
     return n.toLocaleString('zh-CN');
   }
   function qtag(q) {
-    return '<span class="gmb-q q' + (q || 0) + '">' + (QLABEL[q] || '?') + '</span>';
+    return '<span class="gmb-q ' + qClass(q, 'gq', GAMBLE_QUALITY_MAX) + '">' + (qName(q) || '?') + '</span>';
   }
   function tag(text, cls) {
     return '<span class="gmb-tag ' + (cls || '') + '">' + esc(text) + '</span>';
@@ -42,6 +50,7 @@
     var bag = rows.bag || [];
     var summary = rows.summary || {};
     var meta = module;
+    QUALITIES = meta.qualities || [];
     var state = Object.assign({ tab: 'mine', q: '', status: 'active', text: '', spoiler: false }, store.get(KEY, {}));
     if (['mine', 'guide', 'bands', 'buyers', 'notes'].indexOf(state.tab) < 0) state.tab = 'mine';
     if (['active', 'done', 'all'].indexOf(state.status) < 0) state.status = 'active';
@@ -235,7 +244,7 @@
         }).length };
       }).filter(function (item) { return item.count; });
       chips.innerHTML = qualities.map(function (item) {
-        return '<button type="button" class="gmb-chip gmb-qchip q' + item.value + (Number(state.guideQ) === item.value ? ' on' : '') +
+        return '<button type="button" class="gmb-chip gmb-qchip ' + qClass(item.value, 'gq', GAMBLE_QUALITY_MAX) + (Number(state.guideQ) === item.value ? ' on' : '') +
           '" data-guide-q="' + item.value + '">' + esc(item.label) + '<i>' + item.count + '</i></button>';
       }).join('');
       var rows = (meta.templates || []).filter(function (t) {
@@ -288,12 +297,12 @@
       if (!box) return;
       var bands = meta.bands || [];
       var html = '';
-      [1, 2, 3, 4, 5].forEach(function (quality) {
+      qTiers().forEach(function (quality) {
         var rows = bands.filter(function (band) {
           return !band.exclusive_item_id && (band.qualities || []).indexOf(quality) >= 0;
         });
         if (!rows.length) return;
-        html += '<div class="gmb-group gmb-qgroup q' + quality + '">' + QLABEL[quality] + '色璞石<span>3 档</span></div>' +
+        html += '<div class="gmb-group gmb-qgroup ' + qClass(quality, 'gq', GAMBLE_QUALITY_MAX) + '">' + qName(quality) + '色璞石<span>3 档</span></div>' +
           '<div class="gmb-table-wrap"><table class="gmb-table"><thead><tr>' +
           '<th>价格带</th><th>最低估值</th><th>可换器胚</th></tr></thead><tbody>' +
           rows.map(function (band) {
@@ -309,7 +318,7 @@
         html += '<div class="gmb-group">专属璞石<span>' + exclusive.length + ' 条</span></div>';
         html += exclusive.map(function (band) {
           var item = (meta.items || {})[String(band.exclusive_item_id)] || {};
-          return '<div class="gmb-exclusive"><b>' + esc(item.name || ('璞石 ' + band.exclusive_item_id)) +
+          return '<div class="gmb-exclusive"><b>' + esc(item.name || '未识别璞石') +
             '</b><span>门槛 ' + fmt(band.min_value) + '</span><em>' +
             (band.embryos || []).map(function (embryo) { return esc(embryo.name); }).join('、') + '</em></div>';
         }).join('');
@@ -344,10 +353,10 @@
         Number(constants.npc_cooldown_turns || 2) + ' 轮。100%~120% 的买家优先，60%~90% 的买家只在急需回血时考虑。</div>';
     }
 
-    var qualityChips = [{ value: '', label: '全部' }].concat([1, 2, 3, 4, 5].map(function (q) {
+    var qualityChips = [{ value: '', label: '全部' }].concat(qTiers().map(function (q) {
       var count = bag.filter(function (row) { return row.quality === q; }).reduce(function (sum, row) { return sum + row.untouched; }, 0) +
         stones.filter(function (stone) { return stone.quality === q && !stone.exchanged; }).length;
-      return { value: q, label: QLABEL[q], count: count };
+      return { value: q, label: qName(q), count: count };
     }).filter(function (item) { return item.count; }));
     var statusChips = [
       { value: 'active', label: '待处理', count: summary.untouched + summary.in_progress },

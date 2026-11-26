@@ -1,40 +1,44 @@
-/* 奇遇：母奇遇下的子分支折叠展示 */
-.evbranches{margin-top:12px;padding-top:9px;border-top:1px dashed #2b3340}
-.evbranch-head{color:#8b93a1;font-size:11px;line-height:1.7;margin:0 2px 8px}
-.evbranch{margin:0 0 7px 12px;border-left:2px solid #2b3340}
+/* 奇遇：母奇遇下的子分支折叠展示 *//* 规则说明默认折叠，避免把搜索框挤出首屏 */
+.evnotes{background:var(--info-bg);border:1px solid var(--info-border);border-radius:9px;padding:7px 12px;margin:0 0 10px}
+.evnotes>summary{cursor:pointer;list-style:none;color:var(--info-text);font-size:12px;font-weight:600}
+.evnotes>summary::-webkit-details-marker{display:none}
+.evnotes>summary::before{content:'▸';margin-right:6px;color:var(--text-faint);font-size:10px}
+.evnotes[open]>summary::before{content:'▾'}
+.evnotes .notice{margin:8px 0 0}
+.evbranches{margin-top:12px;padding-top:9px;border-top:1px dashed var(--border-subtle)}
+.evbranch-head{color:var(--text-muted);font-size:11px;line-height:1.7;margin:0 2px 8px}
+.evbranch{margin:0 0 7px 12px;border-left:2px solid var(--border-subtle)}
 .evbranch>summary{padding:9px 12px}
 .evbranch .evname{font-size:13px}
-.evbranch.branch-done{border-left-color:#3d735b}
-.evbranch.branch-closed{border-left-color:#3a2126;opacity:.72}
-.evbranch.branch-closed .evname{color:#9aa3b2}
+.evbranch.branch-done{border-left-color:var(--accent)}
+.evbranch.branch-closed{border-left-color:var(--danger-border);opacity:.72}
+.evbranch.branch-closed .evname{color:var(--text-dim)}
 @media(max-width:560px){.evbranch{margin-left:4px}}
 
 /* 高品质待拿奖励：和支线一致，直接在奇遇标题旁亮出紫/橙/红品 */
 .ev-hi{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
-.ev-hi-chip{font-size:10px;line-height:1.6;padding:1px 6px;border-radius:5px;white-space:nowrap;
-  background:#241f14;border:1px solid #5a4c2a;color:#f0d38a}
-.ev-hi-chip.f3{background:#1e1a29;border-color:#453a5c;color:#cbb2ee}
-.ev-hi-chip.f5{background:#251818;border-color:#5c3535;color:#f0a6a6}
-.ev-hi-more{font-size:10px;color:#7d8593}
-#evopen .chip i{font-style:normal;color:#8b93a1;margin-left:5px;font-size:10px}
-#evopen .chip.on i{color:#c9f5dd}
-.effchip.note{border-color:#4c5d74;background:#18202b;color:#a9c4de;cursor:help}
+.ev-hi-chip{font-size:10px;line-height:1.6;padding:1px 6px;border-radius:4px;white-space:nowrap;
+  background:var(--tier-bg,var(--surface-raised));border:1px solid var(--tier-bd,var(--border-subtle));color:var(--tier-fg,var(--text-soft))}
+.ev-hi-more{font-size:10px;color:var(--text-faint)}
+#evopen .chip i{font-style:normal;color:var(--text-muted);margin-left:5px;font-size:10px}
+#evopen .chip.on i{color:var(--accent-fg)}
+.effchip.note{border-color:var(--info-border);background:var(--info-bg);color:var(--info-text);cursor:help}
 
 /* 前置任务：任务名可能不在任务列表，必须把“怎么拿到”一起写出来 */
 .evprereq{margin:2px 0 6px}
 .evprereqs{display:flex;flex-direction:column;gap:6px;margin-top:4px}
-.evprereq-item{padding:7px 9px;border:1px solid #2b3340;border-radius:7px;background:#151a21}
-.evprereq-item.ok{border-color:#3d735b}
-.evprereq-item.bad{border-color:#5c3535;background:#1f1616}
+.evprereq-item{padding:7px 9px;border:1px solid var(--border-subtle);border-radius:6px;background:var(--surface-alt)}
+.evprereq-item.ok{border-color:var(--accent)}
+.evprereq-item.bad{border-color:var(--danger-border);background:var(--danger-bg-soft)}
 .evprereq-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.evprereq-obtain{color:#c9d3e0;font-size:12px;line-height:1.7;margin-top:3px}
-.evprereq-warn{color:#e0a6a0;font-size:11px;line-height:1.7;margin-top:2px}
+.evprereq-obtain{color:var(--text-soft);font-size:12px;line-height:1.7;margin-top:3px}
+.evprereq-warn{color:var(--warn-text);font-size:11px;line-height:1.7;margin-top:2px}
 
 /* 未开启时逐项对照存档，直接回答“为什么没触发” */
 .evwhy{margin:4px 0 8px}
-.evwhy>summary{cursor:pointer;color:#8b93a1;font-size:11px;line-height:1.8}
+.evwhy>summary{cursor:pointer;color:var(--text-muted);font-size:11px;line-height:1.8}
 .evchecks{display:flex;flex-direction:column;gap:3px;margin-top:5px}
-.evcheck{font-size:11px;line-height:1.7;padding:3px 8px;border-radius:5px;background:#141920;border:1px solid #242c37}
-.evcheck.ok{border-color:#2f5b47;color:#b7e6cc}
-.evcheck.bad{border-color:#5c3535;color:#f0b6b0}
-.evcheck.info{border-color:#3a4658;color:#a9b7c8}
+.evcheck{font-size:11px;line-height:1.7;padding:3px 8px;border-radius:4px;background:var(--surface-sunken);border:1px solid var(--border)}
+.evcheck.ok{border-color:var(--ok-border);color:var(--ok-text)}
+.evcheck.bad{border-color:var(--danger-border);color:var(--danger-text)}
+.evcheck.info{border-color:var(--info-border);color:var(--info-text)}

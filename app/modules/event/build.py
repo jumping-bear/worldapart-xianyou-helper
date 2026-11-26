@@ -1045,7 +1045,7 @@ def _build_tree(quest_id, dialogues, flows, attrs, quest_names=None, max_nodes=1
                     if check.get("t") != "attr":
                         continue
                     info = attrs.get(str(check.get("a"))) or {}
-                    name = info.get("name") or ("属性 %s" % check.get("a"))
+                    name = info.get("name") or "未识别属性"
                     notes.append("%s %s %s" % (name, check.get("op"), check.get("v")))
             if notes:
                 main["note"] = "满足 %s 时另有结果" % " 且 ".join(notes)
@@ -1262,7 +1262,7 @@ def build_event(tables):
         if not isinstance(row, dict) or row.get("id") is None:
             continue
         item_id = _int(row["id"])
-        name = _text(row.get("itemName")) or ("物品 %s" % item_id)
+        name = _text(row.get("itemName")) or ("未识别物品")
         if name == "灵石":
             currency.add(item_id)
         items[str(item_id)] = {
@@ -1792,7 +1792,7 @@ def build_event(tables):
                     (weight * 100.0 / total) if total else 100.0)
                 info = items.get(str(item_id)) or {}
                 out.append({
-                    "item": item_id, "name": info.get("name") or ("物品 %s" % item_id),
+                    "item": item_id, "name": info.get("name") or ("未识别物品"),
                     "quality": info.get("quality") or 0, "type": info.get("type") or "",
                     "price": info.get("price") or 0, "use": info.get("use") or [],
                     "desc": info.get("desc") or "",

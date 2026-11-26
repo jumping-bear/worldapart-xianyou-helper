@@ -255,7 +255,7 @@
     var chips = list.map(function (t) {
       var id = (t && typeof t === 'object') ? String(t.id) : '';
       var info = tmeta[id] || {};
-      var name = typeof t === 'string' ? t : (t.name || info.name || ('天赋 ' + (t.id || '')));
+      var name = typeof t === 'string' ? t : (t.name || info.name || '未识别天赋');
       var locked = (t && typeof t === 'object') ? t.unlocked === false : false;
       return '<span class="rolebook-talent-chip' + (locked ? ' is-locked' : '') +
         '" style="--qcolor:' + qualityColor(info.quality) + '"' +
@@ -271,7 +271,7 @@
     return '<div class="rolebook-talents">' + list.map(function (t) {
       var id = (t && typeof t === 'object') ? String(t.id) : '';
       var info = tmeta[id] || {};
-      var name = (t && typeof t === 'object') ? (t.name || info.name || ('天赋 ' + id)) : t;
+      var name = (t && typeof t === 'object') ? (t.name || info.name || '未识别天赋') : t;
       var desc = info.desc || '';
       var locked = (t && typeof t === 'object') ? t.unlocked === false : false;
       return '<div class="rolebook-talent' + (locked ? ' is-locked' : '') +

@@ -249,9 +249,11 @@ def build_pill_map(tables, inspection):
         if not isinstance(row, dict):
             continue
         values = []
+        fx = []
         for effect in row.get("main_effects") or row.get("effects") or []:
             if isinstance(effect, dict):
                 values.extend(effect.get("values") or [])
+                fx.append(_int(effect.get("type")))
         recipes[str(_int(row.get("id")))] = {
             "n": _text(row.get("name")), "t": _int(row.get("tier")),
             "e": _int(row.get("element")), "d": _fill(_plain(row.get("desc")), values),
@@ -261,6 +263,8 @@ def build_pill_map(tables, inspection):
             "s": _int(row.get("spirit_progress")),
             "m": _int(row.get("max_craft_count") or row.get("max_craft")),
             "tm": _int(row.get("total_time") or row.get("time")),
+            # 功效类型：玩家常常不知道丹方名，只知道想要什么效果，按这个反查。
+            "fx": sorted(set(t for t in fx if t)),
         }
     shared = {"effects": effects, "rewards": rewards, "portals": portals, "recipes": recipes,
               "herbs": {str(_int(h.get("id"))): _text(h.get("name"))
@@ -432,7 +436,7 @@ def build_pill(tables):
         if cost_id:
             cost = {"id": cost_id,
                     "name": (herb or {}).get("name") or _text(cost_item.get("itemName"))
-                    or ("物品 %s" % cost_id),
+                    or ("未识别物品"),
                     "count": _int(row.get("cost_count"))}
         portals.append({
             "id": _int(row["id"]),

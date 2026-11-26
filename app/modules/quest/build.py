@@ -133,7 +133,7 @@ def _build_egg_notes(items, quests=None, edges=None):
                  if key not in ("quest_name", "quest_id", "item_id")}
         item_id = _int(note.get("item_id") or note.get("item"))
         item = items.get(item_id) or {}
-        entry["item_name"] = item.get("name") or (("物品 %s" % item_id) if item_id else "")
+        entry["item_name"] = item.get("name") or (("未识别物品") if item_id else "")
         entry["item_desc"] = item.get("desc") or ""
         entry["quest"] = owner["id"]
         entry["quest_name"] = owner["name"]
@@ -1146,7 +1146,7 @@ def build_quests(tables):
     for row in _rows(tables["tbitem"]):
         if isinstance(row, dict) and row.get("id") is not None:
             items[_int(row["id"])] = {
-                "name": _text(row.get("itemName")) or ("物品 %s" % row["id"]),
+                "name": _text(row.get("itemName")) or ("未识别物品"),
                 "quality": _int(row.get("quality")),
                 "type": item_types.get(str(_int(row.get("itemType"))), ""),
                 "price": _int(row.get("price")),
@@ -1161,7 +1161,7 @@ def build_quests(tables):
     for row in _rows(tables.get("tbinteractattribute")):
         if isinstance(row, dict) and row.get("id") is not None:
             attr_id = _int(row["id"])
-            attr_names[attr_id] = _text(row.get("name")) or ("属性 %s" % attr_id)
+            attr_names[attr_id] = _text(row.get("name")) or ("未识别属性")
             thresholds = [_int(c.get("maxExp")) for c in (row.get("levelConfigs") or [])
                           if isinstance(c, dict) and isinstance(c.get("maxExp"), (int, float))
                           and _int(c.get("maxExp")) > 0]
@@ -1352,7 +1352,7 @@ def build_quests(tables):
         def add_drop(drop_id, source):
             for item_id, low, high in _quest_drop_items(drops, drop_id):
                 info = items.get(item_id) or {}
-                add_reward(item_id, info.get("name") or ("物品 %s" % item_id),
+                add_reward(item_id, info.get("name") or ("未识别物品"),
                            _int(info.get("quality")), low, high, source)
 
         if row.get("rewardId"):
@@ -1373,7 +1373,7 @@ def build_quests(tables):
             add_drop(drop_id, "剧情")
         for item_id, count in flow_items:
             info = items.get(item_id) or {}
-            add_reward(item_id, info.get("name") or ("物品 %s" % item_id),
+            add_reward(item_id, info.get("name") or ("未识别物品"),
                        _int(info.get("quality")), count, count, "剧情")
         for npc_id, amount in flow_intimacy:
             if amount > 0:

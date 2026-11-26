@@ -9,7 +9,7 @@ function save(){store.set(REP_KEY,ui)}
 function n(v){const x=Number(v);return Number.isFinite(x)?x:0}
 function num(v){return n(v).toLocaleString('zh-CN')}
 function badge(text,cls){return `<span class="badge ${cls||''}">${esc(text)}</span>`}
-function qualityClass(q){return 'q'+Math.max(0,Math.min(9,n(q)))}
+function qualityClass(q){return qClass(q,'q')}
 
 function view(){
  if(!cache||cache.m!==DATA.modules.reputation){

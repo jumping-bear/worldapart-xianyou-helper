@@ -123,7 +123,7 @@ def _reward_items(tables):
     for row in _rows_of(tables, "tbitem"):
         item_id = _int(row.get("id"))
         if item_id:
-            items[item_id] = _plain(row.get("itemName")) or ("物品 %s" % item_id)
+            items[item_id] = _plain(row.get("itemName")) or "未识别物品"
     drops = {}
     for row in _rows_of(tables, "tbrewarddrop"):
         drop_id = _int(row.get("id"))
@@ -237,7 +237,7 @@ def build(tables):
             group = "功法招式" if type_id in (3, 95) else "灵果灵物"
             entry = {
                 "item": item_id,
-                "name": item_names.get(item_id) or ("物品 %s" % item_id),
+                "name": item_names.get(item_id) or "未识别物品",
                 "count": _int(supply.get("count"), 1),
                 "price": price,
                 "position": pos_need,
@@ -308,7 +308,7 @@ def build(tables):
             purchases.append({
                 "id": _int(order_row.get("id")),
                 "item": item_id,
-                "name": item_names.get(item_id) or ("物品 %s" % item_id),
+                "name": item_names.get(item_id) or "未识别物品",
                 "count": _int(order_row.get("demand_count"), 1),
                 "contribution": _int(order_row.get("reward_contribution")),
                 "reputation": _int(order_row.get("sect_reputation_reward")),

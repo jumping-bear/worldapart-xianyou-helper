@@ -329,12 +329,12 @@ function inspectHtml(q,line){
   if(!gates.length)(q.gates||[]).forEach(g=>{if(g&&g.text)gates.push({text:g.text,need:0})});
   (q.options||[]).forEach(o=>{
     if(!o)return;
-    const to=(o.to||[]).map(id=>map[id]?map[id].name:('#'+id)).join(' / ');
+    const to=(o.to||[]).map(id=>map[id]?map[id].name:'未识别').join(' / ');
     const check=o.check||{};
     gates.push({text:(o.gate?o.gate.text+' → ':'')+o.text+(to?' · '+to:''),
                 need:check.need||0,cur:check.cur,ok:check.ok});
   });
-  const next=(q.next||[]).map(id=>map[id]?esc(map[id].name):('#'+id)).join('、');
+  const next=(q.next||[]).map(id=>map[id]?esc(map[id].name):'未识别').join('、');
   const notice=(q.status_cls==='unpicked')
     ?'<div class="hongchen-inspect-note">这条支线当时没选，你走了另一条路；它不会再出现。</div>'
     :(q.status_cls==='skipped'

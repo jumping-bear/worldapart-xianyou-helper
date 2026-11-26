@@ -8,6 +8,9 @@ const PILL_TYPES={recipe:[2],effect:[1],cleanse:[3],reward:[4],portal:[5,6]};
 const PILL_TYPE_LABEL={recipe:'丹方',effect:'丹方属性',cleanse:'减毒',reward:'奖励',portal:'传送口'};
 const PILL_KEYWORDS=['攻击','暴击','生命','破韧','防御','速度','灵力','伤害','净化','复活','修为','灼烧','共鸣','同道','灵气'];
 const PILL_ORDER=['recipe','effect','cleanse','reward','portal','other'];
+// 用户常常不知道丹方名，只知道想要什么效果。这些词只作为入口，
+// 每个词的命中数都从当前数据实时统计，命中为 0 的词自动不显示（游戏改文案也不会误导）。
+const EFFECT_TERMS=['回复','气血','攻击','防御','暴击','灵力','速度'];
 const PILL_FILTER_KEY='worldapart.pill.filters.v3';
 const PILL_DEFAULTS={types:Object.keys(PILL_TYPES),elements:['1','2','3','4','5'],tiers:[],keywords:[],q:'',hideDone:false};
 // 未知类型（游戏新增拾取物）自动归入「其他」，不会从筛选里消失
@@ -80,29 +83,37 @@ function initPill(){
   [`丹方手记`,`${(st.manual||[]).length} / ${Object.keys(mp.recipes||{}).length} 张`,`最高 ${st.highest_grade||0} 品`],
   [`盘面拾取点`,`${mp.pois.length} 个`,`已拾取 ${consumed.size}`]]
   .map(([k,v,s])=>`<div class="card"><div class="k">${esc(k)}</div><div class="v">${esc(v)}<span> ${esc(s)}</span></div></div>`).join('');
+ // 功效入口：命中数实时统计，0 命中的词不显示
+ function effectChips(){
+  const recipes=Object.values(mp.recipes||{});
+  return EFFECT_TERMS.map(term=>{
+   const count=recipes.filter(r=>(r.d||'').includes(term)).length;
+   return count?`<button type="button" class="chip" data-eff="${esc(term)}">${esc(term)}<i>${count}</i></button>`:'';
+  }).join('');
+ }
  host.innerHTML=sourceHtml(m)+`<div class="cards">${cards}</div>`+
+  `<div class="pill-searchwrap"><input id="pillq" class="pill-search" placeholder="不知道名字也行：搜想要的效果，例如 回复 / 攻击 / 防御"><div class="effchips"><span class="chip-label">按功效</span>${effectChips()}</div><div id="pillhits" class="phits"></div></div>`+
   (maps.length>1?`<div class="chips" id="pillmaps"><span class="chip-label">盘面</span>`+
    maps.map((x,i)=>`<button class="chip${x===mp?' on':''}" data-map="${i}">${esc(x.name)}<i>${(x.pois||[]).length}</i></button>`).join('')+`</div>`:'')+
-  `<div class="pill-grid"><div class="mapbox"><canvas id="pillmap"></canvas><svg id="pillsvg" viewBox="0 0 ${cols} ${rowsN}" xmlns="http://www.w3.org/2000/svg"></svg><div class="map-tip" id="pillherbtip"></div><div class="map-tip" id="pillpoitip"></div></div>`+
+  `<div class="pill-grid"><div class="mapwrap"><div class="mapbox"><canvas id="pillmap"></canvas><svg id="pillsvg" viewBox="0 0 ${cols} ${rowsN}" xmlns="http://www.w3.org/2000/svg"></svg><div class="map-tip" id="pillherbtip"></div><div class="map-tip" id="pillpoitip"></div></div>${PILL_LEGEND}</div>`+
   `<div class="pill-side">`+
   `<div class="pill-detail" id="pillinfo">${PILL_HINT}</div>`+
   `<div class="fsec"><div class="fhead"><b>显示对象</b><span class="fhint">Alt+点击 独选</span>`+
    `<span class="fops"><button type="button" data-op="none" data-row="types">清</button><button type="button" data-op="all" data-row="types">全</button></span></div>`+
    `<div class="chips" id="pillchips"></div></div>`+
-  `<div class="fsec" id="pillcond"><div class="fhead"><b>筛选条件</b><span class="fhint">仅作用于丹方 / 丹方属性</span></div>`+
+  `<details class="fsec fsec-fold" id="pillcond"><summary><b>筛选条件</b><span class="fhint">五行 / 阶数 / 药效</span></summary>`+
    `<div class="frow"><span class="chip-label">五行</span><div class="chips" id="pillelems"></div>`+
     `<span class="fops"><button type="button" data-op="none" data-row="elements">清</button><button type="button" data-op="all" data-row="elements">全</button></span></div>`+
    `<div class="frow"><span class="chip-label">阶数</span><div class="chips" id="pilltiers"></div>`+
     `<span class="fops"><button type="button" data-op="none" data-row="tiers">清</button><button type="button" data-op="all" data-row="tiers">全</button></span></div>`+
    `<div class="frow"><span class="chip-label">药效</span><div class="chips" id="pillkeys"></div>`+
     `<span class="fops"><button type="button" data-op="none" data-row="keywords">清</button></span></div>`+
-  `</div>`+
-  `<input id="pillq" class="pill-search" placeholder="搜索丹方 / 药效 / 奖励，例如：攻击、暴击">`+
+  `</details>`+
   `<div class="fsec"><div class="fhead"><b>视图</b></div><div class="chips" id="pillview"></div></div>`+
   `<div class="pill-active" id="pillactive"></div>`+
   `<div class="pill-sum" id="pillsum"></div>`+
   `<div class="pill-list" id="pilllist"></div>`+
-  `${PILL_LEGEND}</div></div>`+
+  `</div></div>`+
   `<div class="manual"><div class="manual-head">丹方手记<span>已学会 ${(st.manual||[]).length} 张 · 点击定位盘面</span></div><div class="manual-list" id="pillmanual"></div></div>`+
   `<div class="tip">盘面为游戏内置固定地图（${cols}×${rowsN} 格，每格 ${ts} 单位），并非随机生成；带删除线的拾取点表示本存档已拾取过。「迷雾」开启后只显示已探索区域，落在迷雾里的拾取点会一起隐藏。「药材路线」默认关闭，打开后显示盘面自带的 ${(mp.trajectories||[]).length} 条药材分布轨迹，鼠标停在线路上才会显示药材名。</div>`;
  // 地形
@@ -278,7 +289,7 @@ function initPill(){
   if(consumed.has(p[0]))tags.push('已拾取');
   let html=`<div class="detail-head"><i class="dh-dot" style="background:${poiFill(p)}"></i>`+
    `<div class="dh-title"><b>${esc(pillName(p,mp))}</b><span class="muted">${esc(tags.filter(Boolean).join(' · '))}</span></div></div>`+
-   `<div class="dh-meta">坐标 ${p[6]}, ${p[7]}　编号 #${p[0]}</div>`;
+   `<div class="dh-meta">坐标 ${p[6]}, ${p[7]}</div>`;
   if(rec){
    const tiers=(rec.g||[]).join(' / ')||'—';
    html+=`<div class="rec-info"><div><span>丹毒上限</span>${rec.x||0}</div>`+
@@ -473,7 +484,7 @@ function initPill(){
   let sub;
   if(isRecipe){sub=`${PILL_ELEMENT[p[2]]||''}·${p[3]||0}阶`;if(learned.has(rid))sub+=' · 已学会'}
   else if(p[1]===1){const e=(mp.effects||{})[String(p[4])];sub=(e&&e[7])||'丹方属性';if(p[3])sub+=' · '+p[3]+'阶'}
-  else if(p[1]===4){const r=(mp.rewards||{})[String(p[8])];sub='奖励'+(r?' · 品质 '+r[2]:'')}
+  else if(p[1]===4){const r=(mp.rewards||{})[String(p[8])];sub='奖励'+(r?' · '+qName(r[2]):'')}
   else if(p[1]===5||p[1]===6)sub='传送口 · '+portalCost(mp,p[10]);
   else sub=PILL_TYPE[p[1]]||'其他';
   const comp=compById.has(p[0])?compById.get(p[0]):-1;
@@ -609,6 +620,37 @@ function initPill(){
  };
  $('pillq').value=pillFilter.q;
  $('pillq').oninput=e=>{pillFilter.q=e.target.value;applyFilter()};
+ // 点功效词 = 直接填入搜索并过滤，不需要知道丹方名
+ document.querySelectorAll('#pill [data-eff]').forEach(btn=>{
+  btn.onclick=()=>{pillFilter.q=btn.dataset.eff;$('pillq').value=pillFilter.q;applyFilter()};
+ });
+ // 搜索命中列表：直接把「在哪、怎么去」摊在搜索框下面，不用再去盘面上找点。
+ function renderHits(){
+  const box=$('pillhits');if(!box)return;
+  const q=pillFilter.q.trim();
+  if(!q){box.innerHTML='';box.classList.remove('on');return}
+  // 按功效搜时属性点很多，先把真正的丹方排在前面，避免被冲淡
+  const hits=mp.pois.filter(p=>passBase(p,'')&&(pillName(p,mp).includes(q)||pillText(p,mp).includes(q)))
+   .sort((a,b)=>(a[1]===2?0:1)-(b[1]===2?0:1)).slice(0,8);
+  if(!hits.length){box.innerHTML='<div class="phit phit-none">没有匹配的丹方或拾取点</div>';box.classList.add('on');return}
+  box.innerHTML=hits.map((p,i)=>{
+   const comp=compById.has(p[0])?compById.get(p[0]):-1;
+   const steps=(mp.routes||{})[String(comp)]||[];
+   const go=(comp>=0&&comp===mp.main)?'无需传送':(steps.length?'传送 '+steps.length+' 次':'');
+   const rid=p[1]===2?String((mp.pool||[])[p[5]]||''):'';
+   const rec=p[1]===2?(mp.recipes||{})[rid]:null;
+   const flags=[consumed.has(p[0])?'已拾取':(p[1]===2&&learned.has(rid)?'已学会':'')].filter(Boolean).join(' · ');
+   return `<button type="button" class="phit" data-hit="${i}" title="${esc((rec&&rec.d)||'')}"><i class="phit-dot" style="background:${poiFill(p)}"></i>`+
+    `<b>${esc(pillName(p,mp))}</b><span>${Math.round(p[6])}, ${Math.round(p[7])}</span>`+
+    `${go?`<em>${go}</em>`:''}${flags?`<em class="phit-flag">${flags}</em>`:''}</button>`;
+  }).join('');
+  box.classList.add('on');
+  box.querySelectorAll('[data-hit]').forEach(btn=>{btn.onclick=()=>{
+   showPoi(hits[+btn.dataset.hit]);
+   // 点完命中要立刻看到详情，否则还要再滚一次，闭环就断了
+   const info=$('pillinfo');if(info)info.scrollIntoView({block:'nearest'});
+  }});
+ }
  function applyFilter(){
   const matched=[];
   mp.pois.forEach((p,idx)=>{
@@ -618,6 +660,7 @@ function initPill(){
   });
   renderTypes();renderElems();renderTiers();renderKeys();renderView();renderCond();renderActive();
   renderList(matched);
+  renderHits();
   saveFilter();
  }
  applyFilter();

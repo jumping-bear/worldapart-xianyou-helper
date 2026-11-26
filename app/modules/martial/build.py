@@ -17,7 +17,7 @@ def _element_map(tables):
     out = {}
     for row in _rows(tables.get("tbelement")):
         if isinstance(row, dict) and row.get("id") is not None:
-            out[str(row["id"])] = _text(row.get("element_name")) or ("属性 %s" % row["id"])
+            out[str(row["id"])] = _text(row.get("element_name")) or ("未识别属性")
     out["0"] = "无"
     return out
 
@@ -81,7 +81,7 @@ def build(tables):
     for row in _rows(tables.get("tbitem")):
         if isinstance(row, dict) and row.get("id") is not None:
             key = str(row["id"])
-            item_names[key] = _text(row.get("itemName")) or ("物品 %s" % row["id"])
+            item_names[key] = _text(row.get("itemName")) or ("未识别物品")
             item_prices[key] = _int(row.get("price"))
 
     shops = {}

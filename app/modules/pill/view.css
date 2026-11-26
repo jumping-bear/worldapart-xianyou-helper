@@ -1,7 +1,7 @@
 /* 炼丹：信息区独立于地图，选中对象后信息 + 路线 + 妖丹在侧栏顶部清晰呈现 */
 
 /* 详情面板：独立信息区，置于侧栏顶部，不遮挡地图 */
-.pill-detail{position:relative;border-left:3px solid #3d735b;background:#14181f;padding:12px 13px}
+.pill-detail{position:relative;border-left:3px solid var(--accent);background:var(--surface-alt);padding:12px 13px}
 .pill-detail .detail-head{display:flex;align-items:flex-start;gap:9px}
 .pill-detail .dh-dot{width:12px;height:12px;border-radius:50%;flex:none;margin-top:5px;box-shadow:0 0 0 3px rgba(255,255,255,.06)}
 .pill-detail .dh-title{flex:1;min-width:0}
@@ -11,28 +11,28 @@
 
 /* 空状态三步引导：用颜色与序号引导，不堆文字 */
 .pill-hint{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:52px}
-.pill-hint .hstep{display:inline-flex;align-items:center;gap:7px;background:#171b23;border:1px solid #2b3340;border-radius:12px;padding:6px 11px;font-size:12px;color:#cdd6e2}
-.pill-hint .hstep i{width:18px;height:18px;border-radius:50%;background:var(--c);color:#0e1014;font-style:normal;font-weight:700;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
+.pill-hint .hstep{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:12px;padding:6px 11px;font-size:12px;color:var(--text-soft)}
+.pill-hint .hstep i{width:18px;height:18px;border-radius:50%;background:var(--c);color:var(--bg);font-style:normal;font-weight:700;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
 .pill-hint .hstep b{font-weight:600}
 .pill-hint em{color:#6f7787;font-style:normal}
 
 /* 传送路线步骤：每步一行，名称 + 坐标 + 妖丹消耗徽章 */
 .route-steps{flex-direction:column;align-items:stretch;gap:6px}
-.route-steps .route-head{color:#8b93a1;margin-bottom:2px}
-.route-steps .route-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 10px;border-radius:10px}
-.route-steps .ri-step{flex:none;width:18px;height:18px;border-radius:50%;background:#263b34;color:#8ee6b3;font-style:normal;font-weight:700;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
+.route-steps .route-head{color:var(--text-muted);margin-bottom:2px}
+.route-steps .route-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 10px;border-radius:12px}
+.route-steps .ri-step{flex:none;width:18px;height:18px;border-radius:50%;background:var(--accent-bg);color:var(--ok-text);font-style:normal;font-weight:700;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
 .route-steps .ri-name{color:#dfe6ef;font-weight:600;font-size:12px}
 .route-steps .ri-coord{margin-left:auto;color:#6f7787;font-size:10px;font-style:normal}
-.ri-cost{flex:none;font-style:normal;font-size:11px;padding:2px 9px;border-radius:11px;white-space:nowrap}
+.ri-cost{flex:none;font-style:normal;font-size:11px;padding:2px 9px;border-radius:12px;white-space:nowrap}
 .ri-cost.has{background:#3a2f1e;border:1px solid #5a4a2e;color:#ffd98a}
-.ri-cost.free{background:#1d232c;border:1px solid #2b3340;color:#7d8593}
+.ri-cost.free{background:var(--surface-soft);border:1px solid var(--border-subtle);color:var(--text-faint)}
 
 /* 传送口直接点开时的妖丹徽章 */
 .portal-cost{display:flex;align-items:center;gap:8px;margin-top:6px;color:#a8b3c1;font-size:11px}
 
 /* 传送口：更大视觉 + 更大命中热区 */
-.poi-dot.poi-portal{stroke-width:.7;stroke:#0b0d10}
-.poi-dot.poi-portal:hover{stroke:#c9f5dd;stroke-width:1}
+.poi-dot.poi-portal{stroke-width:.7;stroke:var(--bg)}
+.poi-dot.poi-portal:hover{stroke:var(--accent-fg);stroke-width:1}
 .poi-hit{cursor:pointer}
 
 /* 图例分组：拾取对象 / 五行丹方 / 地形 三行 */
@@ -44,3 +44,31 @@
 .pill-search{border-color:#3a4a5f}
 .pill-search:focus{border-color:#55c78b;box-shadow:0 0 0 3px rgba(85,199,139,.18)}
 .pill-search::placeholder{color:#667182}
+/* 搜索前置：最高频入口放首屏，命中列表紧随其后 */
+.pill-searchwrap{display:flex;flex-direction:column;gap:6px;margin:0 0 14px}
+.effchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.effchips .chip{font-size:11px;padding:4px 10px}
+.effchips .chip i{font-style:normal;color:var(--text-faint);margin-left:4px}
+.mapwrap{display:flex;flex-direction:column;gap:10px;min-width:0}
+.mapwrap .pill-legend{flex-direction:row;flex-wrap:wrap;gap:6px 16px;background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+/* 详情随右栏自然排布，不贴顶也不压住下方内容 */
+.pill-detail{border-radius:10px;border:1px solid var(--border-subtle);border-left:3px solid var(--accent);flex:none}
+/* 高级筛选默认折叠，把首屏让给搜索与地图 */
+.fsec-fold{padding:0}
+.fsec-fold>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:9px 12px}
+.fsec-fold>summary::-webkit-details-marker{display:none}
+.fsec-fold>summary::before{content:"▸";color:var(--text-faint);font-size:10px}
+.fsec-fold[open]>summary::before{content:"▾"}
+.fsec-fold .frow{padding:0 12px 8px}
+/* 搜索命中列表：直接给出坐标与传送次数，点一下即定位到盘面 */
+.phits{display:none;flex-direction:column;gap:4px;margin:7px 0 2px}
+.phits.on{display:flex}
+.phit{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:var(--surface-alt);border:1px solid var(--border);border-radius:6px;padding:6px 9px;font-size:11px;line-height:1.5;color:var(--text-body);cursor:pointer;font-family:inherit}
+.phit:hover{border-color:var(--accent);color:var(--text)}
+.phit b{color:var(--text);font-weight:600;flex:none;max-width:44%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.phit span{color:var(--text-faint);flex:none;font-variant-numeric:tabular-nums}
+.phit em{font-style:normal;color:var(--text-dim);flex:none;margin-left:auto}
+.phit em.phit-flag{color:var(--gold);margin-left:0}
+.phit-dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.phit-none{color:var(--text-faint);cursor:default}
+.phit-none:hover{border-color:var(--border);color:var(--text-faint)}

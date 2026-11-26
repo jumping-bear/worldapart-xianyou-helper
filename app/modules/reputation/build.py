@@ -101,7 +101,7 @@ def _item_index(tables):
         item_id = _int(row.get("id"))
         if item_id:
             items[item_id] = {
-                "name": _plain(row.get("itemName")) or ("物品 %s" % item_id),
+                "name": _plain(row.get("itemName")) or "未识别物品",
                 "type": _int(row.get("itemType")),
                 "quality": _int(row.get("quality")),
                 "price": _int(row.get("price")),
@@ -199,7 +199,7 @@ def build(tables):
             if town_id not in town_by_id:
                 continue
             item_id = _int(supply.get("itemId"))
-            item = items.get(item_id) or {"name": "物品 %s" % item_id, "price": 0,
+            item = items.get(item_id) or {"name": "未识别物品", "price": 0,
                                           "quality": 0, "type": 0}
             shelf_npcs.setdefault(town_id, {}).setdefault(npc_id, 0)
             shelf_npcs[town_id][npc_id] += 1

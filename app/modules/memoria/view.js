@@ -45,7 +45,7 @@ function unlockChips(seg){
  if(u.after)chips.push(`<span class="mem-chip need">前置 ${esc(u.after)}</span>`);
  if(n(u.intimacy)>0)chips.push(`<span class="mem-chip need">好感 ≥${n(u.intimacy)}</span>`);
  if(n(u.stamina)>0)chips.push(`<span class="mem-chip">精力 ${n(u.stamina)}</span>`);
- if(u.quest)chips.push(`<span class="mem-chip quest">支线·${esc(u.quest_name||('#'+u.quest))}</span>`);
+ if(u.quest)chips.push(`<span class="mem-chip quest">支线·${esc(u.quest_name||'未识别支线')}</span>`);
  if(u.reachable===false)chips.push(`<span class="mem-chip block">当前版本无入口</span>`);
  return chips.length?`<span class="mem-unlock">${chips.join('')}</span>`:'';
 }
@@ -59,7 +59,7 @@ function nextUnlockLine(card){
  if(u.after)bits.push('前置 '+u.after);
  if(n(u.intimacy)>0)bits.push('好感≥'+n(u.intimacy));
  if(n(u.stamina)>0)bits.push('精力 '+n(u.stamina));
- if(u.quest)bits.push('支线·'+(u.quest_name||('#'+u.quest)));
+ if(u.quest)bits.push('支线·'+(u.quest_name||'未识别支线'));
  if(u.reachable===false)bits.push('当前版本无入口');
  return `<span class="mem-next"><b>下一段</b>${esc(seg.title||'')}`+
   (seg.hint?`<i>${esc(seg.hint)}</i>`:'')+
@@ -73,11 +73,16 @@ function initMemoria(){
  if(!ui.sort)ui.sort=defaultSort(ui.view);
  const st=data.stats||{},sc=st.shooting||{},bc=st.bond||{},ac=st.adventure||{},fc=st.friends||{};
  const reach=typeof sc.reachable==='number'?sc.reachable:sc.total;
- const activeCount=(data.shooting||[]).filter(card=>card.active_title).length;
+ const activeCards=(data.shooting||[]).filter(card=>card.active_title);
+ const activeCount=activeCards.length,activeFirst=activeCards[0];
+ // 本月没有入口时不能再说“入口已激活、点此查看”，否则会把人带进空列表。
+ const activeCard=activeCount
+  ? `<div class="card mem-click" id="memactive"><div class="k">本月可做</div><div class="v">${activeCount}<small>${esc(activeFirst.name)}·留影${esc(activeFirst.active_title)} 等 · 点此查看</small></div></div>`
+  : `<div class="card"><div class="k">本月可做</div><div class="v">0<small>本月暂无入口 · 每月刷新后重抽</small></div></div>`;
  $('memoria').innerHTML=sourceHtml(m)+`
   <div class="mem-cards">
    <div class="card"><div class="k">留影</div><div class="v">${n(sc.got)}<small>共 ${n(sc.total)} 段${reach<n(sc.total)?` · 可达 ${reach}`:''}</small></div></div>
-   <div class="card mem-click" id="memactive"><div class="k">本月可做</div><div class="v">${activeCount}<small>留影入口已激活 · 点此查看</small></div></div>
+   ${activeCard}
    <div class="card"><div class="k">结缘</div><div class="v">${n(bc.got)}<small>共 ${n(bc.total)} 位</small></div></div>
    <div class="card"><div class="k">奇遇留影</div><div class="v">${n(ac.got)}<small>共 ${n(ac.total)} 桩</small></div></div>
    <div class="card"><div class="k">故交</div><div class="v">${n(fc.count)}<small>${n(fc.records)} 条往事</small></div></div>

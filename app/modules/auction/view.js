@@ -10,7 +10,7 @@ let activeKey = '';
 
 function money(v) { return Number(v || 0).toLocaleString('zh-CN'); }
 function suggest(v) { return Math.max(0, Math.round(Number(v || 0) * (1 - margin / 100))); }
-function qbadge(q) { return q == null ? '' : `<span class="au-q au-q${esc(q)}">品质 ${esc(q)}</span>`; }
+function qbadge(q) { return q == null ? '' : `<span class="au-q ${qClass(q,'q')}">${esc(qName(q))}</span>`; }
 function typeBadge(t) { return `<span class="au-type">${esc(t || '未分类')}</span>`; }
 
 function headHtml(rows) {

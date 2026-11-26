@@ -228,7 +228,7 @@ def build_items(tables):
                 "alignment": rule.get("alignment_delta_success") or 0,
             }
         items[str(row["id"])] = {
-            "name": _text(row.get("itemName")) or ("物品 %s" % row["id"]),
+            "name": _text(row.get("itemName")) or ("未识别物品"),
             "type": item_types.get(str(row.get("itemType")), "") or "未分类",
             "type_id": _int(row.get("itemType")),
             "quality": row.get("quality"),
