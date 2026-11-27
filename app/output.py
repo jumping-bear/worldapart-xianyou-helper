@@ -300,6 +300,10 @@ CSS += r"""
 .charline b{color:#e8eaed}
 .notice{background:#16202b;border:1px solid #2d4356;border-radius:8px;color:#a9c4d8;font-size:12px;line-height:1.8;padding:8px 11px;margin:0 0 10px}
 .notice b{color:#d7e9f7}
+.notice-tip{position:relative;padding-right:34px}
+.notice-x{position:absolute;top:6px;right:8px;background:none;border:0;color:#7f96a8;font:14px/1 "Microsoft YaHei",system-ui,sans-serif;cursor:pointer;padding:2px 5px;border-radius:4px}
+.notice-x:hover{color:#cfe3f2;background:#1d2b38}
+.notice-hidden{display:none}
 .webbar{display:inline-flex;align-items:center;gap:6px;margin-left:10px;vertical-align:middle;
  font:12px/1.4 "Microsoft YaHei",system-ui,sans-serif}
 .webbar[hidden]{display:none!important}
@@ -1147,6 +1151,21 @@ window.PROGRESS_GOTO=function(key,needle){
  return true;
 };
 renderTab(active);
+// 首屏提示条可以关掉：老玩家读一次就不需要它一直占 50px 高度。
+(function(){
+ const key='worldapart.notice.dismissed.v1';
+ const seen=store.get(key,[]);
+ document.querySelectorAll('[data-notice]').forEach(function(box){
+   if(seen.indexOf(box.getAttribute('data-notice'))>=0){box.classList.add('notice-hidden');return}
+   const btn=box.querySelector('.notice-x');
+   if(btn)btn.onclick=function(){
+     box.classList.add('notice-hidden');
+     const list=store.get(key,[]);
+     if(list.indexOf(box.getAttribute('data-notice'))<0)list.push(box.getAttribute('data-notice'));
+     store.set(key,list);
+   };
+ });
+})();
 
 let polledVersion=INITIAL_VERSION;
 let pageVisible=true,reloadTimer=null,manualUntil=0,pendingSince=0;
@@ -1358,7 +1377,10 @@ def build_html(payload):
         else:
             console_note = ("" if not common.FROZEN
                             else '<div class="notice">%s</div>' % i18n.shell("en", "notice_web"))
-        console_note = '<div class="notice">%s</div>' % i18n.shell("en", "notice_update") + console_note
+        console_note = ('<div class="notice notice-tip" data-notice="overlay-hint">'
+                        '<button type="button" class="notice-x" aria-label="Dismiss" '
+                        'title="Dismiss this hint">×</button>%s</div>'
+                        % i18n.shell("en", "notice_update")) + console_note
     else:
         if common.OVERLAY_MODE:
             console_note = ('<div class="notice">按顶部显示的快捷键收起或再次呼出（默认为 <b>F3</b>，'
@@ -1369,7 +1391,10 @@ def build_html(payload):
                             '<div class="notice">使用期间请留着那个黑色小窗口（可以最小化）——'
                             '<b>它负责自动检查数据，关掉后本页就不再自动刷新。</b>'
                             '右下角「立即同步」可马上导出最新存档。</div>')
-        console_note = ('<div class="notice">从 <b>v2.2</b> 起，进游戏后按 <b>F3</b> 即可呼出本页面；'
+        console_note = ('<div class="notice notice-tip" data-notice="overlay-hint">'
+                        '<button type="button" class="notice-x" aria-label="关闭提示" '
+                        'title="关闭这条提示">×</button>'
+                        '从 <b>v2.2</b> 起，进游戏后按 <b>F3</b> 即可呼出本页面；'
                         '或双击 仙友助手.exe 启用网页版。'
                         '老用户重新运行一次「一键安装.bat」即可更新。</div>'
                         ) + console_note
