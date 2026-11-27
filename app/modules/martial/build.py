@@ -191,7 +191,7 @@ def build(tables):
         book = _int(row.get("item_id"))
         stack, unit = _stack_info(row.get("text_skillBuff_stack"))
         if not stack:
-            warnings.append("心法 %s 的层数资源名未识别" % core_id)
+            warnings.append("心法「%s」的层数资源名未识别" % (_text(row.get("name")) or "未识别心法"))
         tiers = []
         for sub in row.get("sub_passives") or []:
             if not isinstance(sub, dict):
@@ -302,7 +302,7 @@ def build(tables):
         warnings.append("说明：%d 条共鸣词条没能匹配到对应功法，未计入共鸣列表" % unmatched_resonance)
     resonance.sort(key=lambda item: (item["tier"], item["id"]))
     if not resonance:
-        warnings.append("未找到共鸣技能（tbskill ability_kind=3）")
+        warnings.append("配置里没有找到共鸣功法")
 
     used_npcs = {}
     for bucket in shops.values():
