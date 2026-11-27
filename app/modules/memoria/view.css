@@ -116,3 +116,9 @@
 .mem-help>summary::before{content:'▸';margin-right:6px;color:var(--text-faint);font-size:10px}
 .mem-help[open]>summary::before{content:'▾'}
 .mem-help .mem-tip{margin:9px 0 0;background:transparent;border:0;padding:0}
+
+/* 页签与筛选合成一张工具卡，页面上方少一层分隔；规则说明挪到列表之后。 */
+.mem-toolbar{background:var(--surface);border:1px solid var(--border-strong);border-radius:12px;padding:12px 14px;margin:0 0 13px}
+.mem-toolbar .mem-tabs{margin:0 0 10px}
+.mem-toolbar .mem-filters{background:transparent;border:0;border-radius:0;padding:0;margin:0}
+.mem-toolbar .mem-quick{margin-top:9px;padding-top:9px;border-top:1px solid var(--border-raised)}

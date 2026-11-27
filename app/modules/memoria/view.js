@@ -88,18 +88,21 @@ function initMemoria(){
    <div class="card"><div class="k">故交</div><div class="v">${n(fc.count)}<small>${n(fc.records)} 条往事</small></div></div>
    <div class="card mem-click" id="memunseen"><div class="k">未看过</div><div class="v">${n(st.unseen)}<small>点击只看未看</small></div></div>
   </div>
-  <div class="mem-tabs" id="memtabs">${VIEWS.map(v=>{
+  <div class="mem-toolbar">
+   <div class="mem-tabs" id="memtabs">${VIEWS.map(v=>{
    const count=v[0]==='shooting'?`${n(sc.got)}/${n(sc.total)}`:v[0]==='bonds'?`${n(bc.got)}/${n(bc.total)}`:v[0]==='adventure'?`${n(ac.got)}/${n(ac.total)}`:`${n(fc.count)} 人`;
    return `<button type="button" class="mem-tab" data-view="${v[0]}">${v[1]}<i>${count}</i></button>`;
   }).join('')}</div>
   ${data.hint?`<div class="mem-tip">${esc(data.hint)}</div>`:''}
+   <div class="mem-filters" id="memfilters"></div>
+  </div>
+  <div id="memresult" class="mem-result"></div>
+  <div id="memlist"></div>
   <details class="mem-help"><summary>留影规则：解锁条件与刷新逻辑</summary>
    <div class="mem-tip"><b>激活条件</b>：留影按前置段 / 好感 / 精力 / 支线解锁，没有按天数冷却。游戏里偶尔看不到留影石入口，通常是精力不足（入口要求 10）、前置互动段未完成，个别角色还需要好感 30 / 60。</div>
    <div class="mem-tip"><b>为什么做完一段不立刻出下一段</b>：NPC 每月只保留一个特殊互动入口（留影石就是其中之一），完成后入口会立刻清空，要等下一次每月刷新（游戏内月份切换）重新抽取；所以下一段不一定下个月就出现，也不是卡住。</div>
   </details>
-  <div class="mem-filters" id="memfilters"></div>
-  <div id="memresult" class="mem-result"></div>
-  <div id="memlist"></div>`;
+  `;
  syncTabs();renderFilters();renderList();
  $('memtabs').onclick=e=>{
   const button=e.target.closest('.mem-tab');if(!button)return;
