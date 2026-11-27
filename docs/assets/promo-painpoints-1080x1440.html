@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>用户痛点 v5</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    width:1080px;height:1440px;overflow:hidden;
+    background:#0e1014;color:#e8eaed;
+    font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+    padding:60px 56px 42px;position:relative;
+  }
+  .glow{position:absolute;border-radius:50%;filter:blur(130px);pointer-events:none}
+  .glow.a{width:560px;height:560px;background:#1d5c43;top:-260px;right:-160px;opacity:.45}
+  .glow.b{width:440px;height:440px;background:#1a3a52;bottom:-220px;left:-180px;opacity:.28}
+  .inner{position:relative;z-index:2;display:flex;flex-direction:column;height:100%}
+
+  h1{font-size:78px;line-height:1.1;font-weight:800;letter-spacing:2px}
+  h1 em{font-style:normal;color:#3ddc84}
+  .sub{font-size:20px;color:#9aa3b2;margin-top:16px;line-height:1.6}
+  .sub b{color:#b4bdca;font-weight:700}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:34px;flex:1;min-height:0;grid-auto-rows:1fr}
+  .card{
+    position:relative;background:#171a21;border:1px solid #232833;border-radius:18px;
+    padding:24px 26px;display:flex;flex-direction:column;justify-content:center;
+  }
+  .card:before{content:"";position:absolute;left:0;top:28px;bottom:28px;width:3px;border-radius:0 3px 3px 0;background:#3d735b}
+  .tag{font-size:28px;color:#8ee6b3;font-weight:800;letter-spacing:.5px;padding-left:16px;line-height:1.35}
+  .pain{font-size:40px;line-height:1.32;font-weight:800;color:#ffffff;letter-spacing:.5px;margin-top:12px;padding-left:16px}
+
+  .rest{margin-top:18px;font-size:15px;line-height:1.7;color:#778292;text-align:center;letter-spacing:.3px}
+  .rest b{color:#9aa3b2;font-weight:600}
+
+  .foot{margin-top:20px;padding-top:18px;border-top:1px solid #232833;display:flex;align-items:flex-end;justify-content:space-between}
+  .foot .l{font-size:15px;color:#778292;line-height:1.7}
+  .foot .l b{color:#b4bdca;font-weight:600}
+  .foot .r{font-size:16px;color:#8ee6b3;font-weight:700;letter-spacing:.3px}
+  .foot .r i{font-style:normal;color:#3ddc84}
+</style>
+</head>
+<body>
+  <div class="glow a"></div><div class="glow b"></div>
+  <div class="inner">
+    <h1>仙友<em>助手</em></h1>
+    <p class="sub"><b>17 个模块</b> · 你当前存档的进度，一看便知</p>
+
+    <div class="grid">
+      <div class="card">
+        <div class="tag">奇遇 / 支线 / 红尘</div>
+        <p class="pain">条件不够，<br>白跑一趟</p>
+      </div>
+      <div class="card">
+        <div class="tag">境界修为</div>
+        <p class="pain">材料差几件，<br>去哪刷？</p>
+      </div>
+      <div class="card">
+        <div class="tag">炼丹</div>
+        <p class="pain">只记得效果，<br>不记得在哪</p>
+      </div>
+      <div class="card">
+        <div class="tag">NPC 天赋</div>
+        <p class="pain">这个词条，<br>在谁身上？</p>
+      </div>
+      <div class="card">
+        <div class="tag">仙居楼互动</div>
+        <p class="pain">还差几段？<br>没人告诉你</p>
+      </div>
+      <div class="card">
+        <div class="tag">留影石</div>
+        <p class="pain">这个月还能<br>做哪些留影？</p>
+      </div>
+      <div class="card">
+        <div class="tag">探索</div>
+        <p class="pain">本月还能<br>找谁互动？</p>
+      </div>
+      <div class="card">
+        <div class="tag">赌石 / 拍卖</div>
+        <p class="pain">该卖给谁，<br>该出多少？</p>
+      </div>
+    </div>
+
+    <div class="rest">另有 <b>宗门 · 声望 · NPC 物品 · 人物图鉴 · 炼器 · 心法功法</b>，同样都有答案</div>
+
+    <div class="foot">
+      <div class="l"><b>只读存档 · 绿色版不坏档</b><br>打开就看你当前存档的进度，不用手动记</div>
+      <div class="r">Steam 创意工坊搜<i>「仙友助手」</i></div>
+    </div>
+  </div>
+</body>
+</html>
