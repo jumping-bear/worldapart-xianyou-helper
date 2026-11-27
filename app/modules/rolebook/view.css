@@ -262,3 +262,10 @@ body.xy-overlay .rolebook-drawer{top:46px}
 .rolebook-special{display:inline-block;font-size:11px;line-height:1.6;padding:1px 7px;border-radius:6px;
   color:var(--ok-text);background:rgba(95,189,139,.1);border:1px solid rgba(95,189,139,.36);white-space:nowrap}
 .rolebook-tag-green{color:var(--ok-text);background:rgba(95,189,139,.1);border-color:rgba(95,189,139,.36)}
+
+/* 筛选分两层：基础常驻、其余进「更多筛选」，首屏让给 NPC 列表。 */
+.rolebook-filters-main{grid-template-columns:2fr 1fr 1fr}
+.rolebook-filters .advanced-filters{background:transparent;border:0;border-radius:0;border-top:1px solid var(--border-raised);margin:12px 0 0;padding:0}
+.rolebook-filters .advanced-filters summary{padding:10px 0}
+.rolebook-adv-grid{grid-template-columns:repeat(4,minmax(0,1fr));border-top:0;padding:2px 0 12px}
+.rolebook-adv .rolebook-state-hint{margin:0 0 2px}

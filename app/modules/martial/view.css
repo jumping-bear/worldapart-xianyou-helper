@@ -84,7 +84,7 @@
 .martial-line b{flex:none;color:var(--text-faint);font-weight:500;min-width:58px}
 .martial-chip{display:inline-flex;align-items:center;gap:4px;background:var(--surface-soft);border:1px solid var(--border-subtle);border-radius:6px;padding:2px 7px;font-size:11px;color:var(--text-body);margin:0 5px 5px 0}
 .martial-chip i{font-style:normal;color:#7fa695;font-size:10px}
-.martial-tiers{width:100%;border-collapse:separate;border-spacing:0 5px;margin-top:-5px}
+.martial-tiers{width:100%;border-collapse:separate;border-spacing:0 4px;margin-top:-5px}
 .martial-tiers th{text-align:left;color:var(--text-faint);font-size:11px;font-weight:500;padding:0 8px}
 .martial-tiers td{background:var(--surface-alt);padding:8px;font-size:11px;line-height:1.7;color:var(--text-body);vertical-align:top}
 .martial-tiers tr td:first-child{border-radius:8px 0 0 8px}

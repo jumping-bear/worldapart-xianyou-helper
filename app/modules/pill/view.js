@@ -95,8 +95,9 @@ function initPill(){
   `<div class="pill-searchwrap"><input id="pillq" class="pill-search" placeholder="不知道名字也行：搜想要的效果，例如 回复 / 攻击 / 防御"><div class="effchips"><span class="chip-label">按功效</span>${effectChips()}</div><div id="pillhits" class="phits"></div></div>`+
   (maps.length>1?`<div class="chips" id="pillmaps"><span class="chip-label">盘面</span>`+
    maps.map((x,i)=>`<button class="chip${x===mp?' on':''}" data-map="${i}">${esc(x.name)}<i>${(x.pois||[]).length}</i></button>`).join('')+`</div>`:'')+
-  `<div class="pill-grid"><div class="mapwrap"><div class="mapbox"><canvas id="pillmap"></canvas><svg id="pillsvg" viewBox="0 0 ${cols} ${rowsN}" xmlns="http://www.w3.org/2000/svg"></svg><div class="map-tip" id="pillherbtip"></div><div class="map-tip" id="pillpoitip"></div></div>${PILL_LEGEND}</div>`+
+  `<div class="pill-grid"><div class="mapwrap"><div class="sec-title">炼丹地图<small>点地图上的丹方可看路线，Alt+点击独选对象</small></div><div class="mapbox"><canvas id="pillmap"></canvas><svg id="pillsvg" viewBox="0 0 ${cols} ${rowsN}" xmlns="http://www.w3.org/2000/svg"></svg><div class="map-tip" id="pillherbtip"></div><div class="map-tip" id="pillpoitip"></div></div>${PILL_LEGEND}</div>`+
   `<div class="pill-side">`+
+  `<div class="sec-title">丹方详情<small>成丹门槛、可炼次数与传送路线</small></div>`+
   `<div class="pill-detail" id="pillinfo">${PILL_HINT}</div>`+
   `<div class="fsec"><div class="fhead"><b>显示对象</b><span class="fhint">Alt+点击 独选</span>`+
    `<span class="fops"><button type="button" data-op="none" data-row="types">清</button><button type="button" data-op="all" data-row="types">全</button></span></div>`+

@@ -72,3 +72,7 @@
 .phit-dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
 .phit-none{color:var(--text-faint);cursor:default}
 .phit-none:hover{border-color:var(--border);color:var(--text-faint)}
+
+/* 地图与侧栏标题：原来两块面板都没有名字，用户不知道右边是什么。 */
+.pill-grid .sec-title{margin:0 2px 2px}
+.pill-side .sec-title{margin:2px 2px 0}

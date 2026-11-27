@@ -589,11 +589,19 @@
     if (mask) mask.classList.remove('show');
   }
 
+  // 高级筛选：有值时自动展开并显示条数，和物品页保持一套交互。
+  function syncAdv() {
+    var keys = ['evil', 'realm', 'region', 'loc', 'sect', 'personality'];
+    var n = keys.filter(function (k) { return !!filters[k]; }).length;
+    var cnt = $('rolebook-advcount'), box = $('rolebook-adv');
+    if (cnt) cnt.textContent = n ? '（' + n + '）' : '';
+    if (n && box && !box.open) box.open = true;
+  }
   function bindEvents(m) {
     function bind(id, key) {
       var el = $(id);
       if (!el) return;
-      el.onchange = function () { filters[key] = el.value; persist(); renderCards(m, true); };
+      el.onchange = function () { filters[key] = el.value; persist(); renderCards(m, true); syncAdv(); };
     }
     var q = $('rolebook-q');
     if (q) q.oninput = function () { filters.q = q.value.trim(); persist(); renderCards(m, true); };
@@ -629,6 +637,7 @@
     });
     var more = $('rolebook-more');
     if (more) more.onclick = loadMore;
+    syncAdv();
     var reset = $('rolebook-reset');
     if (reset) reset.onclick = function () {
       filters = Object.assign({}, DEFAULTS); persist();
@@ -638,7 +647,7 @@
       });
       var st = $('rolebook-state'); if (st) st.value = DEFAULTS.state;
       var qa = $('rolebook-q'); if (qa) qa.value = '';
-      syncChips(); renderCards(m, true);
+      syncChips(); renderCards(m, true); syncAdv();
     };
   }
 
@@ -688,7 +697,7 @@
         '</div>' +
       '</div>' +
       '<div class="rolebook-filters">' +
-        '<div class="rolebook-filters-row">' +
+        '<div class="rolebook-filters-row rolebook-filters-main">' +
           '<label class="rolebook-search"><span>查找 NPC</span>' +
             '<input id="rolebook-q" placeholder="名字 / 称号 / 门派 / 境界 / 地点 / 关系" value="' + esc(filters.q) + '"></label>' +
           '<label class="rolebook-field"><span>状态</span><select id="rolebook-state" ' +
@@ -702,28 +711,6 @@
               .concat(relValues.map(function (r) { return [r, r]; }))
               .map(function (p) {
                 return '<option value="' + p[0] + '"' + (filters.rel === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
-              }).join('') + '</select></label>' +
-          '<label class="rolebook-field"><span>善恶</span><select id="rolebook-evil">' +
-            '<option value="">全部</option><option value="bad"' + (filters.evil === 'bad' ? ' selected' : '') + '>恶名</option>' +
-            '<option value="mid"' + (filters.evil === 'mid' ? ' selected' : '') + '>中庸</option>' +
-            '<option value="good"' + (filters.evil === 'good' ? ' selected' : '') + '>善念</option></select></label>' +
-          '<label class="rolebook-field"><span>境界</span><select id="rolebook-realm">' +
-            optList(realms, filters.realm, '全部境界') + '</select></label>' +
-          '<label class="rolebook-field"><span>地区</span><select id="rolebook-region">' +
-            optList(regions, filters.region, '全部地区') + '</select></label>' +
-          '<label class="rolebook-field"><span>地点</span><select id="rolebook-loc">' +
-            locOptions(npcs, filters.loc) + '</select></label>' +
-          '<label class="rolebook-field"><span>门派</span><select id="rolebook-sect">' +
-            optList(sects, filters.sect, '全部门派') + '</select></label>' +
-          '<label class="rolebook-field"><span>性格</span><select id="rolebook-personality">' +
-            optList(persons, filters.personality, '全部性格') + '</select></label>' +
-        '</div>' +
-        '<div class="rolebook-filters-row rolebook-filters-row2">' +
-          '<label class="rolebook-field"><span>排序</span><select id="rolebook-sort">' +
-            [['relevance', '与我相关优先'], ['special', '本月可互动优先'], ['safe', '安全目标优先'], ['layer', '境界高低'], ['lifespan', '剩余寿元'],
-             ['favor', '好感优先'], ['evil', '由恶到善'], ['evilDesc', '由善到恶'], ['name', '按名字'], ['id', '按 ID']]
-              .map(function (p) {
-                return '<option value="' + p[0] + '"' + (filters.sort === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
               }).join('') + '</select></label>' +
         '</div>' +
         '<div class="rolebook-chips">' +
@@ -739,7 +726,32 @@
           }).join('') +
           '<button type="button" id="rolebook-reset" class="rolebook-chip rolebook-chip-reset">清空</button>' +
         '</div>' +
+        '<details class="advanced-filters rolebook-adv" id="rolebook-adv">' +
+          '<summary>更多筛选 <span id="rolebook-advcount" class="filter-count"></span></summary>' +
+          '<div class="advanced-grid rolebook-adv-grid">' +
+          '<label class="rolebook-field"><span>善恶</span><select id="rolebook-evil">' +
+            '<option value="">全部</option><option value="bad"' + (filters.evil === 'bad' ? ' selected' : '') + '>恶名</option>' +
+            '<option value="mid"' + (filters.evil === 'mid' ? ' selected' : '') + '>中庸</option>' +
+            '<option value="good"' + (filters.evil === 'good' ? ' selected' : '') + '>善念</option></select></label>' +
+          '<label class="rolebook-field"><span>境界</span><select id="rolebook-realm">' +
+            optList(realms, filters.realm, '全部境界') + '</select></label>' +
+          '<label class="rolebook-field"><span>地区</span><select id="rolebook-region">' +
+            optList(regions, filters.region, '全部地区') + '</select></label>' +
+          '<label class="rolebook-field"><span>地点</span><select id="rolebook-loc">' +
+            locOptions(npcs, filters.loc) + '</select></label>' +
+          '<label class="rolebook-field"><span>门派</span><select id="rolebook-sect">' +
+            optList(sects, filters.sect, '全部门派') + '</select></label>' +
+          '<label class="rolebook-field"><span>性格</span><select id="rolebook-personality">' +
+            optList(persons, filters.personality, '全部性格') + '</select></label>' +
+          '<label class="rolebook-field"><span>排序</span><select id="rolebook-sort">' +
+            [['relevance', '与我相关优先'], ['special', '本月可互动优先'], ['safe', '安全目标优先'], ['layer', '境界高低'], ['lifespan', '剩余寿元'],
+             ['favor', '好感优先'], ['evil', '由恶到善'], ['evilDesc', '由善到恶'], ['name', '按名字'], ['id', '按 ID']]
+              .map(function (p) {
+                return '<option value="' + p[0] + '"' + (filters.sort === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+              }).join('') + '</select></label>' +
+          '</div>' +
         '<div class="rolebook-state-hint">在世＝当前可交互；已寿终＝寿元耗尽；已退隐＝境界突破或剧情清退；尚未登场＝存档里还没有这个人。攻击 / 切磋 / 偷窃 / 交易只对在世的人生效。</div>' +
+        '</details>' +
       '</div>' +
       '<div id="rolebook-count" class="rolebook-count"></div>' +
       '<div id="rolebook-grid" class="rolebook-grid"></div>' +
