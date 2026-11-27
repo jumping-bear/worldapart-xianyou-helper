@@ -1,9 +1,13 @@
 /* 探索：本月入口、切磋次数与委托目标。 */
 .ex-levels{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 6px}
-.ex-lvchip{display:inline-flex;align-items:baseline;gap:5px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px 9px;color:var(--text-dim);font-size:12px;white-space:nowrap;font-family:inherit;cursor:pointer;line-height:1.4;font-variant-numeric:tabular-nums}
+.ex-lvchip{position:relative;display:inline-flex;align-items:baseline;gap:5px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px 9px 8px;color:var(--text-dim);font-size:12px;white-space:nowrap;font-family:inherit;cursor:pointer;line-height:1.4;font-variant-numeric:tabular-nums}
 .ex-lvchip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-fg)}
 .ex-lvchip b{color:var(--text);font-size:13px}
 .ex-lvchip i{font-style:normal;color:var(--text-faint);font-size:11px}
+/* 五段进度带：胶囊底部一条 3px 轨道，宽度由 --pct 动态派生，不写死档位。 */
+.ex-chip-bar{position:absolute;left:8px;right:8px;bottom:3px;height:3px;border-radius:3px;background:var(--border);overflow:hidden}
+.ex-chip-bar:after{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--pct,0%);border-radius:3px;background:var(--accent)}
+.ex-lvchip.on .ex-chip-bar:after{background:var(--accent-fg)}
 .ex-meta{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--text-faint);font-size:11px;margin:0 2px 8px;font-variant-numeric:tabular-nums}
 .ex-controls{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;margin:6px 0 4px}
 .ex-controls input{width:100%;background:var(--input-bg);border:1px solid var(--border-strong);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12px;outline:none}

@@ -116,7 +116,8 @@ function statusHtml(r){
   const levels=(r.attrs||[]).map(a=>{
     const expText=a.need?`${fmt(a.exp)}/${fmt(a.need)}`:`${fmt(a.exp)} · 已满级`;
     const active=n(ui.attr)===n(a.id);
-    return `<button type="button" class="ex-lvchip${active?' on':''}" data-attr="${n(a.id)}" title="点击只看${esc(a.name)}，再点取消"><b>${esc(a.name)}</b> Lv.${n(a.level)}<i>${expText}</i></button>`;
+    const pct=a.need?Math.min(100,Math.floor(n(a.exp)*100/n(a.need))):100;
+    return `<button type="button" class="ex-lvchip${active?' on':''}" data-attr="${n(a.id)}" style="--pct:${pct}%" title="点击只看${esc(a.name)}，再点取消"><b>${esc(a.name)}</b> Lv.${n(a.level)}<i>${expText}</i><em class="ex-chip-bar"></em></button>`;
   }).join('');
   // 存档里的「精力上限」是基础值，天赋/装备加成后当前值可能超过它；此时只报当前值，不写成 148/140。
   const staminaText=n(st.max)&&n(st.cur)<=n(st.max)
