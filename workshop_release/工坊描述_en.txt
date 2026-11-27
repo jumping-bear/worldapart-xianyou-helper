@@ -29,8 +29,8 @@ Read-only save copy · no save editing · works offline · English UI supported 
 [list]
 [*][b]Game updates[/b]: romance lines come from the config, so new heroines appear automatically; no stray lines or quest IDs; reward and trigger hints added.
 [*][b]English UI[/b]: full-sentence rules first; remaining Chinese labels, hints and numbered patterns translated.
-[*][b]Lighter first screen[/b]: stat cards, tables and tabs realigned; encounter page trimmed, conclusions up front; overlay hints merged; first-screen tip dismissible.
-[*][b]Cleaner data[/b]: item search by effect/type/outcome; NPC inventory shows stealing, requesting and gifting side by side; no table names or internal IDs; encounter prerequisites added.
+[*][b]Lighter first screen[/b]: stat cards, tables and tabs realigned; encounter page trimmed; overlay hints merged; first-screen tip dismissible.
+[*][b]Cleaner data[/b]: item search by effect/type/outcome; NPC inventory lists stealing, requesting and gifting; no internal IDs; encounter prerequisites, sect gates and follow-ups added; new chars do not inherit old saves.
 [*][b]Smaller download[/b]: EXE back to ~28 MB from 79 MB (~51 MB less per update); installer shows Chinese first with English alongside.
 [*]v2.3.0+ needs no reinstall; updates sync automatically.
 [/list]
