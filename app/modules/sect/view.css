@@ -49,6 +49,9 @@
 .sec-hint b{color:var(--text-soft);font-variant-numeric:tabular-nums}
 .sec-offer-note{background:var(--gold-bg);border:1px solid var(--gold-border);border-radius:8px;color:#d9c28e;font-size:11px;line-height:1.8;padding:8px 10px;margin:0 0 10px}
 .sec-offer-note b{color:var(--gold-strong);font-variant-numeric:tabular-nums}
+.sec-offer-how{background:var(--accent-bg);border:1px solid var(--accent);border-radius:8px;color:var(--text-body);font-size:11px;line-height:1.75;padding:8px 10px;margin:0 0 4px}
+.sec-offer-how b{color:var(--accent-fg);font-weight:600}
+.sec-offer-rule{margin:0 0 10px;border-top:0;padding-top:0}
 .sec-empty{color:var(--text-faint);font-size:12px;line-height:1.8;padding:6px 0}
 .sec-income{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px}
 .sec-income>div{background:var(--input-bg);border:1px solid var(--border-subtle);border-radius:8px;padding:10px 12px}

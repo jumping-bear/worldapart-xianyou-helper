@@ -173,29 +173,46 @@ function tasksHtml(rows){
  };
  const group=(title,items)=>items.length?`<div class="sec-sub">${title} ${items.length} 条</div>`+items.map(card).join(''):'';
  // 委托板是轮换的：本期挂出数量以存档为准（不写死「3 条」）；「可同时接」上限由职位决定。
+ // 接取方式据游戏代码：tbinteractaction 604「执事堂」由本宗 NPC 交互打开面板；
+ // tbstrconfig.sect：SECT_DUTY_TAB_TASK=宗门任务（页签）、SECT_DUTY_LIST_TASK=可接任务（列表标题）、
+ // SECT_DUTY_TASK_ACTION_ACCEPT=领取任务；点击后 SectTaskManager.TryAcceptSectTask 自动接取。
+ // 页面必须明确告诉玩家去哪里接；只挂「可领取」标签会让人以为在助手里就能领。
  const refreshText=refresh.next?`每周期轮换 · 下次刷新 ${esc(refresh.next)}`:'每周期轮换';
- const offerHint=`委托板本期挂出 <b>${list.length}</b> 条外务委托${refresh.next?`，下次刷新 <b>${esc(refresh.next)}</b>`:''}，会轮换出新的一批。「本期挂出 ${list.length} 条」不等于「只能同时接 ${list.length} 个」——你能同时接的上限是 <b>${n(slots.limit)}</b> 条（由职位决定）。`;
+ const offerHint=`这些任务找<b>本宗 NPC 对话选「执事堂」</b> → 在「宗门任务」页签的「可接任务」列表里选任务、点「领取任务」即自动接取，完成后回执事堂提交。下面的「可领取」= 现在就能去领，不是奖励已到账。`;
+ const ruleHint=`本期挂出 <b>${list.length}</b> 条外务委托${refresh.next?`，下次刷新 <b>${esc(refresh.next)}</b>`:''}，会轮换出新的一批。「本期挂出 ${list.length} 条」不等于「只能同时接 ${list.length} 个」——你能同时接的上限是 <b>${n(slots.limit)}</b> 条（由职位决定）。`;
  const offerBody=list.length?list.map(item=>{
   const state=item.completed?badge('已完成','ok'):(item.locked?badge('职位不足','warn'):badge('可领取',''));
-  return `<div class="sec-task${item.completed?' done':''}">
-   <span class="sec-task-name">${esc(item.name)}</span>
-   ${badge(item.type_name||'外务委托')}${badge('难度 '+n(item.difficulty))}
-   ${item.min_position?badge(item.min_position_name||('职位 '+item.min_position)):''}
-   <span class="sec-num">+${num(item.contribution)} 贡献</span>
-   ${item.reputation?`<span class="sec-num">+${num(item.reputation)} 声望</span>`:''}
-   ${item.stones?`<span class="sec-num">+${num(item.stones)} 灵石</span>`:''}
-   ${state}
+  // 目标/地点来自 tbquest.objectives，与已接任务同源；占位任务没有目标时不显示这一行。
+  const detail=item.objective?`<div class="sec-task-obj">${esc(item.objective)}</div>
+   <div class="sec-task-meta">
+    ${item.location?`<span>${esc(item.location)}</span>`:''}
+    ${item.target?`<span>${esc(item.action||'目标')} ${esc(item.target)}${item.count?` ×${num(item.count)}`:''}${item.quality?` · ${esc(item.quality)}`:''}</span>`:''}
+   </div>`:'';
+  return `<div class="sec-task-card${item.completed?' done':''}">
+   <div class="sec-task-top">
+    <span class="sec-task-name">${esc(item.name)}</span>
+    ${badge(item.type_name||'宗门任务')}${badge('难度 '+n(item.difficulty))}
+    ${item.min_position?badge(item.min_position_name||('职位 '+item.min_position)):''}
+    <span class="sec-num">+${num(item.contribution)} 贡献</span>
+    ${item.reputation?`<span class="sec-num">+${num(item.reputation)} 声望</span>`:''}
+    ${item.stones?`<span class="sec-num">+${num(item.stones)} 灵石</span>`:''}
+    ${state}
+   </div>
+   ${detail}
   </div>`;
- }).join(''):`<div class="sec-empty">本期委托板没有挂出的外务委托。</div>`;
+ }).join(''):`<div class="sec-empty">本期委托板没有挂出的宗门任务。</div>`;
  const offerBlock=`<div class="sec-block">
   <div class="sec-head">委托板 · 外务委托<span>${refreshText}</span></div>
-  <div class="sec-hint sec-offer-note">${offerHint}</div>
+  <div class="sec-hint sec-offer-how">${offerHint}</div>
+  <details class="sec-pool sec-offer-rule"><summary>轮换与接取上限说明</summary><div class="sec-hint">${ruleHint}</div></details>
   ${offerBody}
  </div>`;
- // 差遣/要务/重任：走执事/长老领取，与委托板是两套，已接的进入任务日志。
- const dutyHint=`宗门差遣 / 要务 / 重任与委托板是两套：这三类找执事 / 长老领取，不在委托板上；已接的会进入任务日志，计在「可同时接 <b>${n(slots.limit)}</b> 条」里。`;
+ // 差遣/要务/重任：已接任务来自任务日志（questComponent），与执事堂委托板是两套。
+ // 游戏代码里 task_type 2/3/4 的 quest_id 全为 0、未实装，查不到「找执事/长老领取」的依据，
+ // 因此不写具体接取人，只说明数据去向，避免编造引导。
+ const dutyHint=`这里的已接任务来自游戏任务日志，与执事堂委托板是两套，不在委托板上；接取方式以游戏内任务来源为准，已接的计在「可同时接 <b>${n(slots.limit)}</b> 条」里。`;
  const dutyBody=(group('待提交',pending)+group('进行中',active)+group('已提交',done))
-  ||`<div class="sec-empty">当前没有已接取的差遣 / 要务 / 重任。这三类任务找执事 / 长老领取，不在委托板上。</div>`;
+  ||`<div class="sec-empty">当前没有已接取的差遣 / 要务 / 重任；这类任务不在执事堂委托板上。</div>`;
  const dutyBlock=`<div class="sec-block">
   <div class="sec-head">宗门差遣 · 要务 · 重任<span>可同时接 ${n(slots.limit)} 条 · 已接 ${n(slots.accepted)} · 待提交 ${pending.length}</span></div>
   <div class="sec-hint">${dutyHint}</div>

@@ -16,9 +16,11 @@ import re
 from meta_update import _int, _plain, _rows, _text, build_realms
 
 
-# 任务类型没有独立文案表（已核对 tbsecttaskpool / tbquesttype 均无），这里只做界面归类；
-# 已知 4 类固定文案，未知类型兜底为「宗门任务·类型N」，不硬编码新类型。
-TASK_TYPES = {1: "外务委托", 2: "宗门差遣", 3: "宗门要务", 4: "宗门重任"}
+# task_type 是玩法类型，不是业务分类。游戏 SectTaskType 枚举与
+# SectDutyHallViewModel.BuildTaskCard 的映射为 1=HUNT/2=GATHER/3=SPAR/4=FETCH，
+# 对应文案见 tbstrconfig.sect 的 DutyTaskTypeHunt/Gather/Spar/Fetch。
+# 未知类型兜底为「宗门任务·类型N」，不硬编码新类型。
+TASK_TYPES = {1: "讨伐", 2: "采集", 3: "切磋", 4: "寻物"}
 
 
 def _task_type_name(task_type):
@@ -51,6 +53,51 @@ def _quest_names(tables):
     return names
 
 
+def _quest_objective_info(row):
+    """从 tbquest 行解析目标/地点/目标物/数量/动作；无目标时返回空字典。
+
+    已接的 [宗门] 任务与委托板任务共用这套解析，避免委托板只有任务名。
+    """
+    raw_texts = []
+    for objective in row.get("objectives") or []:
+        if isinstance(objective, dict):
+            raw = _text(objective.get("description"))
+            if raw:
+                raw_texts.append(raw)
+    if not raw_texts:
+        return {}
+    raw = raw_texts[0]
+    highlights = [_plain(match) for match in
+                  re.findall(r"<color=[^>]+>(.*?)</color>", raw, re.S)]
+    places = [text for text in highlights if "." in text or "·" in text]
+    location = "、".join(places)
+    target = next((text for text in highlights if text not in places), "")
+    if not places and highlights:
+        location, target = highlights[0], (highlights[-1] if len(highlights) > 1 else "")
+    objective = "；".join(_plain(text) for text in raw_texts)
+    count = 0
+    match = re.search(r"(?:采集|收集|击败|击杀|讨伐|提交|准备)\s*(\d+)\s*(?:个|只|名|位|株|份|枚|张)", objective)
+    if match:
+        count = int(match.group(1))
+    quality = ""
+    quality_match = re.search(r"[（(]([^）)]+品质)[）)]", objective)
+    if quality_match:
+        quality = quality_match.group(1)
+    action = "其他"
+    for keyword, label in (("采集", "采集"), ("采药", "采集"), ("收集", "收集"),
+                           ("击败", "讨伐"), ("击杀", "讨伐"), ("除患", "讨伐"),
+                           ("切磋", "切磋"), ("交谈", "访谈"), ("访谈", "访谈"),
+                           ("赠礼", "赠礼"), ("亲密度", "赠礼"), ("好感度", "赠礼"),
+                           ("筹备", "筹备"), ("提交", "提交"), ("前往", "前往")):
+        if keyword in objective:
+            action = label
+            break
+    return {
+        "objective": objective, "location": location, "target": target,
+        "count": count, "quality": quality, "action": action,
+    }
+
+
 def _duty_quests(tables):
     """已接取的宗门任务：[宗门] 开头的任务目标、地点、目标物与动作。
 
@@ -63,42 +110,14 @@ def _duty_quests(tables):
         name = _plain(row.get("name")) or ""
         if not quest_id or not name.startswith("[宗门]"):
             continue
-        raw_texts = []
-        for objective in row.get("objectives") or []:
-            if isinstance(objective, dict):
-                raw = _text(objective.get("description"))
-                if raw:
-                    raw_texts.append(raw)
-        raw = raw_texts[0] if raw_texts else ""
-        highlights = [_plain(match) for match in
-                      re.findall(r"<color=[^>]+>(.*?)</color>", raw, re.S)]
-        places = [text for text in highlights if "." in text or "·" in text]
-        location = "、".join(places)
-        target = next((text for text in highlights if text not in places), "")
-        if not places and highlights:
-            location, target = highlights[0], (highlights[-1] if len(highlights) > 1 else "")
-        objective = "；".join(_plain(text) for text in raw_texts)
-        count = 0
-        match = re.search(r"(?:采集|收集|击败|击杀|讨伐|提交|准备)\s*(\d+)\s*(?:个|只|名|位|株|份|枚|张)", objective)
-        if match:
-            count = int(match.group(1))
-        quality = ""
-        quality_match = re.search(r"[（(]([^）)]+品质)[）)]", objective)
-        if quality_match:
-            quality = quality_match.group(1)
-        action = "其他"
-        for keyword, label in (("采集", "采集"), ("采药", "采集"), ("收集", "收集"),
-                               ("击败", "讨伐"), ("击杀", "讨伐"), ("除患", "讨伐"),
-                               ("切磋", "切磋"), ("交谈", "访谈"), ("访谈", "访谈"),
-                               ("赠礼", "赠礼"), ("亲密度", "赠礼"), ("好感度", "赠礼"),
-                               ("筹备", "筹备"), ("提交", "提交")):
-            if keyword in objective:
-                action = label
-                break
-        out[str(quest_id)] = {
-            "name": name, "objective": objective, "location": location,
-            "target": target, "count": count, "quality": quality, "action": action,
-        }
+        info = _quest_objective_info(row)
+        out[str(quest_id)] = dict(info, name=name,
+                                  objective=info.get("objective", ""),
+                                  location=info.get("location", ""),
+                                  target=info.get("target", ""),
+                                  count=info.get("count", 0),
+                                  quality=info.get("quality", ""),
+                                  action=info.get("action", "其他"))
     return out
 
 
@@ -164,6 +183,7 @@ def build(tables):
     realms = build_realms(tables)
     item_names, drops = _reward_items(tables)
     quests = _quest_names(tables)
+    quest_rows = {_int(row.get("id")): row for row in _rows_of(tables, "tbquest")}
     npcs = _npc_names(tables)
     aliases = _condition_aliases(tables)
 
@@ -281,12 +301,21 @@ def build(tables):
             task_type = _int(pool_row.get("task_type"))
             type_name = _task_type_name(task_type)
             difficulty = _int(pool_row.get("task_difficulty"), 1)
+            # 委托板任务的目标/地点/动作与已接任务同源（tbquest.objectives）；
+            # quest_id=0 的占位配置没有目标，也不在游戏抽选范围内，保持空字段。
+            info = _quest_objective_info(quest_rows.get(quest_id) or {}) if quest_id else {}
             tasks.append({
                 "id": _int(pool_row.get("id")),
                 "quest": quest_id,
                 "name": quests.get(quest_id) or ("%s·难度%d" % (type_name, difficulty)),
                 "type": task_type,
                 "type_name": type_name,
+                "objective": info.get("objective", ""),
+                "location": info.get("location", ""),
+                "target": info.get("target", ""),
+                "count": info.get("count", 0),
+                "quality": info.get("quality", ""),
+                "action": info.get("action", ""),
                 "difficulty": difficulty,
                 "min_position": _int(pool_row.get("min_position_level")),
                 "min_position_name": (position_by_id.get(
