@@ -23,7 +23,7 @@
 .sec-warn summary{cursor:pointer}
 .sec-warn div{padding-top:4px}
 .sec-block{background:var(--surface-alt);border:1px solid var(--border);border-radius:12px;padding:13px 14px;margin:0 0 12px}
-.sec-head{display:flex;align-items:center;gap:10px;color:var(--text);font-size:13px;font-weight:600;margin:0 0 11px}
+.sec-head{display:flex;align-items:center;gap:10px;color:var(--text-soft);font-size:13px;font-weight:600;margin:0 0 11px}
 .sec-head span{margin-left:auto;color:var(--text-faint);font-size:11px;font-weight:400}
 .sec-path{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 12px}
 .sec-step{background:var(--input-bg);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;min-width:96px}

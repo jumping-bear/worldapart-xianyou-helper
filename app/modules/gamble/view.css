@@ -65,7 +65,7 @@
 .gmb-hidden-h b{color:#f0d9ff}
 .gmb-hint{color:var(--text-faint);font-size:11px;line-height:1.7;margin:2px 0 0}
 .gmb-sec{background:var(--surface-alt);border:1px solid var(--border-raised);border-radius:12px;padding:14px;margin:18px 0 0}
-.gmb-sec-h{color:#d6dfea;font-size:13px;font-weight:600;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.gmb-sec-h{color:var(--text-soft);font-size:13px;font-weight:600;margin:0 0 10px;display:flex;align-items:center;gap:8px}
 .gmb-table-wrap{overflow-x:auto;border:1px solid var(--border-raised);border-radius:8px}
 .gmb-table{width:100%;border-collapse:collapse;font-size:12px;min-width:620px}
 .gmb-table th{background:var(--surface-soft);color:var(--text-muted);font-weight:500;text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-strong);white-space:nowrap}
