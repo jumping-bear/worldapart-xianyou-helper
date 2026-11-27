@@ -51,6 +51,10 @@ excludes += [
 # 运行期只读 TextAsset / 头像 webp；numpy 仅被已排除的 UnityPy.export 引用。
 # setuptools 系列只服务开发期构建，打包后不需要。
 excludes += ['numpy', 'setuptools', 'pip', 'wheel']
+# matplotlib/PySide6 是构建环境里的开发用库，程序不 import；
+# 但 PyInstaller 的 matplotlib hook 会连带收集 Qt 后端，曾把 EXE 从 27.7MB
+# 撑到 79.1MB（2026-11-27 v2.4.0 重打包事故）。显式排除，环境再脏也不受影响。
+excludes += ['matplotlib', 'PySide6', 'shiboken6']
 hiddenimports = [
     name for name in hiddenimports
     if not any(name == excluded or name.startswith(excluded + '.') for excluded in excludes)
