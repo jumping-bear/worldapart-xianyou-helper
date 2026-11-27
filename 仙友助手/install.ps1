@@ -1,4 +1,10 @@
 ﻿$ErrorActionPreference = 'Stop'
+# 显式锁定 UTF-8 输出，保证 ═ ─ ✓ ✗ 等符号与中文在任意环境都不乱码。
+try {
+    [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    [Console]::InputEncoding  = New-Object System.Text.UTF8Encoding($false)
+    $Host.UI.RawUI.WindowTitle = '不问凡尘 · 仙友助手 一键安装'
+} catch { }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $src = Join-Path $here '安装文件'
 
