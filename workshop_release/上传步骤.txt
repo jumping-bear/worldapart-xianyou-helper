@@ -30,16 +30,20 @@
 
 3. 登录成功后执行上传：
 
-   workshop_build_item "f:\project\temp_20261114_01\workshop_release\workshop.vdf"
+   workshop_build_item "F:\project\xianyou_assistant\workshop_release\workshop.vdf"
 
-   路径要加英文引号。上传目录已放在纯英文路径下，
+   路径要加英文引号。上传目录放在纯英文路径下，
    SteamCMD 对中文路径支持不好，不要挪到带中文的文件夹。
+   （workshop.vdf 由 tools\release.py 生成，不要手改，改描述请改
+   工坊描述.txt / 工坊描述_en.txt 后重新生成。）
 
 4. 上传成功后，窗口里会输出新物品的 ID（一串数字）。
    这就是 publishedfileid，第一次上传时 vdf 里填的是 0。
 
 5. 到创意工坊页面打开这个物品，补充：
-   - 详细描述：把 工坊描述.txt 的内容整段粘贴进去
+   - 详细描述：工坊描述.txt 与 工坊描述_en.txt 两版都要贴。
+     脚本上传只会带英文版（Steam 默认语言用英文描述），
+     中文描述在 Steam 后台的语言标签里单独维护，不会被脚本覆盖。
    - 标签：按游戏工坊现有习惯选择
    - 可见性：确认是否公开
 
@@ -55,12 +59,17 @@
 3. 改一下 "changenote" 写本次更新说明。
 4. 重新执行：
 
-   workshop_build_item "f:\project\temp_20261114_01\workshop_release\workshop.vdf"
+   workshop_build_item "F:\project\xianyou_assistant\workshop_release\workshop.vdf"
 
 四、注意事项
 ------------
 - 订阅不会自动装进游戏。玩家订阅后要自己运行 content 目录里的「一键安装.bat」，
   这一点和工坊里现有的语音插件一致。
+- 更新说明写在 release\changenote.txt，描述写在 工坊描述.txt / 工坊描述_en.txt，
+  vdf 由 python tools\release.py 生成（只改文案用 --keep-listing 只推 changenote），
+  不要直接改 vdf。
+- 描述上限 8000 字节（tools\release.py 预检会拦）。中文一个汉字占 3 字节，
+  中文描述已经贴到 7100 字节左右，再加内容先跑一次预检再上传。
 - 如果上传时报无权限，说明该 App 的社区上传没有开放，
   需要联系游戏方在 Steamworks 后台为 AppID 4209920 开启创意工坊上传权限。
 - 预览图建议保持 16:9，更换时直接替换 preview.png 再上传一次即可。
