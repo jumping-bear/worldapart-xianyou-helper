@@ -7,7 +7,7 @@ from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "hongchen", "红尘"
 KEY, LABEL_EN = "hongchen", "Romance"
-ORDER, SELECT, SCHEMA = 20, "latest", 30  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 20, "latest", 31  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "hongchen_meta.json"
 TABLES = frozenset({
     "tbquest", "tbquesttype", "tbdialogue", "tbconditionexpr", "tbnpcbasecfg",

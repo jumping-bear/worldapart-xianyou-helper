@@ -489,8 +489,11 @@ INJECT_JS = r"""
     'padding:0 16px;background:rgba(14,17,22,.97);border-bottom:1px solid #29303c;z-index:99999;',
     'font:12px/1.4 "Microsoft YaHei",system-ui,sans-serif;color:#8b93a1;overflow:hidden}',
     '#xy-bar .t{color:#c9f5dd;font-weight:600;font-size:13px;white-space:nowrap}',
-    '#xy-bar .hint{white-space:nowrap}',
-    '@media (max-width:1040px){#xy-bar .hint{display:none}}',
+    '#xy-bar .hint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}',
+    // 960×632 基准档位下顶栏还有约 200px 余量，原来 1040 的断点会把 F3 提示吞掉，
+    // 而这是「收起后怎么再呼出」的唯一说明；真挤不下时缩短成省略号，不要整条消失。
+    '@media (max-width:880px){#xy-bar .hint{display:none}}',
+    '@media (max-width:1000px){#xy-bar .zoom{margin-left:0}#xy-bar .sizes{margin-left:4px}#xy-bar .sync{margin-left:4px}}',
     '#xy-bar .h{margin-left:auto;display:flex;gap:8px}',
     '#xy-bar button{background:#1b222c;border:1px solid #35404f;color:#c6cfda;border-radius:7px;',
     'padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit}',

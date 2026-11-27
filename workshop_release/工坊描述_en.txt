@@ -1,72 +1,69 @@
-[h1]Xianyou Helper v2.5.0[/h1]
-[b]Read-only save inspector. It never writes back to your save file.[/b]
-[b]English UI is supported[/b]: switch the language in 功能设置.bat, or choose Auto to follow the game.
-[b]Found it useful? Please rate and favorite.[/b]
-[i]The feature list below is long — just install it and explore as you play.[/i]
+[h1]Xianyou Helper v2.4.0[/h1]
+[b]17 modules, one save file read, and the answers to "where do I go, how much is left, is it worth it" worked out for you. No game files are modified; saves are never touched.[/b]
+Read-only save copy · no save editing · works offline · English UI supported (switch it in 「功能设置」)
 
-[h2]What it does[/h2]
+[h2]Up and running in 30 seconds[/h2]
 [list]
-[*][b]Refining and the pill board[/b]: refining level, furnace and recipe manual; all pickup points, recipes and portal routes. Filter by element, tier, effect or name; clicking highlights the map, and portals show one-way/two-way routes and the beast core they cost.
-[*][b]NPC talents[/b]: talents as the main list; open any NPC to see all their talents when choosing companions.
-[*][b]NPC inventory[/b]: look up an item to see who carries it, whether it can be stolen, the success rate and the penalty. Opening an NPC splits into Theft and Demand (fixed items and affinity cost).
-[*][b]Forging[/b]: forging level, exp, true fire, talent points and best artifact; embryos, material gaps, wash pity, all 78 embryos with board layouts.
-[*][b]Joy house[/b]: each NPC has 3 parts with 6 stages each; sort by progress and see how many more for the 18-touches achievements.
-[*][b]Realm cultivation[/b]: realm, exp gap and next goal at a glance; pick up to 5 auxiliaries with a live success rate and stat bonus. The material codex covers official routes, quests, monster spawns, auction, tournament and world boss.
-[*][b]Stone gambling[/b]: bag stones, opening progress and finished results listed separately, each with quality, crack/bloom progress and estimate; the guide lists odds, price bands, buyer offers and shop locations.
-[*][b]Encounters[/b]: 62 encounters plus 5 branch routes and 364 endings; option conditions are checked against your stats. Each ending lists rewards, then a numbered route.
-[*][b]Side quests[/b]: all 254 quests by story chain with 10 states; unselected branches are flagged and filterable; search by quest, chain, location, giver or reward.
-[*][b]Character gallery[/b]: 1685 NPCs — where they are and what you can do to them. Filters for present/met/Dao companions/friends; safe-to-kill + present avoids reputation loss; a Seclusion Lifespan panel lists who will die.
-[*][b]Romance[/b]: 6 heroine lines and 250 quests with a ring progress axis; cards show done X/Y and available N; locked lines are dimmed.
-[*][b]Memoria[/b]: 187 entries, 37 characters, 62 bond types; progress cards show collected vs total; each entry is marked collected, viewed or not-yet-bonded; search by name or text.
-[*][b]Core passives and arts[/b]: checks your loadout, surfacing top issues and idle resources; the Build tab tests passives/resonances/arts against the real rules, Plan A fills gaps with what you own, Plan B turns gaps into acquisition steps.
-[*][b]Sect[/b]: rank, reputation and realm gaps, salary and task cap; this period's tasks split into to-submit, in-progress, submitted and board offers; 23 scripture-pavilion exchanges are filterable and simulatable one by one.
-[*][b]Town reputation[/b]: 8 towns sorted by tier-up potential; a route list merges commissions by location and totals materials; shelves list tier, price and unlock state.
-[*][b]Auction[/b]: lots by venue with start price, reference value and suggested cap; filter worthwhile lots (1.2x+), chests or finale lots; also shows loan limit and last consignment results.
-[*][b]Follows the game config[/b]: reads the current game configuration first, so most content updates need no tool update.
+[*]1. Subscribe to this item and wait for the download to finish.
+[*]2. [b]Fully close the game[/b], run 「一键安装.bat」 from the workshop folder and confirm your game directory; continue only when every self-check shows ✓.
+[*]3. Start the game and stay on the main menu for about 20 seconds (the first launch generates interop files and may look frozen for 1-3 minutes - that is normal, do not close the game). Then press [b]F3[/b] in-game.
+[/list]
+
+[h2]Match the problem, find the page[/h2]
+[list]
+[*][b]"Not enough requirements, wasted trip"[/b] - Encounters, side quests, romance: the requirement for each of the 364 endings is written next to the ending and checked live against your character (✓/✗), so you no longer dig through dialogue branches. The 254 side quests carry 10 states, unselected branches are flagged and filterable, and the 6 romance lines are laid out as quest trees with "done X/Y, available N" on each card.
+[*][b]"A few materials short - where do I farm?"[/b] - Realm cultivation: realm, EXP gap and breakthrough target in one view, up to 5 auxiliaries ticked with a live success rate. The material codex lists official routes, exact quests, monster spawns, auction, tournament, world boss, secret trove and shop for every material, with jump buttons to the quest, romance and encounter pages.
+[*][b]"I remember the effect, not where it is"[/b] - Refining: level, furnace and recipe manual; 1590 pickup points filterable by element and tier, results highlighted on the map and portal routes drawn.
+[*][b]"Whose body is this passive on?"[/b] - NPC talents: talents are the main list, open any NPC to see everything they carry; filter by category, region, place and name instead of clicking NPCs one by one.
+[*][b]"Can I touch this one, and what do they carry?"[/b] - NPC inventory: look up an item to see who has it, whether it can be stolen, the success rate, the amount per attempt and the karma penalty; theft and demand are split. The gallery covers 1685 NPCs by where they are, how they feel about you and what you can do; safe-to-kill + present avoids reputation loss.
+[*][b]"How many stages left? Nobody tells me"[/b] - Joy house: 3 parts x 6 stages for each NPC, sorted by progress so you see who is nearly done and who never moved in; the 18-touches achievement merges every stage ever obtained across all saves of that character.
+[*][b]"Which memoria can I still get this month?"[/b] - Memoria: 187 entries, 37 characters and 62 bond types in four groups, each marked collected, viewed or not-yet-bonded with its date, searchable by name or text.
+[*][b]"Who can I still interact with this month?"[/b] - Exploration: this month's NPC special interactions with rewards and stamina cost in one list, so who is left is obvious.
+[*][b]"Who do I sell to, and how much do I bid?"[/b] - Stone gambling: quality, crack/bloom progress and estimate per stone; odds by quality with price bands, buyer offers and shelf locations. Auction: lots by venue with start price, reference value and a suggested cap from profit margin, plus filters for worthwhile lots (1.2x+), chests and finale lots.
+[*][b]"Is my loadout any good, what am I missing?"[/b] - Passives and arts: top issues and idle resources first, filter by sect, element and realm, compare arts side by side; the Build tab tests the real rules, Plan A fills gaps with what you own and Plan B turns gaps into acquisition steps. Forging: embryo and material gaps, wash pity, all 78 embryos with board layouts and tier gates.
+[*][b]"How much contribution and reputation left?"[/b] - Sect: current rank and the reputation and realm gap to the next one, salary and task cap, this period's tasks split into to-submit, in-progress and board offers, 23 scripture-pavilion exchanges simulatable. Towns: 8 towns sorted by tier-up potential, and a route list that merges commissions by location and totals materials.
+[*][b]"Will it break when the game updates?"[/b] - It reads the current game configuration first, so most content updates need no tool update.
 [/list]
 
 [h2]v2.4.0[/h2]
 [list]
-[*][b]Realm page redesign[/b]: realm, EXP and target in one view; pick up to 5 auxiliaries with live success rate.
-[*][b]Material codex[/b]: official routes, quests, monster spawns, auction, tournament and world boss.
-[*][b]Joy House[/b]: the 18-touches achievement merges every segment ever obtained across saves.
-[*][b]Ending requirements[/b]: conditions sit beside each ending and are checked live with ✓/✗.
-[*][b]Audit & English[/b]: quests, encounters and romance rechecked; English labels filled; F8 removed.
-[*][b]Quality of life[/b]: character pinning, faster sync, installer opens the browser version.
-[*]On v2.3.0+ no reinstall needed; updates sync automatically.
+[*][b]Realm page redesign[/b]: realm, EXP and target in one view; auxiliaries with a live success rate.
+[*][b]Material codex[/b]: official, quest, monster and auction sources for stage, realm and auxiliary materials.
+[*][b]Joy house by history[/b]: the 18-touches achievement merges segments across all saves.
+[*][b]Ending requirements[/b]: shown beside each ending and checked live.
+[*][b]Audit and English[/b]: quests, encounters and romance rechecked; leftover Chinese labels filled in; F8 removed.
+[*][b]Quality of life[/b]: real character pinning, faster sync, the browser version opens after install.
+[*]On v2.3.0 or newer, no reinstall is needed - updates sync automatically.
 [/list]
 
-[h2]Install[/h2]
+[h2]Install (in order)[/h2]
 [list]
 [*]1. Subscribe to this item and wait for the download to finish.
 [*]2. [b]Fully close the game[/b] (including background processes).
-[*]3. Open the workshop folder: `Steam\steamapps\workshop\content\4209920\3839624741` (4209920 is the AppID of the game, 3839624741 is this item's ID). The folder contains 「一键安装.bat」; run it and confirm your game directory.
+[*]3. Workshop folder: `Steam\steamapps\workshop\content\4209920\3839624741`. Run 「一键安装.bat」 and confirm your game directory.
 [*]4. The script self-checks each step; continue only when everything shows ✓.
-[*]5. Stay on the main menu for about 20 seconds so the plugin can export a save copy. The first launch generates interop files and may take 1-3 minutes with no visible progress; this is normal, do not close the game.
-[*]6. Press [b]F3[/b] in-game to open the panel (the first open shows 「Loading save」 and switches automatically once ready). You no longer need to double-click 「仙友助手.exe」.
+[*]5. Start the game and stay on the main menu for about 20 seconds so the plugin can export a save copy.
+[*]6. Press [b]F3[/b] in-game (the first open shows 「Loading save」 and switches automatically once ready). You can also double-click 仙友助手.exe for the browser version.
 [/list]
 
 [h2]FAQ[/h2]
 [list]
-[*][b]Where is the workshop folder?[/b] `Steam\steamapps\workshop\content\4209920\3839624741`. You can also right-click the game in your Steam library, choose Manage > Browse local files, then go to `..\..\workshop\content\4209920\3839624741`.
-[*][b]Which save does it read?[/b] The newest save of each character by default. To inspect another save, save it again in-game so it becomes the newest one; you can also pin a save in 「功能设置.bat」.
-[*][b]No BepInEx\decrypted folder?[/b] The plugin did not load. Fully close the game and run 「一键安装.bat」 again; check that every self-check shows ✓.
+[*][b]Where is the workshop folder?[/b] `Steam\steamapps\workshop\content\4209920\3839624741`, or right-click the game in Steam, Manage > Browse local files. Look for 一键安装.bat inside.
+[*][b]No BepInEx\decrypted folder?[/b] The plugin did not load. Fully close the game, run 「一键安装.bat」 again and check that every self-check shows ✓.
 [*][b]Does it conflict with other BepInEx plugins?[/b] The installer only adds this tool's plugin and leaves the BepInEx core untouched.
-[*][b]No data in the tool?[/b] Let the game run for 15-20 seconds so the save copy can be exported; click "Sync now" in the top bar.
-[*][b]F3 does nothing / updating from an old version?[/b] On v2.2.0 or older, close the game and run 「一键安装.bat」 one last time; v2.3.0 and later update automatically. Close any other software that grabs F3.
-[*][b]Steam download failed / no response after update?[/b] Fully exit the game and helper, then verify the game files. If it still fails, unsubscribe, restart Steam and subscribe again. The plugin verifies the workshop EXE and keeps the old version if the download is incomplete.
-[*][b]How do I update?[/b] v2.2.0 and older: close the game and run 「一键安装.bat」 once. v2.3.0 and newer: nothing to do — updates sync on the next game launch.
-[*][b]Uninstall[/b]: close the game, delete BepInEx\plugins\SaveDecryptProbe and BepInEx\仙友助手, then unsubscribe. Optionally delete BepInEx\decrypted and %LOCALAPPDATA%\WorldApartTouchProgress.
+[*][b]Which save does it read?[/b] The newest save of each character by default. To inspect another one, save it again in-game; or pin a save in 「功能设置.bat」.
+[*][b]No data in the tool?[/b] The save copy is exported 15-20 seconds after the game starts; click "Sync now" in the top bar to refresh at once.
+[*][b]F3 does nothing / updating from an old version?[/b] On v2.2.0 or older, close the game and run 「一键安装.bat」 one last time; v2.3.0 and later update automatically. Close anything else holding F3.
+[*][b]Steam download failed / no response after update?[/b] Fully exit the game and the helper, then verify the game files. If it still fails, unsubscribe, restart Steam and subscribe again. The plugin verifies the workshop EXE and keeps the old version if the download is incomplete.
 [/list]
 
 [h2]Notes[/h2]
 [list]
-[*]Only the exported save copy is read; game saves are never modified.
-[*]Since v2.2 the panel starts with the game; press F3 to open it. You can still double-click 「仙友助手.exe」 to view it in a browser.
+[*]Only the exported save copy is read; saves are never written.
 [*]Data refreshes every 10 seconds; click "Sync now" in the top bar to refresh immediately.
-[*]「功能设置.bat」 lets you enable or disable each module separately.
-[*]The BepInEx console window stays closed by default; logs are still written to BepInEx\LogOutput.log. Set [Logging.Console] Enabled back to true in BepInEx.cfg when troubleshooting.
-[*]Uninstall: delete BepInEx\plugins\SaveDecryptProbe and BepInEx\仙友助手 from your game folder, then unsubscribe. Optionally delete BepInEx\decrypted and %LOCALAPPDATA%\WorldApartTouchProgress.
+[*]「功能设置.bat」 lets you enable or disable each of the 17 modules separately.
+[*]The BepInEx console stays closed by default; logs go to BepInEx\LogOutput.log.
+[*]Uninstall: close the game, delete BepInEx\plugins\SaveDecryptProbe and BepInEx\仙友助手, then unsubscribe. Optionally delete BepInEx\decrypted and %LOCALAPPDATA%\WorldApartTouchProgress.
 [/list]
 
-If something does not work, please leave a comment with your game version and a screenshot.
+If something does not work, leave a comment with your game version and a screenshot.

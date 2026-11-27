@@ -244,11 +244,13 @@ color:var(--text);font-size:13px}
 .hongchen-node.s-skipped{border-left-color:var(--btn-border-hover);border-left-style:dashed;background:var(--surface-alt)}
 .hongchen-node.s-skipped .hongchen-nname{color:var(--info-text)}
 .hongchen-node.s-skipped .hongchen-desc{color:var(--text-faint)}
-.hongchen-node.s-skipped .hongchen-id{color:#5f6774}
+.hongchen-node.s-skipped .hongchen-ringtag{color:var(--text-faint)}
 .hongchen-node.sel{outline:1px solid var(--hongchen-accent,var(--hc-accent));outline-offset:1px;background:var(--btn-bg)}
 .hongchen-node.dim{opacity:.26;filter:saturate(.5)}
 .hongchen-node-top{display:flex;align-items:center;justify-content:space-between;gap:6px}
-.hongchen-id{color:var(--text-faint);font-size:10px;font-variant-numeric:tabular-nums}
+/* 「珍稀奖励」只标紫色以上，靠右贴着状态；不占一行，避免节点变高。 */
+.hongchen-hitag{flex:none;margin-left:auto;font-size:10px;line-height:1.5;padding:0 5px;border-radius:6px;
+ color:var(--tier-fg,var(--hc-gold-soft));background:var(--tier-bg,var(--gold-bg));border:1px solid transparent}
 .hongchen-status{font-size:10px;padding:1px 6px;border-radius:6px;background:var(--surface-raised);color:var(--text-dim);white-space:nowrap}
 .s-done .hongchen-status{background:var(--accent-bg);color:var(--hc-green-light)}.s-doing .hongchen-status{background:var(--btn-hover);color:var(--hc-blue-light)}
 .s-ready .hongchen-status{background:#3b3220;color:var(--hc-gold-soft)}.s-unpicked .hongchen-status{background:var(--surface-raised);color:var(--hc-purple-light)}
@@ -314,6 +316,13 @@ color:var(--text);font-size:13px}
 .hongchen-igates{display:flex;align-items:flex-start;gap:7px;flex-wrap:wrap;margin-top:11px;padding-top:10px;border-top:1px dashed var(--border-subtle)}
 .hongchen-igates>b{color:var(--text-faint);font-size:11px;font-weight:500;flex:0 0 56px;padding-top:2px}
 .hongchen-igates .hongchen-badge{font-size:11px;padding:3px 8px}
+/* 奖励：物品按品质上色（f0~f5 复用全局色阶），探索属性经验单独一档灰色 */
+.hongchen-ireward{display:flex;align-items:flex-start;gap:7px;margin-top:11px;padding-top:10px;border-top:1px dashed var(--border-subtle)}
+.hongchen-ireward>b{color:var(--text-faint);font-size:11px;font-weight:500;flex:0 0 56px;padding-top:2px}
+.hongchen-rws{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
+.hongchen-rw{font-size:11px;line-height:1.6;padding:1px 7px;border-radius:6px;white-space:nowrap;
+ color:var(--tier-fg,var(--text-soft));background:var(--tier-bg,var(--surface-soft));border:1px solid var(--border-subtle)}
+.hongchen-rw.more,.hongchen-rw.attr{color:var(--text-muted);background:var(--surface-soft)}
 .hongchen-hint{margin-top:12px;font-size:11px;color:var(--text-faint);text-align:center}
 .hongchen-empty{background:var(--surface);border:1px dashed var(--border-subtle);border-radius:12px;padding:28px;text-align:center;color:var(--text-muted);font-size:13px;margin-top:14px}
 
