@@ -72,6 +72,26 @@ function nodeOptions(q){
     +'</div>';
 }
 
+// 奖励：物品按品质上色，探索属性经验单独一档；没有奖励就不写这一行（不补默认值）。
+function rewardChips(q,limit){
+  const items=(q.rewards||[]).filter(x=>x&&x.name);
+  const attrs=(q.attr_gain||[]).filter(x=>x&&x.name);
+  if(!items.length&&!attrs.length)return '';
+  const cap=limit||4,out=[];
+  items.slice(0,cap).forEach(x=>{
+    const num=(x.min===x.max)?x.min:(x.min+'-'+x.max);
+    const tip=[(x.sources||[]).join('/'),x.name+(num?'×'+num:'')].filter(Boolean).join(' · ');
+    out.push('<span class="hongchen-rw '+qClass(x.quality,'f')+'" title="'+esc(tip)+'">'+esc(x.name)+'×'+num+'</span>');
+  });
+  if(items.length>cap)out.push('<span class="hongchen-rw more">+'+(items.length-cap)+'</span>');
+  attrs.forEach(a=>out.push('<span class="hongchen-rw attr">'+esc(a.name)+' +'+a.value+'</span>'));
+  return out.join('');
+}
+function hasHiReward(q){
+  return (q.rewards||[]).some(x=>x&&!isStone(x)&&(parseInt(x.quality,10)||0)>=3);
+}
+function isStone(x){return x&&x.name==='灵石'}
+
 function nodeHtml(q,map,step){
   const st=statusOf(q.status_cls);
   const dim=isDim(q)?' dim':'';
@@ -85,8 +105,9 @@ function nodeHtml(q,map,step){
   if((q.status_cls==='unpicked'||q.status_cls==='skipped')&&q.fail_text)
     note='<div class="hongchen-node-note">'+esc(q.fail_text)+'</div>';
   return '<div class="hongchen-node '+st.cls+dim+sel+'" data-qid="'+q.id+'" data-ring="'+ringOf(q)+'" title="'+esc(q.desc||q.name)+'">'
-    +'<div class="hongchen-node-top"><span class="hongchen-id">#'+q.id+'</span>'
+    +'<div class="hongchen-node-top">'
     +'<span class="hongchen-ringtag">'+(step?'第 '+step+' 步':'第 '+ringOf(q)+' 环')+'</span>'
+    +(hasHiReward(q)?'<span class="hongchen-hitag" title="这一步有紫色及以上品质的奖励">珍稀奖励</span>':'')
     // 未开始的任务不写状态字，避免一屏全是「未开始」；状态仍靠颜色区分。
     +'<span class="hongchen-status">'+(q.status_cls==='notstarted'?'':st.label)+'</span></div>'
     +'<div class="hongchen-nname">'+esc(q.name)+'</div>'
@@ -303,9 +324,11 @@ function triggerHtml(q,line){
   const map=byId(line);
   const src=Number(q.acq_source||0);
   const giver=(q.giver&&q.giver.name)||'';
-  const byNpc=(src===1)||(src!==2&&!!giver);
-  const way=byNpc?(giver?('与「'+giver+'」对话接取'):'与剧情人物对话接取')
-                 :'自动触发（剧情推进时出现）';
+  // 「对话接取」只认 acqSource=1；其余是剧情触发，但知道是谁的线时要点名，
+  // 否则满屏「自动触发」玩家不知道该推进哪个人。
+  const way=src===1
+    ?(giver?('与「'+giver+'」对话接取'):'与剧情人物对话接取')
+    :(giver?('随「'+giver+'」的剧情推进自动出现'):'随剧情推进自动出现（没有接取入口）');
   let prevHtml='';
   if(q.prev){
     const p=map[q.prev];
@@ -323,7 +346,7 @@ function triggerHtml(q,line){
 }
 
 function inspectHtml(q,line){
-  const st=statusOf(q.status_cls), map=byId(line);
+  const st=statusOf(q.status_cls), map=byId(line), rw=rewardChips(q,8);
   const gates=[];
   (q.gate_checks||[]).forEach(c=>{if(c&&c.text)gates.push(c)});
   if(!gates.length)(q.gates||[]).forEach(g=>{if(g&&g.text)gates.push({text:g.text,need:0})});
@@ -341,11 +364,12 @@ function inspectHtml(q,line){
       ?'<div class="hongchen-inspect-note is-skipped">这条分支在本档已跳过：它与同线其它任务没有关联，且剧情已经推进到更后面的环，游戏里不会再出现。</div>'
       :(q.status_cls==='notstarted'?'<div class="hongchen-inspect-note">前置剧情还没走到，先推进前面的任务吧。</div>':''));
   return '<div class="hongchen-inspect"><div class="hongchen-inspect-title">'
-    +'<span class="hongchen-id">#'+q.id+'</span>'+esc(q.name)
+    +esc(q.name)
     +'<span class="hongchen-status '+st.cls+'">'+st.label+'</span></div>'
     +triggerHtml(q,line)
     +(q.desc?'<p class="hongchen-inspect-desc">'+esc(q.desc)+'</p>':'')
     +notice
+    +(rw?'<div class="hongchen-ireward"><b>奖励</b><div class="hongchen-rws">'+rw+'</div></div>':'')
     +'<div class="hongchen-inspect-grid">'
 
     +'<div class="hongchen-ir"><b>前置</b><span>'+(q.prev&&map[q.prev]?esc(map[q.prev].name):'无（起点）')+'</span></div>'

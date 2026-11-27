@@ -60,6 +60,108 @@ def _table_rows(table):
     return _rows(table)
 
 
+def _drop_items(drops, drop_id, depth=0):
+    """奖励包 -> [(物品, 最少, 最多)]。奖励包可以嵌套子奖励包，最多跟三层。"""
+    out = []
+    drop = drops.get(str(_int(drop_id)))
+    if not drop or depth > 3:
+        return out
+    for variant in drop.get("variants") or []:
+        if not isinstance(variant, dict):
+            continue
+        for entry in variant.get("dropList") or []:
+            if not isinstance(entry, dict):
+                continue
+            item_id = _int(entry.get("itemId"))
+            if not item_id:
+                continue
+            low = _int(entry.get("itemCountMin"), 1)
+            high = _int(entry.get("itemCountMax"), low)
+            out.append((item_id, low, high))
+        for child in variant.get("rewardDropList") or []:
+            if not isinstance(child, dict):
+                continue
+            child_id = _int(child.get("rewardDropId"))
+            if child_id:
+                out.extend(_drop_items(drops, child_id, depth + 1))
+    return out
+
+
+def _flow_rewards(flows, start):
+    """顺着流水 nextIds 取出奖励包 / 物品 / 探索属性，认清「提交后到底给了什么」。"""
+    drops, items_got, attrs = [], [], []
+    seen, queue = set(), [_int(start)]
+    while queue and len(seen) < 80:
+        flow_id = queue.pop(0)
+        if not flow_id or flow_id in seen:
+            continue
+        seen.add(flow_id)
+        flow = flows.get(flow_id) or {}
+        name, index, args = _call_parts(flow.get("action"))
+        method = index or name or ""
+        values = list(_const_args(args))
+        if method == "获得奖励" and values:
+            drops.append(_int(values[0]))
+        elif method == "获取物品" and len(values) >= 2:
+            items_got.append((_int(values[0]), _int(values[1], 1)))
+        elif method == "增加玩家探索属性" and len(values) >= 2:
+            attrs.append((_int(values[0]), _int(values[1])))
+        for nxt in flow.get("nextIds") or []:
+            queue.append(_int(nxt))
+    return drops, items_got, attrs
+
+
+def _quest_rewards(row, items, drops, flows):
+    """一条红尘任务的产出：物品（提交/阶段/剧情）+ 探索属性经验。
+
+    同一件物品可能同时来自奖励包和流水，按 id 合并数量，来源只记一次。
+    """
+    slots, order = {}, []
+
+    def add(item_id, low, high, source):
+        key = str(item_id)
+        slot = slots.get(key)
+        if slot is None:
+            info = items.get(item_id) or {}
+            slot = {"item": item_id, "name": info.get("name") or "未识别物品",
+                    "quality": _int(info.get("quality")), "min": 0, "max": 0, "sources": []}
+            slots[key] = slot
+            order.append(slot)
+        slot["min"] += max(0, _int(low))
+        slot["max"] += max(0, _int(high if high not in (None, "") else low))
+        if source not in slot["sources"]:
+            slot["sources"].append(source)
+
+    def add_drop(drop_id, source):
+        for item_id, low, high in _drop_items(drops, drop_id):
+            add(item_id, low, high, source)
+
+    if _int(row.get("rewardId")):
+        add_drop(row["rewardId"], "提交")
+    for obj in row.get("objectives") or []:
+        if isinstance(obj, dict) and _int(obj.get("rewardId")):
+            add_drop(obj["rewardId"], "阶段")
+
+    attrs = []
+    for field in ("questSubmitFlowId", "questAcqFlowId"):
+        flow_id = _int(row.get(field))
+        if not flow_id:
+            continue
+        drop_ids, got_items, got_attrs = _flow_rewards(flows, flow_id)
+        for drop_id in drop_ids:
+            add_drop(drop_id, "剧情")
+        for item_id, count in got_items:
+            add(item_id, count, count, "剧情")
+        attrs.extend(got_attrs)
+
+    attr_gain = []
+    for attr_id, value in attrs:
+        name = _ATTR_NAMES.get(str(attr_id)) or ""
+        if name and _int(value):
+            attr_gain.append({"name": name, "value": _int(value)})
+    return order, attr_gain
+
+
 def _space_index(tables):
     """tbspace -> {spaceId: "父地点 / 子地点"}，供 scan 按存档实时位置查女主在哪。"""
     out = {}
@@ -641,6 +743,26 @@ def build_hongchen(tables):
     phase_names = _build_phase_names(tables)
     layer_phases = _build_layer_phases(tables)
 
+    # 奖励：任务提交后给什么，是玩家判断「值不值得走这条线」的关键信息。
+    # 数据只在 tbrewarddrop / tbitem / tbgameactionflow 里，缺名称时降级「未识别物品」。
+    drops = {str(_int(r.get("id"))): r for r in _rows(tables.get("tbrewarddrop"))
+             if isinstance(r, dict) and r.get("id") is not None}
+    flows = {_int(r.get("id")): r for r in _rows(tables.get("tbgameactionflow"))
+             if isinstance(r, dict) and r.get("id") is not None}
+    item_type_names = {}
+    for row in _rows(tables.get("tbitemtype")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            item_type_names[str(_int(row["id"]))] = _text(row.get("typeName")) or _text(row.get("name")) or ""
+    items = {}
+    for row in _rows(tables.get("tbitem")):
+        if isinstance(row, dict) and row.get("id") is not None:
+            items[_int(row["id"])] = {
+                "name": _text(row.get("itemName")) or "未识别物品",
+                "quality": _int(row.get("quality")),
+                "type": item_type_names.get(str(_int(row.get("itemType"))), ""),
+                "price": _int(row.get("price")),
+            }
+
     # 对话按 id 汇总（同一段剧情分散在多个 subId 行）。
     options_by_dialogue, acq_gates, dialogue_targets = {}, {}, {}
     dialogue_ids = set()
@@ -739,6 +861,7 @@ def build_hongchen(tables):
             qname = _plain(row.get("name")) or ""
             if row.get("hidden") and re.search(r"接取门槛|Acceptance Requirements", qname):
                 continue
+            rewards, attr_gain = _quest_rewards(row, items, drops, flows)
             line_quests.append({
                 "id": qid,
                 "name": _plain(row.get("name")) or ("红尘 %s" % qid),
@@ -750,6 +873,7 @@ def build_hongchen(tables):
                 "acq_source": _int(row.get("acqSource")),
                 "giver": {"id": giver_id, "name": npcs.get(giver_id, {}).get("name", "")} if giver_id else None,
                 "gates": gates, "options": options,
+                "rewards": rewards, "attr_gain": attr_gain,
             })
         by_id = {q["id"]: q for q in line_quests}
 
@@ -955,12 +1079,14 @@ def build_hongchen(tables):
                           "member_next": d.get("member_next") or {}, "kind": d["kind"]}
                          for d in branch_defs],
             "stats": {"total": len(line_quests),
+                      "with_rewards": sum(1 for q in line_quests if q["rewards"] or q["attr_gain"]),
                       "with_gates": sum(1 for q in line_quests if q["gates"] or q["options"])},
         })
         all_quests.extend(line_quests)
 
     stats = {
         "lines": len(lines), "quests": len(all_quests),
+        "with_rewards": sum(1 for q in all_quests if q["rewards"] or q["attr_gain"]),
         "with_gates": sum(1 for q in all_quests if q["gates"] or q["options"]),
         "gates": sum(len(q["gates"]) + sum(1 for o in q["options"] if o["gate"])
                      for q in all_quests),

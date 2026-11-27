@@ -653,6 +653,8 @@ def scan(obj, meta_obj, state=None):
                 "gates": quest.get("gates") or [],
                 "gate_checks": gate_checks,
                 "options": options,
+                "rewards": quest.get("rewards") or [],
+                "attr_gain": quest.get("attr_gain") or [],
                 "state": code,
                 "accepted": bool(item),
                 "accept_time": _int(item.get("acceptTime")),
