@@ -206,8 +206,13 @@ function npcPass(row,npcQ){
  if(npcQ&&!((row.who+' '+(row.realm||'')).toLowerCase().includes(npcQ)))return false;
  return true;
 }
+/* 搜物品不只按名字：不知道名字时按功效/类型找（规范第七节要求名字搜索配一条功效路径）。 */
+function itemHay(t){
+ return [t.name,t.type,t.effect,t.desc,(t.tags||[]).join(' '),t.element_name]
+   .map(v=>String(v||'')).join(' ').toLowerCase();
+}
 function itemPass(iid,t,row,v,q){
- if(q&&!String(t.name).toLowerCase().includes(q))return false;
+ if(q&&itemHay(t).indexOf(q)<0)return false;
  if(itemFilters.type&&(t.type||'未分类')!==(itemFilters.type==='__none__'?'未分类':itemFilters.type))return false;
  if(itemFilters.quality==='__unknown__'&&t.quality!=null)return false;
  if(itemFilters.quality&&itemFilters.quality!=='__unknown__'&&String(t.quality??'')!==itemFilters.quality)return false;
@@ -392,7 +397,7 @@ function initItems(){
     <button type="button" class="viewbtn" id="iview-npc" data-view="npc">按 NPC 看</button>
    </div>
    <div class="search-fields">
-    <label class="search-field"><span>找物品</span><input id="iq" placeholder="输入物品名称" value="${esc(itemFilters.q)}"></label>
+    <label class="search-field"><span>找物品</span><input id="iq" placeholder="不知道名字也行：搜物品名、功效或类型，例如 回复气血 / 药材" value="${esc(itemFilters.q)}"></label>
     <label class="search-field"><span>找 NPC（可选）</span><input id="inpc" placeholder="输入 NPC 名称，与物品条件叠加" value="${esc(itemFilters.npc)}"></label>
    </div>
   </div>
