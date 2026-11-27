@@ -526,12 +526,29 @@ def _gate_from_condition(cond_row, npcs, grey_text="", quest_names=None, cond_op
     return gate
 
 
+_FEMALE_LINE = re.compile(r"女主\s*[-－—~～]\s*(.+?)\s*支线")
+
+
 def _character_of_group(group):
-    m = re.search(r"女主\s*[-－—~～]\s*(.+?)\s*支线", str(group or ""))
+    m = _FEMALE_LINE.search(str(group or ""))
     if m:
         return m.group(1).strip()
     text = re.sub(r"^(女主|红线|情缘)\s*[-－—]?\s*", "", str(group or ""))
     return re.sub(r"支线\s*$", "", text).strip() or str(group or "未分组")
+
+
+def _is_role_line(group, group_rows):
+    """这组红尘任务该不该当成一条角色线。
+
+    红尘类型里混着不带支线分组的隐藏引导任务（例：81011「乌茉来讯」，
+    taskGroup 为空、hidden=true，只是请玩家路过客栈时去歇脚）。按分组硬建线
+    会凭空长出一张只有 1 个隐藏节点的角色卡，把 NPC 当成女主展示。
+    有正式支线分组名的照常保留；没分组名时，组内只要还有可见任务也保留，
+    这样策划换命名方式或新增未分组的真实支线仍会自动出现。
+    """
+    if _FEMALE_LINE.search(str(group or "")):
+        return True
+    return any(not row.get("hidden") for row in group_rows)
 
 
 def _line_npc(group, quests, npcs):
@@ -684,7 +701,9 @@ def build_hongchen(tables):
 
     all_quests, lines = [], []
     line_colors = ["#c9866b", "#9a7bb0", "#b08a5a", "#6f9fa0", "#c2727f", "#7f95c0"]
-    for group_index, (group, group_rows) in enumerate(sorted(grouped.items())):
+    line_groups = [(group, group_rows) for group, group_rows in sorted(grouped.items())
+                   if _is_role_line(group, group_rows)]
+    for group_index, (group, group_rows) in enumerate(line_groups):
         npc_id, character = _line_npc(group, group_rows, npcs)
         npc_info = npcs.get(npc_id) or {}
         # 分组名是策划写的中文（如「慕云栖」），显示名优先用 NPC 表里的当前语言名。

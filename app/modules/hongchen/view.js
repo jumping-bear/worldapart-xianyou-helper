@@ -432,7 +432,7 @@ function render(host,stats){
   }).join('');
   const line=LINES.filter(l=>l.group===OPEN)[0];
   host.innerHTML='<div class="hongchen-root">'
-    +'<div class="hongchen-head"><div><div class="hongchen-title">红尘 · 六段情缘</div>'
+    +'<div class="hongchen-head"><div><div class="hongchen-title">红尘 · '+stats.lines+' 段情缘</div>'
     +'<div class="hongchen-sub">'+stats.quests+' 段任务 · '+stats.lines+' 条角色线 · 展开某人按顺序看完整条线</div></div>'
     +'<div class="hongchen-legend">'
     +'<span><i class="hongchen-dot s-done"></i>已完成</span><span><i class="hongchen-dot s-doing"></i>进行中</span>'
