@@ -1,15 +1,15 @@
 /* 仙居楼互动：仙友头像列。 */
 .bedwho{display:flex;align-items:center;gap:9px}
-.bed-avatar{width:36px;height:36px;border-radius:50%;background:#243430;border:1px solid #3a5f4f;color:#bfe8d3;display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;flex:none;position:relative;overflow:hidden}
+.bed-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-bg);border:1px solid var(--ok-border);color:var(--ok-pale);display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;flex:none;position:relative;overflow:hidden}
 .bed-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .bed-avatar.has-img{background:var(--surface-alt)}
 /* 6 段进度块：实心＝已获得，空心＝还缺 */
 .bed-controls{margin:0 0 12px}
-.bseg{width:16px;height:16px;border-radius:6px;display:inline-block;background:transparent;border:1px solid #46505f}
-.bseg.on{background:#2f9e6b;border-color:var(--ok)}
-.bseg.miss{background:var(--surface-soft);border-color:#3a424e}
-.part .pl em{font-style:normal;color:#6f7787;font-size:11px;margin-left:6px}
-tr.full-row td:first-child{box-shadow:inset 2px 0 0 #2f9e6b}
+.bseg{width:16px;height:16px;border-radius:6px;display:inline-block;background:transparent;border:1px solid var(--info-border)}
+.bseg.on{background:var(--ok-solid);border-color:var(--ok)}
+.bseg.miss{background:var(--surface-soft);border-color:var(--btn-border)}
+.part .pl em{font-style:normal;color:var(--text-faint);font-size:11px;margin-left:6px}
+tr.full-row td:first-child{box-shadow:inset 2px 0 0 var(--ok-solid)}
 
 /* 三列固定宽度：不同仙友的部位名不一样（脸/腰/足 vs 脸/足/腿），固定列位才不会一列一列歪。 */
 tr.row .parts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 18px}

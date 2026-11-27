@@ -7,28 +7,28 @@
 .pill-detail .dh-title{flex:1;min-width:0}
 .pill-detail .dh-title b{font-size:15px}
 .pill-detail .dh-title .muted{display:block;font-size:11px;margin-top:2px}
-.pill-detail .dh-meta{color:#6f7787;font-size:11px;margin-top:4px}
+.pill-detail .dh-meta{color:var(--text-faint);font-size:11px;margin-top:4px}
 
 /* 空状态三步引导：用颜色与序号引导，不堆文字 */
 .pill-hint{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:52px}
 .pill-hint .hstep{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:12px;padding:6px 11px;font-size:12px;color:var(--text-soft)}
 .pill-hint .hstep i{width:18px;height:18px;border-radius:50%;background:var(--c);color:var(--bg);font-style:normal;font-weight:700;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
 .pill-hint .hstep b{font-weight:600}
-.pill-hint em{color:#6f7787;font-style:normal}
+.pill-hint em{color:var(--text-faint);font-style:normal}
 
 /* 传送路线步骤：每步一行，名称 + 坐标 + 妖丹消耗徽章 */
 .route-steps{flex-direction:column;align-items:stretch;gap:6px}
 .route-steps .route-head{color:var(--text-muted);margin-bottom:2px}
 .route-steps .route-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 10px;border-radius:12px}
 .route-steps .ri-step{flex:none;width:18px;height:18px;border-radius:50%;background:var(--accent-bg);color:var(--ok-text);font-style:normal;font-weight:700;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
-.route-steps .ri-name{color:#dfe6ef;font-weight:600;font-size:12px}
-.route-steps .ri-coord{margin-left:auto;color:#6f7787;font-size:10px;font-style:normal}
+.route-steps .ri-name{color:var(--text);font-weight:600;font-size:12px}
+.route-steps .ri-coord{margin-left:auto;color:var(--text-faint);font-size:10px;font-style:normal}
 .ri-cost{flex:none;font-style:normal;font-size:11px;padding:2px 9px;border-radius:12px;white-space:nowrap}
-.ri-cost.has{background:#3a2f1e;border:1px solid #5a4a2e;color:#ffd98a}
+.ri-cost.has{background:#3a2f1e;border:1px solid var(--gold-line);color:#ffd98a}
 .ri-cost.free{background:var(--surface-soft);border:1px solid var(--border-subtle);color:var(--text-faint)}
 
 /* 传送口直接点开时的妖丹徽章 */
-.portal-cost{display:flex;align-items:center;gap:8px;margin-top:6px;color:#a8b3c1;font-size:11px}
+.portal-cost{display:flex;align-items:center;gap:8px;margin-top:6px;color:var(--info-text);font-size:11px}
 
 /* 传送口：更大视觉 + 更大命中热区 */
 .poi-dot.poi-portal{stroke-width:.7;stroke:var(--bg)}
@@ -38,10 +38,10 @@
 /* 图例分组：拾取对象 / 五行丹方 / 地形 三行 */
 .pill-legend{flex-direction:column;gap:7px;align-items:stretch}
 .pill-legend .lg{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.pill-legend .lg-t{color:#5d6675;font-size:10px;letter-spacing:.5px;min-width:52px}
+.pill-legend .lg-t{color:var(--btn-border-hover);font-size:10px;letter-spacing:.5px;min-width:52px}
 
 /* 搜索框醒目 */
-.pill-search{border-color:#3a4a5f}
+.pill-search{border-color:var(--info-border)}
 .pill-search:focus{border-color:#55c78b;box-shadow:0 0 0 3px rgba(85,199,139,.18)}
 .pill-search::placeholder{color:#667182}
 /* 搜索前置：最高频入口放首屏，命中列表紧随其后 */

@@ -93,6 +93,20 @@ color-scheme:dark;
 --info-bg:#18202b;
 --info-border:#3a4658;
 --info-text:#a9b7c8;
+/* 强调色的强弱档：模块里反复出现的金色高亮、成功、危险、信息、正文强调都从这里取 */
+--gold-strong:#e8c76d;
+--gold-soft:#f0d38a;
+--gold-warm:#ffc987;
+--gold-line:#5a4c2a;
+--ok-strong:#8fd0a9;
+--ok-solid:#2f9e6b;
+--ok-pale:#bfe8d3;
+--danger-strong:#e88b82;
+--danger-line:#6b3a44;
+--info-strong:#a9dbe8;
+--info-line:#2e455c;
+--ink-strong:#d6dee8;
+--ink:#9fb0c4;
 }
 """
 
