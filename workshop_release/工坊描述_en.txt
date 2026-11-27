@@ -1,6 +1,6 @@
 [h1]Xianyou Helper v2.5.0 - Pocket Guide[/h1]
-[b]17 modules, one save file read: where to go, what is left, what is worth it - worked out for you. No game files modified; saves never touched.[/b]
-Read-only save copy · no save editing · English UI supported (switch it in 「功能设置」)
+[b]17 modules, one save file read, green and save-safe: where to go, what is left, what is worth it - worked out for you.[/b]
+English UI supported (switch it in 「功能设置」)
 
 [b]Installation[/b]
 [list]
