@@ -10,7 +10,7 @@ from .scan import enrich, meta, scan, summary
 
 KEY, LABEL = "martial", "心法与功法"
 KEY, LABEL_EN = "martial", "Arts & Manuals"
-ORDER, SELECT, SCHEMA = 70, "latest", 1  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 70, "latest", 2  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "martial_meta.json"
 TABLES = frozenset({
     "tbpassiveskill", "tbskill", "tbskilllevel", "tbitem", "tbsect",

@@ -180,7 +180,7 @@ def build(tables):
                                    _int(row.get("id"))), reverse=True)
         kept.append(rows[0])
         for extra in rows[1:]:
-            excluded.append({"id": _int(extra.get("id")),
+            excluded.append({"name": _text(extra.get("name")) or "未识别心法",
                              "reason": "同名同境界重复，且缺少真意档位/卷册"})
     kept.sort(key=lambda row: (_int(row.get("sect_id")), _int(row.get("skill_tier")),
                                _int(row.get("id"))))
@@ -256,7 +256,7 @@ def build(tables):
     if not arts:
         raise ValueError("功法配置为空（tbskill ability_kind=2 且 sect_id 非空）")
     if missing_intro:
-        warnings.append("说明：%d 本功法不在 tbsectintroskill 中，秘传标记按否展示" % missing_intro)
+        warnings.append("说明：%d 本功法在门派配置里没有标注，秘传标记按「非秘传」显示" % missing_intro)
 
     resonance_rows = [row for row in _rows(tables.get("tbskill"))
                       if isinstance(row, dict) and _int(row.get("ability_kind")) == 3]
@@ -264,6 +264,7 @@ def build(tables):
     for row in resonance_rows:
         by_name.setdefault(_text(row.get("name")), row)
     assigned = {}
+    unmatched_resonance = 0
     for row in _rows(tables.get("tbskill")):
         if not isinstance(row, dict) or not row.get("resonance_npc_id"):
             continue
@@ -271,11 +272,10 @@ def build(tables):
         match = re.search(r"【(.+?)】", des)
         skill = by_name.get(match.group(1)) if match else None
         if not skill:
-            warnings.append("共鸣词条 %s 未能匹配到技能文案" % _int(row.get("id")))
+            unmatched_resonance += 1
             continue
         skill_id = _int(skill.get("id"))
         if skill_id in assigned:
-            warnings.append("共鸣技能 %s 被多个 NPC 引用，已保留首个" % skill_id)
             continue
         assigned[skill_id] = {"npc": _int(row.get("resonance_npc_id")),
                               "tier": _int(row.get("skill_tier"))}
@@ -298,6 +298,8 @@ def build(tables):
         else:
             item.update({"npc": 0, "npc_name": "", "unlock_layer": 0, "source": "unopened"})
         resonance.append(item)
+    if unmatched_resonance:
+        warnings.append("说明：%d 条共鸣词条没能匹配到对应功法，未计入共鸣列表" % unmatched_resonance)
     resonance.sort(key=lambda item: (item["tier"], item["id"]))
     if not resonance:
         warnings.append("未找到共鸣技能（tbskill ability_kind=3）")
