@@ -167,7 +167,7 @@ function initEvent(){
  }
  function eventCard(r,nested){
   const endings=r.endings||[];
-  const got=endings.filter(e=>e.got||e.history_got).length;
+  const got=endings.filter(e=>e.got).length;
   const conds=condSummary(r);
   const branches=nested?[]:(childrenOf[r.id]||[]);
   const os=r.open_status;

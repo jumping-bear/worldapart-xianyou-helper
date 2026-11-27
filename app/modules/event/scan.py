@@ -408,7 +408,7 @@ def scan_event(obj, meta):
         "branches": sum(len(items) for items in children.values()),
         "endings": sum(len(row["endings"]) for row in rows),
         "got_endings": sum(1 for row in rows for ending in row["endings"]
-                           if ending.get("got") or ending.get("history_got")),
+                           if ending.get("got")),
         "granted": sum(len(row["grants"]) for row in rows),
         "reward_items": len(index),
     }
