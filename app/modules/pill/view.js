@@ -78,11 +78,12 @@ function initPill(){
   if(!pillFilter.types.includes('other'))pillFilter.types=pillFilter.types.concat('other');
  }else{PILL_LABELS=PILL_TYPE_LABEL;PILL_GROUPS=PILL_TYPES}
  pillFilter.types=pillFilter.types.filter(k=>PILL_GROUPS[k]);
- const cards=[[`炼丹等级`,`${st.level||0} 级`,`经验 ${st.exp||0}`],
-  [`炉火`,`${st.current_furnace||0} 号炉`,`已解锁 ${st.furnace||0} 座`],
-  [`丹方手记`,`${(st.manual||[]).length} / ${Object.keys(mp.recipes||{}).length} 张`,`最高 ${st.highest_grade||0} 品`],
-  [`盘面拾取点`,`${mp.pois.length} 个`,`已拾取 ${consumed.size}`]]
-  .map(([k,v,s])=>`<div class="card"><div class="k">${esc(k)}</div><div class="v">${esc(v)}<span> ${esc(s)}</span></div></div>`).join('');
+ // 统计卡统一「主值 + 单位 + 次级指标」三段，和支线/宗门/奇遇一套结构。
+ const cards=[[`炼丹等级`,`${st.level||0}`,`级`,`经验 ${st.exp||0}`],
+  [`炉火`,`${st.current_furnace||0}`,`号炉`,`已解锁 ${st.furnace||0} 座`],
+  [`丹方手记`,`${(st.manual||[]).length}`,`/ ${Object.keys(mp.recipes||{}).length} 张`,`最高 ${st.highest_grade||0} 品`],
+  [`盘面拾取点`,`${mp.pois.length}`,`个`,`已拾取 ${consumed.size}`]]
+  .map(([k,v,u,s])=>`<div class="card"><div class="k">${esc(k)}</div><div class="v">${esc(v)}${u?`<span> ${esc(u)}</span>`:''}</div>${s?`<div class="s">${esc(s)}</div>`:''}</div>`).join('');
  // 功效入口：命中数实时统计，0 命中的词不显示
  function effectChips(){
   const recipes=Object.values(mp.recipes||{});

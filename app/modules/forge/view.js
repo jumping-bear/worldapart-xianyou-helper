@@ -23,13 +23,13 @@ function initForge(){
   return '<div class="fgrid" style="grid-template-columns:repeat('+n+',20px)">'+cells+'</div>';
  }
  const cards=[
-  ['炼器等级','Lv'+st.level,st.level_title||''],
-  ['经验',st.exp+' / '+(st.exp_need||'—'),st.exp_need&&st.exp>=st.exp_need?'已达升级线':'继续炼制积累'],
-  ['真火',st.true_fire,'本级基础值'],
-  ['天赋点',st.talent_points,'已解锁 '+(st.unlocked||[]).length+' · 已领悟 '+(st.learned||[]).length],
-  ['最高器契',st.best_score,st.best_tier_name||'—'],
-  ['器胚库存',(st.embryo_total||0)+' 件',(st.embryos||[]).length+' 种'],
- ].map(([k,v,s])=>'<div class="card"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'<span> '+esc(s)+'</span></div></div>').join('');
+  ['炼器等级','Lv'+(st.level||0),'',st.level_title||''],
+  ['经验',st.exp+' / '+(st.exp_need||'—'),'',st.exp_need&&st.exp>=st.exp_need?'已达升级线':'继续炼制积累'],
+  ['真火',st.true_fire,'','本级基础值'],
+  ['天赋点',st.talent_points,'','已解锁 '+(st.unlocked||[]).length+' · 已领悟 '+(st.learned||[]).length],
+  ['最高器契',st.best_score,'',st.best_tier_name||'—'],
+  ['器胚库存',(st.embryo_total||0),'件',(st.embryos||[]).length+' 种'],
+ ].map(([k,v,u,s])=>'<div class="card"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+(u?'<span> '+esc(u)+'</span>':'')+'</div>'+(s?'<div class="s">'+esc(s)+'</div>':'')+'</div>').join('');
  // 分区标题：卡片包裹，区块之间视觉分层
  function fzone(id,title,sub,body){
   return '<details class="fzone" id="'+id+'"><summary class="fzone-head">'+esc(title)+'<span>'+esc(sub)+'</span></summary><div class="fzone-body">'+body+'</div></details>';
@@ -49,7 +49,7 @@ function initForge(){
   return '<tr class="row"><td>'+esc(p.realm_name)+'</td><td>'+esc(p.quality_name)+'：'+p.count+' / '+p.total+'</td>'+
    '<td class="muted">'+(left?'还差 '+left+' 次':'下一次必出')+'</td><td style="width:150px"><div class="bar"><i style="width:'+ratio(p.count,p.total)+'%"></i></div></td></tr>';
  }).join('');
- const elemCards=(st.elements||[]).map(e=>'<div class="card"><div class="k">'+esc(elem(e.element))+'行材料</div><div class="v">'+e.count+' <span>件 · 灵性 '+e.spirit+'</span></div></div>').join('')||'<div class="card"><div class="k">材料</div><div class="v">0 <span>件</span></div></div>';
+ const elemCards=(st.elements||[]).map(e=>'<div class="card"><div class="k">'+esc(elem(e.element))+'行材料</div><div class="v">'+e.count+'<span> 件</span></div><div class="s">灵性 '+e.spirit+'</div></div>').join('')||'<div class="card"><div class="k">材料</div><div class="v">0 <span>件</span></div></div>';
  const matRows=(st.materials||[]).map(r=>'<tr class="row"><td><div class="who fq'+r.quality+'">'+esc(r.name)+'</div><div class="bed">'+esc(elem(r.element))+' · '+esc(realmName(r.realm))+'</div></td>'+
   '<td style="width:56px">×'+r.count+'</td><td style="width:60px">'+r.spirit+'</td><td class="muted">灵性合计 '+(r.count*r.spirit)+'</td></tr>').join('');
  const artRows=(st.artifacts||[]).map(a=>{

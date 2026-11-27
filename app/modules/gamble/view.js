@@ -388,10 +388,10 @@
 
     host.innerHTML = sourceHtml(module) +
       '<div class="gmb-cards">' +
-      '<div class="card"><div class="k">背包璞石</div><div class="v">' + fmt(summary.bag_total) + '<small>未开 ' + fmt(summary.untouched) + '</small></div></div>' +
-      '<div class="card"><div class="k">进行中</div><div class="v">' + fmt(summary.in_progress) + '<small>待刮开/待兑换</small></div></div>' +
-      '<div class="card"><div class="k">已兑换</div><div class="v">' + fmt(summary.exchanged) + '<small>已换成器胚</small></div></div>' +
-      '<div class="card"><div class="k">最高估价</div><div class="v">' + fmt(summary.best_value) + '<small>当前可见估价</small></div></div>' +
+      '<div class="card"><div class="k">背包璞石</div><div class="v">' + fmt(summary.bag_total) + '<span> 块</span></div><div class="s">未开 ' + fmt(summary.untouched) + '</div></div>' +
+      '<div class="card"><div class="k">进行中</div><div class="v">' + fmt(summary.in_progress) + '<span> 块</span></div><div class="s">待刮开 / 待兑换</div></div>' +
+      '<div class="card"><div class="k">已兑换</div><div class="v">' + fmt(summary.exchanged) + '<span> 块</span></div><div class="s">已换成器胚</div></div>' +
+      '<div class="card"><div class="k">最高估价</div><div class="v">' + fmt(summary.best_value) + '</div><div class="s">当前可见估价</div></div>' +
       '</div>' +
       '<div class="gmb-subnav" id="gmb-subnav">' + tabs.map(function (tab) {
         return '<button type="button" class="gmb-tab' + (state.tab === tab.key ? ' on' : '') +
