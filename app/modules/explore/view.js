@@ -118,11 +118,14 @@ function statusHtml(r){
     const active=n(ui.attr)===n(a.id);
     return `<button type="button" class="ex-lvchip${active?' on':''}" data-attr="${n(a.id)}" title="点击只看${esc(a.name)}，再点取消"><b>${esc(a.name)}</b> Lv.${n(a.level)}<i>${expText}</i></button>`;
   }).join('');
+  // 存档里的「精力上限」是基础值，天赋/装备加成后当前值可能超过它；此时只报当前值，不写成 148/140。
+  const staminaText=n(st.max)&&n(st.cur)<=n(st.max)
+    ?`精力 ${fmt(st.cur)}/${fmt(st.max)}`:`精力 ${fmt(st.cur)}`;
   return `<div class="ex-levels">${levels}</div>
    <div class="ex-meta">
     <span>游戏时间 ${n(d.year)} 年 ${n(d.month)} 月 ${n(d.day)} 日</span>
     <span>本月入口 ${fmt(t.entries)} 个（每月刷新，每个 NPC 最多 1 个）· 不在当前世界 ${fmt(t.retired)} 个</span>
-    <span>精力 ${fmt(st.cur)}/${fmt(st.max)}</span>
+    <span>${staminaText}</span>
     <span>委托 ${fmt(t.tasks)} 条 · ${fmt(t.matched_tasks)} 条可顺路</span>
    </div>`;
 }

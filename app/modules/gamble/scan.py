@@ -394,7 +394,7 @@ def enrich(module, meta_obj, state=None):
         if untouched <= 0:
             continue
         bag_rows.append({
-            "item_id": _int(item_id), "name": template.get("name") or ("璞石 %s" % item_id),
+            "item_id": _int(item_id), "name": template.get("name") or "未识别璞石",
             "quality": _int(template.get("quality")), "variant": template.get("variant"),
             "owned": _int(owned), "in_progress": touched, "untouched": untouched,
             "base_price": _int(template.get("base_price")), "stats": template.get("stats"),
@@ -442,6 +442,8 @@ def enrich(module, meta_obj, state=None):
         "reputation": sorted(city_rows.values(), key=lambda row: row["city"]),
         "event_round": event_round,
     }
+    # 视图按 exclusive_item_id 回查物品名，items 必须一起带出，否则专属璞石显示「未识别璞石」。
+    module["items"] = meta_obj.get("items") or {}
     module["templates"] = meta_obj.get("templates") or []
     module["flesh"] = flesh_rows
     module["cracks"] = crack_rows

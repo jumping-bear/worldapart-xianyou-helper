@@ -180,19 +180,19 @@ def _condition_info(condition_id, conditions, spaces):
         if len(ints) >= 2:
             city_id, need = ints[-2], ints[-1]
     city = (spaces.get(str(city_id)) or {}).get("name") or ""
-    text = ("%s声望 ≥ %d" % (city, need)) if city else ("声望 ≥ %d" % need if need else "条件 %s" % condition_id)
+    text = ("%s声望 ≥ %d" % (city, need)) if city else ("声望 ≥ %d" % need if need else "条件未记录")
     return {"id": condition_id, "city_id": city_id, "city": city, "need": need, "text": text}
 
 
 def _prototype_info(proto_id, prototypes, items, realms):
     proto = prototypes.get(str(proto_id)) or {}
     item = items.get(str(proto_id)) or {}
-    name = item.get("name") or _text(proto.get("name")) or ("器胚 %s" % proto_id)
+    name = item.get("name") or _text(proto.get("name")) or "未识别器胚"
     realm_id = _int(item.get("cultivate_realm"))
     slot = _int(proto.get("slot_type"))
     return {
         "id": _int(proto_id), "name": name,
-        "realm": realm_id, "realm_name": realms.get(str(realm_id)) or ("境界%s" % realm_id),
+        "realm": realm_id, "realm_name": realms.get(str(realm_id)) or "未识别境界",
         "slot": slot, "slot_name": SLOT_NAMES.get(str(slot), ""),
     }
 
@@ -207,7 +207,7 @@ def build(tables):
         row = items_raw.get(str(item_id)) or {}
         return {
             "id": _int(item_id),
-            "name": _text(row.get("itemName")) or ("璞石 %s" % item_id),
+            "name": _text(row.get("itemName")) or "未识别璞石",
             "price": _int(row.get("price")),
             "quality": _int(row.get("quality")),
             "cultivate_realm": _int(row.get("cultivateRealm")),
@@ -223,7 +223,7 @@ def build(tables):
         if not isinstance(row, dict) or row.get("id") is None:
             continue
         flesh_rows.append({
-            "id": _int(row.get("id")), "name": _text(row.get("name")) or ("玉肉 %s" % row.get("id")),
+            "id": _int(row.get("id")), "name": _text(row.get("name")) or "未识别玉肉",
             "short_name": _text(row.get("short_name")),
             "base_value": _int(row.get("base_value")),
             "anchor_ratio": round(_num(row.get("anchor_ratio"), 0.8), 4),
@@ -235,7 +235,7 @@ def build(tables):
         if not isinstance(row, dict) or row.get("id") is None:
             continue
         crack_rows.append({
-            "id": _int(row.get("id")), "name": _text(row.get("name")) or ("裂痕 %s" % row.get("id")),
+            "id": _int(row.get("id")), "name": _text(row.get("name")) or "未识别裂痕",
             "base_loss": round(_num(row.get("base_loss")), 4),
         })
     crack_rows.sort(key=lambda row: row["id"])
@@ -245,7 +245,7 @@ def build(tables):
         if not isinstance(row, dict) or row.get("id") is None:
             continue
         bloom_rows.append({
-            "id": _int(row.get("id")), "name": _text(row.get("name")) or ("玉纹 %s" % row.get("id")),
+            "id": _int(row.get("id")), "name": _text(row.get("name")) or "未识别玉纹",
             "rarity": _int(row.get("rarity")),
             "floor_add": round(_num(row.get("floor_add")), 4),
             "ratio_add": round(_num(row.get("ratio_add")), 4),
@@ -278,6 +278,11 @@ def build(tables):
             referenced_items[str(_int(row.get("item_id")))] = item_info(row.get("item_id"))
     for embryo_id in embryo_ids:
         referenced_items[str(embryo_id)] = item_info(embryo_id)
+    # 专属璞石也进物品表，否则页面按 exclusive_item_id 查不到名字。
+    for row in bands:
+        exclusive_id = _int(row.get("exclusive_stone_item_id"))
+        if exclusive_id:
+            referenced_items[str(exclusive_id)] = item_info(exclusive_id)
 
     bands_out = []
     for row in bands:
@@ -290,7 +295,7 @@ def build(tables):
                 embryo["price"] = prices[index]
         bands_out.append({
             "id": _int(row.get("id")),
-            "name": _text(row.get("name")) or ("价格带 %s" % row.get("id")),
+            "name": _text(row.get("name")) or "未识别价格带",
             "qualities": qualities,
             "quality_names": [QUALITY_NAMES[q - 1] if 0 < q <= len(QUALITY_NAMES) else str(q) for q in qualities],
             "exclusive_item_id": _int(row.get("exclusive_stone_item_id")),
@@ -307,7 +312,7 @@ def build(tables):
             continue
         item_id = _int(row.get("item_id"))
         info = referenced_items.get(str(item_id)) or item_info(item_id)
-        name = info.get("name") or ("璞石 %s" % item_id)
+        name = info.get("name") or "未识别璞石"
         family, _, variant = name.partition("·")
         template = {
             "item_id": item_id, "name": name, "family": family.strip(),
@@ -340,7 +345,7 @@ def build(tables):
         base = base_npcs.get(str(npc_id)) or {}
         buyer = buyers.setdefault(npc_id, {
             "id": npc_id,
-            "name": _text(base.get("npcName")) or ("收购商 %s" % npc_id),
+            "name": _text(base.get("npcName")) or "未识别收购商",
             "title": _text(base.get("npcTitle")),
             "offer_min": 100, "offer_max": 100, "variants": 0,
         })

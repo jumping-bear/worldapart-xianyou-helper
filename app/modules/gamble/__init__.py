@@ -5,7 +5,7 @@ from .scan import enrich, meta, post, prepare, scan, summary
 
 KEY, LABEL = "gamble", "赌石"
 KEY, LABEL_EN = "gamble", "Stone Gambling"
-ORDER, SELECT, SCHEMA = 90, "latest", 2  # 模块自有缓存版本，改数据结构时只递增这里
+ORDER, SELECT, SCHEMA = 90, "latest", 3  # 模块自有缓存版本，改数据结构时只递增这里
 SNAPSHOT = "gamble_meta.json"
 TABLES = frozenset({
     "tbgamblestonerawtemplate", "tbgamblestonefleshquality", "tbgamblestonecrack",
