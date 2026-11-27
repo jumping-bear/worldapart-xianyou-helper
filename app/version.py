@@ -8,4 +8,4 @@
 其它位置不要再手抄版本号，统一由 tools/release.py 生成或校验。
 """
 
-VERSION = "2.4.0"
+VERSION = "2.5.0"

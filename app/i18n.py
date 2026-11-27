@@ -239,6 +239,13 @@ EN = {
     "待提交": "Ready to submit", "未接取": "Not accepted", "状态": "State",
     "任务": "Quest", "主线": "Main", "支线": "Side", "红尘": "Romance",
     "隐藏": "Hidden", "委托": "Commission",
+    # ---- 来源/详情里的零散词 ----
+    "提交": "Submit", "剧情": "Story", "对话": "Talk",
+    "炼丹配方": "Alchemy recipe", "可赠予NPC": "Can gift to NPCs",
+    "探索": "Explore", "已故": "Deceased",
+    "仇敌": "Nemesis", "仇人": "Enemy", "世交": "Old friend",
+    "当前配置里没有可获取途径，可能尚未投放":
+        "No obtainable route in the current config; may not be released yet",
     # ---- 境界/阶段/类型 ----
     "炼气期": "Qi Refining", "筑基期": "Foundation", "结丹期": "Golden Core",
     "元婴期": "Nascent Soul", "化神期": "Spirit Transformation",
@@ -252,6 +259,69 @@ EN = {
     "声望": "Reputation", "仙居楼互动": "Joy House", "留影石": "Memoria",
 }
 
+# ---- 界面短文案：JS 里硬编码的按钮/标签/空态，不属于游戏配置 ----
+# 这些是整串词条，运行时由 trText 精确命中；带数字的模板句式放在 output.py 的 TR_FIRST。
+UI_TERMS = {
+    "未识别物品": "Unidentified item", "未识别属性": "Unidentified stat",
+    "未识别地点": "Unidentified location", "未识别璞石": "Unidentified stone",
+    "未识别心法": "Unidentified mind art", "未识别支线": "Unidentified side quest",
+    "未识别天赋": "Unidentified talent", "未识别境界": "Unidentified realm",
+    "未记录结局": "No ending recorded",
+    "未记录结局（配置未收录）": "No ending recorded (not in config)",
+    "剧情标记（非任务）": "Story marker (not a quest)",
+    "一次性奇遇：触发并完成后不再出现": "One-time encounter: it will not reappear once completed",
+    "为什么没触发（对照当前存档）": "Why it did not trigger (against the current save)",
+    "当前存档走的是「X」分支，不会获得本任务": "This save took another branch, so this quest cannot be obtained",
+    "门槛不足": "Requirements unmet", "前置未满足": "Prerequisites unmet",
+    "最接近完成": "Closest to completion", "全部仙友还差": "Remaining across all companions",
+    "无属性经验": "No stat EXP", "无正常来源": "No normal source",
+    "本轮无刷新": "No spawns this cycle", "已不在世": "No longer alive",
+    "按属性": "By stat", "按位置": "By location", "按功效": "By effect",
+    "可顺路": "Can do on the way", "接取后可做": "Doable after accepting",
+    "全部互动": "All interactions", "交互点": "Interaction point",
+    "玉肉：": "Jade flesh: ", "已兑换：": "Exchanged: ", "未开 ×": "Unopened ×",
+    "下一步：": "Next: ", "下一步": "Next step", "后续任务": "Follow-up quest",
+    "判定规则": "Check rules", "炼丹地图": "Alchemy map", "丹方详情": "Recipe details",
+    "无需传送": "No portal needed", "自动存档": "Auto save", "手动存档": "Manual save",
+    "渲染失败": "Render failed", "无辅材": "No auxiliaries",
+    "已刷新": "Refreshed", "未刷新": "Not refreshed", "下一级": "Next level",
+    "更新": "Updated", "合并": "Merged", "模块": "Modules",
+    "已开启": "Opened", "未开启": "Not opened", "待确认": "To confirm",
+    "已达成": "Achieved", "奖励未收录": "Reward not recorded",
+    "压轴": "Finale lot", "珍匣": "Treasure chest",
+    "获取：": "Acquire: ", "触发：": "Trigger: ", "隶属": "Part of",
+    "需入": "Requires entering", "接取：": "Accept: ",
+    "位可偷": " can be stolen from", "位不可偷": " cannot be stolen from",
+    "条持有记录": " held records", "段情缘": " bond entries",
+    "条往事": " memories", "件器胚": " embryos", "色璞石": " stones",
+    "条词条": " entries", "行材料": " material rows", "步 ·": " steps · ",
+    "门槛不足": "Requirements unmet", "未接上主线": "Not linked to the main story",
+    "无奖励记录": "No reward record", "暂无奇遇配置": "No encounter config",
+    "继续": "Continue", "已选 ": "Picked ",
+    "普通菜单切磋不产出体魄经验；下面只列本月切磋入口。":
+        "Normal menu spars do not grant Constitution EXP; only this month's entries are listed.",
+    "按经验从高到低；入口彼此独立，按自身成功次数计算":
+        "Sorted by EXP (high to low); entries are independent and count their own successes",
+    "当前筛选下没有可做的入口": "No entries available under the current filter",
+    "当前筛选下没有拍品。": "No lots under the current filter.",
+    "当前存档没有可接的城镇/宗门委托": "No town/sect commissions available in this save",
+    "这个选项始终可选；条件只决定走哪段结果":
+        "This option is always available; the condition only decides which outcome plays",
+    "存档只保留累计次数与最近一次结算，逐次选择没有记录。":
+        "The save keeps only totals and the latest settlement; individual choices are not recorded.",
+    "历史达成来自旧存档，按角色保存在本地，不写入游戏存档，也不计入当前完成数。":
+        "Past completions come from older saves, stored locally per character; they never touch the game save and are not counted here.",
+    "母奇遇已因其它分支达成，此分支不再计入未完成。":
+        "The parent encounter was completed via another branch; this one no longer counts as incomplete.",
+    "纯旁白事件：配置里没有选项，进入后直接结算。":
+        "Narration-only event: no options in config, it settles on entry.",
+    "这条奇遇没有可选分支，剧情自动推进。":
+        "This encounter has no branches; the story advances automatically.",
+    "回忆里已收录这条奇遇，但存档没有留下结局结算记录（可重复奇遇常见）":
+        "This encounter is recorded in memories, but the save has no ending settlement (common for repeatable encounters)",
+}
+EN.update(UI_TERMS)
+
 # 属性名与境界名：按名称匹配，游戏改 ID 也不影响；改名后自动回退中文。
 EN.update(_ATTR)
 _ELEM = {"金": "Metal", "木": "Wood", "水": "Water", "火": "Fire", "土": "Earth"}
@@ -261,6 +331,44 @@ for _realm, _realm_en in _PHASE.items():
         EN[_realm + _stage] = "%s · %s" % (_realm_en, _stage_en)
     for _elem, _elem_en in _ELEM.items():
         EN[_elem + " · " + _realm + "期"] = "%s · %s" % (_elem_en, _realm_en)
+
+
+# ---- 游戏官方术语（由 tools/game_terms.py 生成，勿手改） ----
+_GAME_TERMS = {
+    "专属信物": "Exclusive Keepsake", "人": "People", "伤害减免": "Damage Reduction",
+    "伤害加成": "Damage Bonus", "修士养成材料": "Cultivator development materials", "偷窃": "Steal",
+    "元婴中期": "Mid Nascent Soul", "元婴初期": "Early Nascent Soul", "元婴后期": "Late Nascent Soul",
+    "共鸣值上限": "Resonance Cap", "内门弟子": "Inner Sect Disciple", "凡阶": "Mortal Tier",
+    "功法": "Art", "化神期": "Spirit Severing", "医术": "Healing Arts",
+    "卜具": "Divination Implements", "名震乡闾": "Local Eminence", "命中": "Hit Rate",
+    "善恶值": "Karma", "器胚": "Artifact Embryo", "地阶": "Earth Tier",
+    "声名远扬": "Widespread Renown", "外门弟子": "Outer Sect Disciple", "天阶": "Heaven Tier",
+    "妖丹": "Monster Core", "妖兽": "Monster Beast", "委托人": "Quest Giver",
+    "幸运": "Lucky", "心法": "Mind Art", "战斗": "Battle",
+    "抗暴": "Critical Resistance", "护符": "Amulet", "挑衅": "Taunt",
+    "探索": "Exploration", "支线任务": "Side Quest", "攻击百分比": "Attack Percentage",
+    "文房": "Study Supplies", "无视防御": "Ignore Defense", "无视防御抵抗": "Ignore Defense Resistance",
+    "日用": "Daily Use", "晋升考核": "Promotion Assessment", "暂未开放": "Not yet available",
+    "暴伤减免": "Critical Damage Reduction", "暴击伤害": "Critical Hit Damage", "暴击率": "Critical Hit Chance",
+    "未知的丹方": "Unknown Pill Formula", "未知的药效": "Unknown Pill Effect", "杂货铺": "General Store",
+    "治疗效率": "Healing Efficiency", "法物": "Magic Artifact", "洞察他人": "Insight Others",
+    "灵力": "Spirit Energy", "灵力上限": "Max Spirit Energy", "灵宠": "Spirit Pet",
+    "灵影": "Spirit Shadow", "灵根果": "Spirit Root Fruit", "灵气": "Spiritual Energy",
+    "灵石": "Spirit Stone", "炼丹炉": "Alchemy Furnace", "炼器": "Refining weapons",
+    "炼器材料": "Crafting Material", "炼气中期": "Mid Qi Refinement", "炼气初期": "Early Qi Refinement",
+    "炼气后期": "Late Qi Refinement", "玄阶": "Profound Tier", "璞石": "Uncut Stone",
+    "生命": "Health", "生命上限": "Max Health", "生命偷取效率": "Lifesteal Efficiency",
+    "生命百分比": "Health Percentage", "留影石": "Memory Stone", "真传弟子": "true disciple",
+    "筑基中期": "Mid Foundation Establishment", "筑基初期": "Early Foundation Establishment", "筑基后期": "Late Foundation Establishment",
+    "筑基期": "Foundation Establishment", "精力": "Energy", "精力上限": "Max Energy",
+    "索要": "Demand", "结丹中期": "Mid Golden Core", "结丹初期": "Early Golden Core",
+    "结丹后期": "Late Golden Core", "结束": "End", "结缘": "Form Bond",
+    "结缘影像": "Bond Recordings", "药材": "Medicinal Ingredients", "道蕴信物": "Dao Essence Token",
+    "闪避": "Dodge", "防御百分比": "Defense Percentage", "韧性上限": "Tenacity Cap",
+}
+# ---- 游戏官方术语结束 ----
+# 同一名词以游戏配置为准，玩家在游戏内外看到的是同一个说法。
+# EN 保持手写原样，覆盖发生在 terms() 里，这样生成器可以反复跑（幂等）。
 
 
 def normalize(value):
@@ -303,4 +411,5 @@ def terms(lang):
         return {}
     out = dict(_EXTRA)
     out.update(EN)
+    out.update(_GAME_TERMS)   # 游戏官方术语最后覆盖
     return out

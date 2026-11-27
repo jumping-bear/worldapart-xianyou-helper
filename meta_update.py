@@ -13,6 +13,7 @@ import time
 from app.tablekit import (  # noqa: F401
     SCHEMA, _callee_name, _call_parts, _clip, _const_args, _const_value, _expr_ints,
     _int, _plain, _rows, _text, build_realms, build_spaces, set_text_language,
+    set_text_glossary,
     TEXT_REVISION,
 )
 
@@ -348,6 +349,38 @@ def inspect_game(game_dir):
     return {"root": root, "manifest": manifest, "source": source, "fingerprint": fingerprint}
 
 
+def _text_glossary(tables):
+    """从配置里现算「简中 → 英文」对照，给没有语言列的表兜底。
+
+    只收三列齐全、英文非空且不含中文的条目；同一句中英对应不唯一时丢弃，
+    宁可留中文，也不猜一个可能错的译名。
+    """
+    pairs, conflicts = {}, set()
+
+    def walk(value):
+        if isinstance(value, dict):
+            if "zh-Hans" in value or "en-US" in value:
+                zh = str(value.get("zh-Hans") or "").strip()
+                en = str(value.get("en-US") or "").strip()
+                if zh and en and zh != en and not re.search(r"[\u4e00-\u9fff]", en):
+                    if zh in pairs and pairs[zh] != en:
+                        conflicts.add(zh)
+                    else:
+                        pairs.setdefault(zh, en)
+                return
+            for child in value.values():
+                walk(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                walk(child)
+
+    for table in tables.values():
+        walk(table)
+    for zh in conflicts:
+        pairs.pop(zh, None)
+    return pairs
+
+
 def _extract_tables(inspection):
     import UnityPy  # 仅在配置指纹变化时导入
 
@@ -489,6 +522,8 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
     配置表自带简中/繁中/英文三列，language 决定构建快照时取哪一列。
     """
     set_text_language(language)
+    # 对照表由配置现算，先清空，避免同一进程里上一次调用残留。
+    set_text_glossary({})
     modules = tuple(dict.fromkeys(modules))
     cache_dir = cache_dir or cache_directory()
     legacy_path = os.path.join(cache_dir, "game_meta_cache.json")
@@ -547,6 +582,8 @@ def load_metadata(game_dir, builtin_dir, modules=("bedroom", "talent"), cache_di
     if to_extract:
         try:
             tables = _extract_tables(inspection)
+            # 没有语言列的表（如称号、部分选项文案）用配置自带的对照兜底。
+            set_text_glossary(_text_glossary(tables) if language != "zh-Hans" else {})
             for module in to_extract:
                 try:
                     missing = _module_tables(module, specs) - set(tables)

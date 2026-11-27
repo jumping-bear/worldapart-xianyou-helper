@@ -26,13 +26,24 @@ def _rows(value):
 TEXT_LANGUAGES = ("zh-Hans", "zh-Hant", "en-US")
 TEXT_LANGUAGE = "zh-Hans"
 # 文本清洗逻辑变更时递增，让已缓存的模块快照重新构建（不必逐个模块改 SCHEMA）。
-TEXT_REVISION = 1
+# 2：新增「配置自带对照表」兜底（见 set_text_glossary），英文快照需要重建。
+TEXT_REVISION = 2
+# 有些表本身没有语言列（例如 tbalignmenttitle 的 titleName 就是纯中文字符串），
+# 但同一句话在别的表里有简中/英文两列。这里放一份「简中 → 英文」的对照，
+# 由 meta_update 从配置里现算，_text 遇到纯字符串时用它兜底。
+TEXT_GLOSSARY = {}
 
 
 def set_text_language(code):
     """切换配置表取值语言；未知语言回退简中。"""
     global TEXT_LANGUAGE
     TEXT_LANGUAGE = code if code in TEXT_LANGUAGES else "zh-Hans"
+
+
+def set_text_glossary(mapping):
+    """设置配置自带的简中→英文对照表；空字典表示关闭兜底。"""
+    global TEXT_GLOSSARY
+    TEXT_GLOSSARY = mapping if isinstance(mapping, dict) else {}
 
 
 def _text(value):
@@ -43,7 +54,13 @@ def _text(value):
             if value.get(key):
                 return str(value[key])
         return ""
-    return "" if value is None else str(value)
+    text = "" if value is None else str(value)
+    # 表里没有语言列时，借配置自带的对照表翻译（仅在非简中模式下生效）。
+    if TEXT_LANGUAGE != "zh-Hans" and TEXT_GLOSSARY:
+        hit = TEXT_GLOSSARY.get(text) or TEXT_GLOSSARY.get(text.strip())
+        if hit:
+            return hit
+    return text
 
 
 def _plain(value):

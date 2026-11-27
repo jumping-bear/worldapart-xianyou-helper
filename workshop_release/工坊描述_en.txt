@@ -1,4 +1,4 @@
-[h1]Xianyou Helper v2.4.0[/h1]
+[h1]Xianyou Helper v2.5.0[/h1]
 [b]Read-only save inspector. It never writes back to your save file.[/b]
 [b]English UI is supported[/b]: switch the language in 功能设置.bat, or choose Auto to follow the game.
 [b]Found it useful? Please rate and favorite.[/b]
