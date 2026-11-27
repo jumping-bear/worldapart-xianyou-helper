@@ -143,13 +143,17 @@ def _quality_css():
 
 
 CSS = r"""
-*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#2b3340;border:2px solid var(--bg);border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#3a4657}::-webkit-scrollbar-corner{background:transparent}::selection{background:#2f5b45;color:#e8eaed}:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}body{background:var(--bg);color:var(--text);font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;padding:26px 20px 60px}.wrap{max-width:1180px;margin:0 auto}h1{font-size:23px;font-weight:600;letter-spacing:.5px}.sub{color:var(--text-faint);font-size:11px;line-height:1.7;margin-top:3px}.tabs{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:6px;margin:14px 0 14px}
-@media(max-width:880px){.tabs{grid-template-columns:repeat(6,minmax(0,1fr))}}
-@media(max-width:640px){.tabs{grid-template-columns:repeat(4,minmax(0,1fr))}}.tab{border:1px solid var(--border-strong);background:var(--surface);color:var(--text-dim);border-radius:8px;padding:7px 8px;cursor:pointer;font-size:13px;white-space:nowrap;text-align:center;transition:background .12s,color .12s,border-color .12s}.tab:hover{background:var(--btn-bg);color:var(--text-soft)}.tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-fg)}.panel{display:none}.panel.active{display:block}.source{display:flex;flex-wrap:wrap;gap:1px 12px;color:var(--text-faint);font-size:11px;line-height:1.7;margin:0 0 12px}
+*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#2b3340;border:2px solid var(--bg);border-radius:6px}::-webkit-scrollbar-thumb:hover{background:#3a4657}::-webkit-scrollbar-corner{background:transparent}::selection{background:#2f5b45;color:#e8eaed}:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}body{background:var(--bg);color:var(--text);font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;padding:26px 20px 60px}.wrap{max-width:1180px;margin:0 auto}h1{display:flex;align-items:baseline;font-size:23px;font-weight:600;letter-spacing:.5px}.id-char{margin-left:auto;min-width:0;font-size:12px;font-weight:400;letter-spacing:0;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sub{color:var(--text-faint);font-size:11px;line-height:1.7;margin-top:3px}.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 14px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 14px}
+.tab{flex:1 1 calc((100% - 48px)/9);min-width:0;overflow:hidden;text-overflow:ellipsis;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-dim);border-radius:8px;padding:7px 8px;cursor:pointer;font-size:13px;white-space:nowrap;text-align:center;transition:background .12s,color .12s,border-color .12s}
+@media(max-width:880px){.tab{flex-basis:calc((100% - 30px)/6)}}
+@media(max-width:640px){.tab{flex-basis:calc((100% - 18px)/4)}}.tab:hover{background:var(--btn-bg);color:var(--text-soft)}.tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-fg)}.panel{display:none}.panel.active{display:block}.source{display:flex;flex-wrap:wrap;gap:1px 12px;color:var(--text-faint);font-size:11px;line-height:1.7;margin:0 0 12px}
 .src-item{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .src-sep{color:var(--border-strong)}
 .src-who{color:var(--text-muted)}
-.src-warn{color:var(--gold)}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:12px;margin:16px 0 22px}.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 17px;min-width:0;transition:border-color .12s}
+.src-warn{color:var(--gold)}
+.src-stale{color:var(--gold)}.src-age{font-style:normal;color:var(--gold-strong);font-variant-numeric:tabular-nums}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:12px;margin:16px 0 22px}.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 17px;min-width:0;transition:border-color .12s}
 .card:hover{border-color:var(--border-subtle)}.card .k{color:var(--text-muted);font-size:12px}.card .v{font-size:20px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}.card .v span{font-size:12px;color:var(--text-muted);font-weight:400}table{width:100%;border-collapse:separate;border-spacing:0 4px}th{text-align:left;color:var(--text-faint);font-size:12px;font-weight:500;padding:0 12px;position:sticky;top:0;z-index:3;background:var(--bg);box-shadow:0 6px 8px -8px rgba(0,0,0,.75)}td{background:var(--surface-alt);padding:12px;vertical-align:middle;font-variant-numeric:tabular-nums;transition:background .12s}
 tr.row:hover td{background:var(--surface-soft)}tr.row td:first-child{border-radius:12px 0 0 12px}tr.row td:last-child{border-radius:0 12px 12px 0}.who{font-size:15px;font-weight:600}.bed,.muted{color:var(--text-faint);font-size:12px;margin-top:3px}.parts{display:flex;gap:24px;flex-wrap:wrap}.part .pl{color:var(--text-dim);font-size:12px;margin-bottom:6px}.dots{display:flex;gap:4px}.dot{width:18px;height:18px;border-radius:6px;background:#252b36;display:flex;align-items:center;justify-content:center;font-size:10px;color:#5d6675}.dot.on{background:var(--ok-fill);color:var(--accent-fg)}.dot.miss{background:var(--danger-bg);color:var(--danger-text)}.bar{height:6px;border-radius:6px;background:var(--border);overflow:hidden;margin-top:8px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#3ddc84,#2f9e6b)}.pct{font-variant-numeric:tabular-nums;font-weight:600;font-size:15px;text-align:right}.pct small{display:block;color:#7d8593;font-weight:400;font-size:11px;margin-top:2px}.full{color:var(--ok)}.badge{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:6px;background:var(--surface-raised);color:var(--text-dim);font-size:11px;font-weight:400;vertical-align:middle}.badge.dao{background:#27374a;color:#b9d9ff}.filters{display:grid;grid-template-columns:2fr repeat(4,1fr);gap:9px;margin:14px 0}.filters input,.filters select{width:100%;background:var(--surface-alt);border:1px solid var(--border-strong);border-radius:8px;color:var(--text);padding:9px 10px;font-size:12px;outline:none}.filters input:focus,.filters select:focus{border-color:#527c69}.filters .wide{grid-column:span 2}.result-info{color:var(--text-muted);font-size:12px;margin:10px 2px 14px}.sec-title{display:flex;align-items:baseline;gap:8px;margin:18px 2px 9px;font-size:13px;font-weight:600;color:var(--text-soft);line-height:1.4}.sec-title small{color:var(--text-faint);font-size:11px;font-weight:400}.npc{background:var(--surface-alt);border:1px solid var(--border);border-radius:12px;margin:0 0 8px;overflow:hidden;transition:border-color .12s}
 .npc:hover{border-color:var(--border-strong)}.npc summary{cursor:pointer;padding:12px 14px;list-style:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.npc summary::-webkit-details-marker{display:none}.npc summary:before{content:"›";color:var(--text-faint);font-size:20px;transform:rotate(0);transition:.15s}.npc[open] summary:before{transform:rotate(90deg)}.npc summary .location{margin-left:auto;color:var(--text-muted);font-size:12px}.slots{border-top:1px solid var(--border);padding:4px 14px 12px}.slot{padding:11px 0;border-bottom:1px solid var(--border)}.slot:last-child{border-bottom:0}.slot-head{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.talent-name{font-size:14px;font-weight:600}.lock{margin-left:auto;font-size:11px;color:#b98289}.lock.on{color:#6edda2}.effect{color:#b4bdca;font-size:12px;line-height:1.7;margin-top:6px}.condition{color:#7d8593;font-size:11px;line-height:1.7;margin-top:4px}.q1{color:#9fd6a9}.q2{color:#82baf5}.q3{color:#c7a1ef}.q4{color:#e8c76d}.q5{color:#e88b82}.empty{background:#171a21;border:1px dashed #303846;border-radius:12px;padding:28px;text-align:center;color:#8b93a1;font-size:13px}.warnings{margin:12px 0;color:#c9a976;font-size:12px;line-height:1.8}.tip{margin-top:22px;color:#6f7787;font-size:12px;line-height:1.9}.tip-more{margin-top:6px}.tip-more summary{cursor:pointer;color:#6f7787;font-size:11px;list-style:none}.tip-more summary::-webkit-details-marker{display:none}.tip-more summary:before{content:'›';display:inline-block;margin-right:6px;transition:.15s}.tip-more[open] summary:before{transform:rotate(90deg)}.tip-more div{margin-top:5px;color:#5f6773;font-size:11px;line-height:1.8}@media(max-width:850px){.filters{grid-template-columns:repeat(2,1fr)}.filters .wide{grid-column:span 2}.parts{gap:12px}.npc summary .location{margin-left:0;width:100%}}@media(max-width:560px){body{padding:18px 10px 40px}.filters{grid-template-columns:1fr}.filters .wide{grid-column:span 1}td{padding:9px 6px}.dot{width:15px;height:15px}.cards{gap:8px}.card{min-width:130px}}
@@ -324,6 +328,7 @@ CSS += r"""
 .charline b{color:#e8eaed}
 .notice{background:#16202b;border:1px solid #2d4356;border-radius:8px;color:#a9c4d8;font-size:12px;line-height:1.8;padding:8px 11px;margin:0 0 10px}
 .notice b{color:#d7e9f7}
+.notice-sub{display:block;margin-top:3px;padding-top:4px;border-top:1px solid #23384a;color:#8ea6b9;font-size:11px}
 .notice-tip{position:relative;padding-right:34px}
 .notice-x{position:absolute;top:6px;right:8px;background:none;border:0;color:#7f96a8;font:14px/1 "Microsoft YaHei",system-ui,sans-serif;cursor:pointer;padding:2px 5px;border-radius:4px}
 .notice-x:hover{color:#cfe3f2;background:#1d2b38}
@@ -451,7 +456,7 @@ CSS += r"""
 }
 """
 CSS += _quality_css()
-HTML_TEMPLATE = r"""<!doctype html><html lang="__LANG__"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>__TITLE__</title><style>__CSS__ __PLUGIN_CSS__ </style></head><body><div class="wrap"><h1>__HEADING__ <span class="appver">v__VER__</span><span id="webbar" class="webbar" hidden><button id="web-sync" type="button">立即同步</button><span id="web-tip"></span></span></h1><div class="sub">__SUB__</div>__CONSOLE_NOTE__<div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div>__PANELS__<div class="tip">__TIP__</div></div><script src="仙友助手版本.js"></script><script>
+HTML_TEMPLATE = r"""<!doctype html><html lang="__LANG__"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>__TITLE__</title><style>__CSS__ __PLUGIN_CSS__ </style></head><body><div class="wrap"><h1>__HEADING__ <span class="appver">v__VER__</span><span id="id-who" class="id-char"></span><span id="webbar" class="webbar" hidden><button id="web-sync" type="button">立即同步</button><span id="web-tip"></span></span></h1><div class="sub">__SUB__</div>__CONSOLE_NOTE__<div id="warnings" class="warnings"></div><div id="tabs" class="tabs"></div>__PANELS__<div class="tip">__TIP__</div></div><script src="仙友助手版本.js"></script><script>
 const INITIAL_VERSION=window.PROGRESS_VERSION||'';const DATA=__DATA__;
 // 品质档位统一在这里钳制：超出当前色阶的编号落到最高档并保持可见，不会静默继承成普通文字色。
 const QUALITY_MAX=__QUALITY_MAX__,GAMBLE_QUALITY_MAX=__GAMBLE_QUALITY_MAX__;
@@ -1128,9 +1133,14 @@ const $=id=>document.getElementById(id);const esc=v=>String(v??'').replace(/[&<>
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const labels=Object.assign({bedroom:'仙居楼互动',talent:'NPC天赋',items:'NPC物品',pill:'炼丹',forge:'炼器',event:'奇遇',quest:'支线'},(LANG==='en'?DATA.labels_en:DATA.labels)||{});let active=store.get('worldapart.active.tab.v2',DATA.enabled[0]||'');if(!DATA.enabled.includes(active))active=DATA.enabled[0]||'';
 function shortSave(name){const s=String(name||'');if(!s)return '';const base=s.replace(/\.msgpack(\.bin)?$/i,'').replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i,'').replace(/_gameworld$/i,'');const mo=base.match(/^slots_(auto|manual)(?:_(\d+))?$/i);if(mo)return (mo[1].toLowerCase()==='auto'?'自动存档':'手动存档')+(mo[2]?' '+parseInt(mo[2],10):'');return base||s}
-function sourceHtml(m){const L=LANG==='en';const CFG={'游戏当前配置':'Game config','兼容缓存':'Compatible cache','内置快照':'Built-in snapshot'};const cfgName=L?(CFG[m.config]||m.config):m.config;const ch=DATA.character||{};const gd=ch.date||{};const who=ch.name?`${L?'Character ':'角色 '}${esc(ch.name)}${ch.layer_name?' · '+esc(ch.layer_name):''}${ch.layer?`（${L?'layer ':'第 '}${ch.layer_local||ch.layer}${L?'':' 层'}）`:''}`:'';const full=[who,`${L?'Save ':'存档 '}${m.src||(L?'none':'暂无')}`,`${L?'Updated ':'更新 '}${m.stamp_text}`,`${L?'Config ':'配置 '}${cfgName}`].join(' | ');const parts=[];if(who)parts.push(`<span class="src-item src-who">${who}</span>`);parts.push(`<span class="src-item">${L?'Save ':'存档 '}${esc(shortSave(m.src)||(L?'none':'暂无'))}</span>`);parts.push(`<span class="src-item">${L?'Updated ':'更新 '}${esc(m.stamp_text)}</span>`);parts.push(`<span class="src-item">${L?'Config ':'配置 '}${esc(cfgName)}</span>`);if(m.config_warning)parts.push(`<span class="src-item src-warn">${esc(m.config_warning)}</span>`);if(m.merged)parts.push(`<span class="src-item">${L?'Merged ':'合并 '}${m.merged}${L?'':' 份'}</span>`);return `<div class="source" title="${esc(full)}">${parts.join('<span class="src-sep">·</span>')}</div>`}
+// 副本可能已经是几小时前的：把「更新」补上相对时间，过期时点亮，避免拿旧数据做决策。
+function agoText(stamp,L){const t=Number(stamp)||0;if(!t)return '';const s=Math.max(0,Date.now()/1000-t);if(s<600)return '';if(s<3600)return ' · '+Math.floor(s/60)+(L?' min ago':' 分钟前');if(s<86400)return ' · '+Math.floor(s/3600)+(L?' h ago':' 小时前');return ' · '+Math.floor(s/86400)+(L?' d ago':' 天前')}
+// 角色身份放到标题右侧：它不属于某一份存档，而是整页共用的「这是谁的数据」。
+function whoText(L){const ch=DATA.character||{};if(!ch.name)return '';return `${L?'Character ':'角色 '}${esc(ch.name)}${ch.layer_name?' · '+esc(ch.layer_name):''}${ch.layer?`（${L?'layer ':'第 '}${ch.layer_local||ch.layer}${L?'':' 层'}）`:''}`}
+function fillWho(){const el=document.getElementById('id-who');if(el)el.innerHTML=whoText(LANG==='en')}
+function sourceHtml(m){const L=LANG==='en';const CFG={'游戏当前配置':'Game config','兼容缓存':'Compatible cache','内置快照':'Built-in snapshot'};const cfgName=L?(CFG[m.config]||m.config):m.config;const ch=DATA.character||{};const gd=ch.date||{};const who=whoText(L);const full=[who,`${L?'Save ':'存档 '}${m.src||(L?'none':'暂无')}`,`${L?'Updated ':'更新 '}${m.stamp_text}`,`${L?'Config ':'配置 '}${cfgName}`].join(' | ');const parts=[];parts.push(`<span class="src-item">${L?'Save ':'存档 '}${esc(shortSave(m.src)||(L?'none':'暂无'))}</span>`);const ago=agoText(m.stamp,L);const stale=!!ago&&(Date.now()/1000-(Number(m.stamp)||0))>=1800;const staleTip=L?'This data may be out of date — use Sync now to re-export':'这份数据可能不是最新的，点右上「立即同步」可重新导出';parts.push(`<span class="src-item${stale?' src-stale':''}"${stale?` title="${staleTip}"`:''}>${L?'Updated ':'更新 '}${esc(m.stamp_text)}${ago?`<i class="src-age">${ago}</i>`:''}</span>`);parts.push(`<span class="src-item">${L?'Config ':'配置 '}${esc(cfgName)}</span>`);if(m.config_warning)parts.push(`<span class="src-item src-warn">${esc(m.config_warning)}</span>`);if(m.merged)parts.push(`<span class="src-item">${L?'Merged ':'合并 '}${m.merged}${L?'':' 份'}</span>`);return `<div class="source" title="${esc(full)}">${parts.join('<span class="src-sep">·</span>')}</div>`}
 function showTab(name){active=name;store.set('worldapart.active.tab.v2',name);document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===name));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));if(window.PROGRESS_RENDER_TAB)window.PROGRESS_RENDER_TAB(name)}
-function initTabs(){$('tabs').innerHTML=DATA.enabled.map(n=>`<button class="tab" data-tab="${n}">${labels[n]}</button>`).join('');document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>showTab(x.dataset.tab));if(!DATA.enabled.length){$('warnings').innerHTML=DATA.warnings.map(esc).join('<br>');return}showTab(active)}
+function initTabs(){fillWho();$('tabs').innerHTML=DATA.enabled.map(n=>`<button class="tab" data-tab="${n}">${labels[n]}</button>`).join('');document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>showTab(x.dataset.tab));if(!DATA.enabled.length){$('warnings').innerHTML=DATA.warnings.map(esc).join('<br>');return}showTab(active)}
 
 /* ---- 模块共享的展示工具（由天赋/物品/炼器共用） ---- */
 function uniq(values){return [...new Set(values)].sort((a,b)=>{const an=Number(a),bn=Number(b);if(a!==''&&b!==''&&!Number.isNaN(an)&&!Number.isNaN(bn))return an-bn;return String(a).localeCompare(String(b),'zh-CN')})}
@@ -1398,33 +1408,46 @@ def build_html(payload):
     body = body.replace("</", "<\\/").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
     css, js = _plugin_assets()
     # 只有打包后的 exe 才有那个黑色控制台窗口；关掉它就没有自动刷新了。
+    # 覆盖模式下公告与快捷键说明并成同一个框的两行：原来是两个蓝框上下叠着，看着像两条报错。
     if lang == "en":
         if common.OVERLAY_MODE:
-            console_note = '<div class="notice">%s</div>' % i18n.shell("en", "notice_overlay")
+            console_note = ('<div class="notice notice-tip" data-notice="overlay-hint">'
+                            '<button type="button" class="notice-x" aria-label="Dismiss" '
+                            'title="Dismiss this hint">×</button>%s'
+                            '<span class="notice-sub">%s</span></div>'
+                            % (i18n.shell("en", "notice_update"),
+                               i18n.shell("en", "notice_overlay")))
         else:
             console_note = ("" if not common.FROZEN
                             else '<div class="notice">%s</div>' % i18n.shell("en", "notice_web"))
-        console_note = ('<div class="notice notice-tip" data-notice="overlay-hint">'
-                        '<button type="button" class="notice-x" aria-label="Dismiss" '
-                        'title="Dismiss this hint">×</button>%s</div>'
-                        % i18n.shell("en", "notice_update")) + console_note
+            console_note = ('<div class="notice notice-tip" data-notice="overlay-hint">'
+                            '<button type="button" class="notice-x" aria-label="Dismiss" '
+                            'title="Dismiss this hint">×</button>%s</div>'
+                            % i18n.shell("en", "notice_update")) + console_note
     else:
         if common.OVERLAY_MODE:
-            console_note = ('<div class="notice">按顶部显示的快捷键收起或再次呼出（默认为 <b>F3</b>，'
-                            '可在「功能设置.bat」里修改），<b>ESC</b> 快速隐藏，右上角可退出工具。</div>')
+            console_note = ('<div class="notice notice-tip" data-notice="overlay-hint">'
+                            '<button type="button" class="notice-x" aria-label="关闭提示" '
+                            'title="关闭这条提示">×</button>'
+                            '从 <b>v2.2</b> 起，进游戏后按 <b>F3</b> 即可呼出本页面；'
+                            '或双击 仙友助手.exe 启用网页版。'
+                            '老用户重新运行一次「一键安装.bat」即可更新。'
+                            '<span class="notice-sub">默认 <b>F3</b> 收起 / 呼出'
+                            '（可在「功能设置.bat」里修改），<b>ESC</b> 快速隐藏，右上角可退出工具。</span>'
+                            '</div>')
         else:
             console_note = (""
                             if not common.FROZEN else
                             '<div class="notice">使用期间请留着那个黑色小窗口（可以最小化）——'
                             '<b>它负责自动检查数据，关掉后本页就不再自动刷新。</b>'
                             '右下角「立即同步」可马上导出最新存档。</div>')
-        console_note = ('<div class="notice notice-tip" data-notice="overlay-hint">'
-                        '<button type="button" class="notice-x" aria-label="关闭提示" '
-                        'title="关闭这条提示">×</button>'
-                        '从 <b>v2.2</b> 起，进游戏后按 <b>F3</b> 即可呼出本页面；'
-                        '或双击 仙友助手.exe 启用网页版。'
-                        '老用户重新运行一次「一键安装.bat」即可更新。</div>'
-                        ) + console_note
+            console_note = ('<div class="notice notice-tip" data-notice="overlay-hint">'
+                            '<button type="button" class="notice-x" aria-label="关闭提示" '
+                            'title="关闭这条提示">×</button>'
+                            '从 <b>v2.2</b> 起，进游戏后按 <b>F3</b> 即可呼出本页面；'
+                            '或双击 仙友助手.exe 启用网页版。'
+                            '老用户重新运行一次「一键安装.bat」即可更新。</div>'
+                            ) + console_note
     update_error = str(data.get("update_error") or "").strip()
     if update_error:
         console_note = ('<div class="notice" style="border-color:#a05a2c;color:#e0a56a">%s %s</div>'
@@ -1480,7 +1503,7 @@ def write_outputs(payload):
     css, js = _plugin_assets()
     version = hashlib.sha256(
         (canonical + "\0" + CSS + "\0" + css + "\0" + js + "\0" + HTML_TEMPLATE + "\0"
-         + common.APP_VERSION).encode("utf-8")).hexdigest()
+         + common.APP_VERSION + "\0" + str(common.OVERLAY_MODE) + str(common.FROZEN)).encode("utf-8")).hexdigest()
     previous = disk_version()
     changed = version != previous or not os.path.exists(common.OUT_HTML)
     if changed:
