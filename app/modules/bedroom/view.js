@@ -36,7 +36,14 @@ function renderBedroom(){
   const visible=state.less?rows.filter(r=>r.total<TOTAL):rows;
 
   const body=visible.map(r=>{
-    const parts=r.parts.map(p=>{
+    // 部位顺序按固定优先级排：不同 NPC 在配置里的动作顺序不一样，不排的话每行三列对不齐。
+    const PART_ORDER=['脸','腰','足','腿','腋下'];
+    const ordered=[...r.parts].sort((a,b)=>{
+      const ia=PART_ORDER.indexOf(a.label),ib=PART_ORDER.indexOf(b.label);
+      if(ia<0&&ib<0)return String(a.label).localeCompare(String(b.label),'zh-CN');
+      if(ia<0)return 1;if(ib<0)return -1;return ia-ib;
+    });
+    const parts=ordered.map(p=>{
       const miss=SEG-p.got.length;
       return `<div class="part"><div class="pl">${esc(p.label)} <em>${p.got.length}/${SEG}${miss?' · 差 '+miss:''}</em></div><div class="dots">${segBlocks(p)}</div></div>`;
     }).join('');

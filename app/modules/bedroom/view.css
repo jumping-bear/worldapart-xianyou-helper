@@ -10,3 +10,7 @@
 .bseg.miss{background:var(--surface-soft);border-color:#3a424e}
 .part .pl em{font-style:normal;color:#6f7787;font-size:11px;margin-left:6px}
 tr.full-row td:first-child{box-shadow:inset 2px 0 0 #2f9e6b}
+
+/* 三列固定宽度：不同仙友的部位名不一样（脸/腰/足 vs 脸/足/腿），固定列位才不会一列一列歪。 */
+tr.row .parts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 18px}
+.part .pl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
