@@ -62,7 +62,7 @@ function attrBlock(list,r){
     return `<section class="ex-attr">
      <div class="ex-attr-head">
       <div class="ex-attr-name">${esc(a.name)}<span class="ex-lv">Lv.${n(a.level)}</span></div>
-      <div class="ex-attr-exp">${fmt(a.exp)}${a.need?` / ${fmt(a.need)}`:''}<small>${a.need?'下一级':'已满级'}</small></div>
+      <div class="ex-attr-exp">${fmt(a.exp)}${a.need?` / ${fmt(a.need)}`:''}<small>${a.need?`还差 ${fmt(Math.max(0,n(a.need)-n(a.exp)))}`:'已满级'}</small></div>
      </div>
      <div class="ex-bar"><i style="width:${pct}%"></i></div>
      <div class="ex-attr-meta">本月入口 ${group.length} 个</div>
@@ -124,7 +124,7 @@ function statusHtml(r){
   return `<div class="ex-levels">${levels}</div>
    <div class="ex-meta">
     <span>游戏时间 ${n(d.year)} 年 ${n(d.month)} 月 ${n(d.day)} 日</span>
-    <span>本月入口 ${fmt(t.entries)} 个（每月刷新，每个 NPC 最多 1 个）· 不在当前世界 ${fmt(t.retired)} 个</span>
+    <span>本月入口 ${fmt(t.entries)} 个 · 不在当前世界 ${fmt(t.retired)} 个</span>
     <span>${staminaText}</span>
     <span>委托 ${fmt(t.tasks)} 条 · ${fmt(t.matched_tasks)} 条可顺路</span>
    </div>`;
@@ -133,14 +133,18 @@ function statusHtml(r){
 function controlsHtml(r){
   const types=typesOf(r.entries||[]);
   const tasks=(r.commissions||[]).length;
+  const matched=n((r.totals||{}).matched_tasks);
+  // 0 条可顺路时按钮点了只会得到空结果，且和相邻的「委托目标」按钮（tasks 为 0 时已隐藏）不一致。
+  const matchBtn=(matched||ui.commission)?`<button type="button" id="ex-match" class="ex-match${ui.commission?' on':''}">可顺路委托 ${fmt(matched)}</button>`:'<span></span>';
+  const advOn=[ui.type,ui.range,ui.stamina?'1':''].filter(Boolean).length;
   const typeOpts=['<option value="">全部互动</option>'].concat(types.map(t=>`<option value="${esc(t)}"${ui.type===t?' selected':''}>${esc(t)}</option>`)).join('');
   const rangeOpts=[['','全部经验']].concat((r.ranges||[]).map(([lo,hi])=>[lo+'-'+hi,lo+'–'+hi])).map(([v,l])=>`<option value="${v}"${ui.range===v?' selected':''}>${l}</option>`).join('');
   return `<div class="ex-controls">
     <div class="ex-seg"><button type="button" data-view="attr" class="${ui.view==='attr'?'on':''}">按属性</button><button type="button" data-view="place" class="${ui.view==='place'?'on':''}">按位置</button>${tasks?`<button type="button" data-view="task" class="${ui.view==='task'?'on':''}">委托目标 ${fmt(tasks)}</button>`:''}</div>
     <input id="ex-q" value="${esc(ui.q)}" placeholder="搜索 NPC / 场景 / 互动 / 委托">
-    <button type="button" id="ex-match" class="ex-match${ui.commission?' on':''}">可顺路委托 ${fmt((r.totals||{}).matched_tasks)}</button>
+    ${matchBtn}
    </div>
-   <details class="ex-adv"><summary>筛选条件 <span>互动类型 / 经验区间 / 精力</span></summary>
+   <details class="ex-adv"${advOn?' open':''}><summary>筛选条件${advOn?`（${advOn}）`:''}</summary>
     <div class="ex-adv-grid">
      <select id="ex-type">${typeOpts}</select>
      <select id="ex-range">${rangeOpts}</select>
@@ -197,7 +201,7 @@ function paintBody(panel,r){
   const list=filterList(r);
   const scope=ui.attr?(r.entries||[]).filter(e=>n(e.attr)===n(ui.attr)):(r.entries||[]);
   const total=scope.length;
-  const hint=ui.view==='place'?'按位置查看 · 场景按最高经验排序':'按属性查看 · 入口按经验从高到低';
+  const hint=ui.view==='place'?'场景按最高经验排序':'入口按经验从高到低';
   const focus=ui.attr?`只看 ${attrName(ui.attr)} · `:'';
   count.textContent=`${focus}${list.length} / ${total} 个入口 · ${hint}`;
   body.innerHTML=ui.view==='attr'?attrBlock(list,r):placeBlock(list,r);
