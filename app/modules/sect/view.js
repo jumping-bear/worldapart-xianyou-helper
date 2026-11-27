@@ -1,6 +1,6 @@
-/* 宗门：职位晋升、贡献兑换、宗门任务与灵材征收。 */
+/* 宗门：职位晋升、宗门委托、贡献兑换。 */
 (function(){
-const SECT_KEY='worldapart.sect.ui.v1';
+const SECT_KEY='worldapart.sect.ui.v2';
 const DEFAULTS={group:'',q:'',onlyAffordable:false,sort:'price',sim:{},simSrc:''};
 let ui=Object.assign({},DEFAULTS,store.get(SECT_KEY,{}));
 let cache=null;
@@ -49,23 +49,21 @@ function nextShopEntry(rows,balanceValue){
   && n(entry.realm)<=n(rows.realm)).sort((a,b)=>n(a.price)-n(b.price))[0];
 }
 function groupName(key){return key==='low'?'灵果灵物':'功法招式'}
-
-function cardsHtml(rows){
- const offers=(rows.offers||[]).filter(item=>!item.completed);
- const shopCount=rows.exchange_total||0;
- return `<div class="sec-cards">
-  <div class="card"><div class="k">当前贡献</div><div class="v">${num(rows.contribution)}</div><div class="s">可兑换 ${n(rows.exchange_affordable)} / ${shopCount} 件</div></div>
-  <div class="card"><div class="k">本期可领</div><div class="v">${num(rows.offer_contribution)}</div><div class="s">${offers.length} 项任务 · 声望 +${num(rows.offer_reputation)}</div></div>
-  <div class="card"><div class="k">累计贡献</div><div class="v">${num(rows.contribution_total)}</div><div class="s">本宗累计投入</div></div>
-  <div class="card"><div class="k">宗门声望</div><div class="v">${num(rows.reputation)}</div><div class="s">${esc(rows.position_name||'未任职')}</div></div>
-  <div class="card"><div class="k">灵石</div><div class="v">${num(rows.stones)}</div><div class="s">可用于城镇货架</div></div>
- </div>`;
+function commission(rows){return rows.commission||{}}
+function refreshText(commissionRow){
+ const refresh=commissionRow.refresh||{};
+ if(refresh.days_left===null||refresh.days_left===undefined){
+  return refresh.last?`上次刷新 ${refresh.last}`:'刷新时间未知';
+ }
+ if(refresh.days_left<=0)return '已到刷新日，进游戏过一天后刷新';
+ return `距下次刷新 ${refresh.days_left} 天${refresh.next?`（${refresh.next}）`:''}`;
 }
 
 function dashboardHtml(rows){
- const accepted=rows.accepted||[];
- const pending=accepted.filter(item=>item.state_text==='待提交').length;
- const active=accepted.filter(item=>item.state_text==='进行中').length;
+ const c=commission(rows);
+ const pending=(c.pending||[]).length;
+ const active=(c.active||[]).length;
+ const available=(c.available||[]).filter(item=>!item.locked).length;
  const p=rows.promotion;
  let promotionValue='已满级';
  let promotionSub='当前版本最高职位';
@@ -78,19 +76,16 @@ function dashboardHtml(rows){
  }
  const stats=[
   ['当前贡献',num(rows.contribution)],
-  ['可同时接',`${n(rows.slots&&rows.slots.limit)} 条`],
-  ['委托板本期',`${(rows.offers||[]).length} 条`],
   ['累计贡献',num(rows.contribution_total)],
   ['宗门声望',num(rows.reputation)],
-  ['灵石',num(rows.stones)]
+  ['灵石',num(rows.stones)],
+  ['下期刷新',refreshText(c)]
  ];
- const next=nextShopEntry(rows,n(rows.contribution));
- const affordSub=next?`再攒 ${num(n(next.price)-n(rows.contribution))} 可换「${esc(next.name)}」`:`当前贡献 ${num(rows.contribution)}`;
  return `<div class="sec-actions">
-  <div class="sec-action${pending?' primary':''}"><div class="k">待提交</div><div class="v">${pending}</div><div class="s">${pending?'先去交掉，别占着任务位':'暂无待提交'}</div></div>
-  <div class="sec-action"><div class="k">进行中</div><div class="v">${active}</div><div class="s">可同时接 ${n(rows.slots&&rows.slots.limit)} 条 · 已接 ${n(rows.slots&&rows.slots.accepted)} · 还可接 ${n(rows.slots&&rows.slots.remaining)}</div></div>
+  <div class="sec-action${pending?' primary':''}"><div class="k">待提交委托</div><div class="v">${pending}</div><div class="s">${pending?'回「委托」面板提交，别占着位置':'暂无待提交'}</div></div>
+  <div class="sec-action"><div class="k">进行中</div><div class="v">${active}</div><div class="s">已接 ${n(c.accepted_count)} / ${n(c.limit)} · 还可接 ${n(c.remaining)}</div></div>
+  <div class="sec-action"><div class="k">可接委托</div><div class="v">${available}</div><div class="s">${n(c.locked_count)?`另有 ${n(c.locked_count)} 条职位不符`:refreshText(c)}</div></div>
   <div class="sec-action"><div class="k">晋升</div><div class="v">${promotionValue}</div><div class="s">${promotionSub}</div></div>
-  <div class="sec-action"><div class="k">可兑换</div><div class="v">${n(rows.exchange_affordable)} 件</div><div class="s">${affordSub}</div></div>
  </div>
  <div class="sec-stats">${stats.map(item=>`<span>${item[0]} <b>${item[1]}</b></span>`).join('')}</div>`;
 }
@@ -128,97 +123,81 @@ function promotionHtml(rows){
    <span class="sec-cond-k">晋升考核</span><span class="sec-cond-v">${esc(p.quest_name||(p.quest?('任务 '+p.quest):'满足条件后前往宗主处晋升'))}</span>
   </div>
   <div class="sec-bar"><i style="width:${repPct}%"></i></div>
-  <div class="sec-hint">晋升后年俸 ${num(p.salary)}，每周期任务上限 ${num(p.task_limit)} 项。</div>
+  <div class="sec-hint">晋升后年俸 ${num(p.salary)} 灵石；部分宗门委托只开放给真传弟子及以上职位。</div>
  </div>`;
 }
 
 function incomeHtml(rows){
- const salary=rows.salary||{},refresh=rows.refresh||{};
+ const c=commission(rows),salary=rows.salary||{};
  return `<div class="sec-block">
-  <div class="sec-head">本月收入<span>${esc(refresh.next?('下次刷新 '+refresh.next):'刷新时间未知')}</span></div>
+  <div class="sec-head">本期委托收益<span>${refreshText(c)}</span></div>
   <div class="sec-income">
-   <div><span>委托板贡献</span><b>+${num(rows.offer_contribution)}</b></div>
-   <div><span>委托板声望</span><b>+${num(rows.offer_reputation)}</b></div>
-   <div><span>年俸</span><b>${num(salary.annual)}</b></div>
+   <div><span>可接委托</span><b>+${num(c.available_contribution)}</b><small>声望 +${num(c.available_reputation)}</small></div>
+   <div><span>已接未交</span><b>+${num(c.accepted_contribution)}</b><small>声望 +${num(c.accepted_reputation)}</small></div>
+   <div><span>年俸</span><b>${num(salary.annual)}</b><small>灵石</small></div>
    <div><span>下次俸禄</span><b>${salary.amount>0?num(salary.amount):'待结算'}</b>${salary.next_time?`<small>${esc(salary.next_time)}</small>`:''}</div>
   </div>
-  <div class="sec-hint" style="margin-top:8px">仅统计委托板可接任务；已接任务的奖励以游戏内为准。</div>
+  <div class="sec-hint" style="margin-top:8px">只统计当前存档里已挂出的委托；接取和提交都在游戏「委托」面板内完成。</div>
  </div>`;
 }
 
-function tasksHtml(rows){
- const accepted=rows.accepted||[];
- const list=rows.offers||[];
- const slots=rows.slots||{};
- const refresh=rows.refresh||{};
- const pending=accepted.filter(item=>item.state_text==='待提交');
- const done=accepted.filter(item=>item.state_text==='已提交');
- const active=accepted.filter(item=>!['待提交','已提交'].includes(item.state_text));
- const card=item=>{
-  const isPending=item.state_text==='待提交';
-  const state=isPending?badge('待提交','warn'):(item.state_text==='已提交'?badge('已提交','ok'):badge(item.state_text||'进行中','warn'));
-  const progress=item.progress_target?`<span class="sec-num">${num(item.progress_now)}/${num(item.progress_target)}</span>`:'';
-  return `<div class="sec-task-card${isPending?' pending':''}${item.state_text==='已提交'?' done':''}">
-   <div class="sec-task-top">
-    <span class="sec-task-name">${esc(item.name)}</span>
-    ${item.action&&item.action!=='其他'?badge(item.action,'act'):''}
-    ${state}${progress}
-   </div>
-   ${item.objective?`<div class="sec-task-obj">${esc(item.objective)}</div>`:''}
-   <div class="sec-task-meta">
-    ${item.location?`<span>${esc(item.location)}</span>`:''}
-    ${item.target?`<span>${esc(item.action||'目标')} ${esc(item.target)}${item.count?` ×${num(item.count)}`:''}${item.quality?` · ${esc(item.quality)}`:''}</span>`:''}
-   </div>
-  </div>`;
- };
- const group=(title,items)=>items.length?`<div class="sec-sub">${title} ${items.length} 条</div>`+items.map(card).join(''):'';
- // 委托板是轮换的：本期挂出数量以存档为准（不写死「3 条」）；「可同时接」上限由职位决定。
- // 接取方式据游戏代码：tbinteractaction 604「执事堂」由本宗 NPC 交互打开面板；
- // tbstrconfig.sect：SECT_DUTY_TAB_TASK=宗门任务（页签）、SECT_DUTY_LIST_TASK=可接任务（列表标题）、
- // SECT_DUTY_TASK_ACTION_ACCEPT=领取任务；点击后 SectTaskManager.TryAcceptSectTask 自动接取。
- // 页面必须明确告诉玩家去哪里接；只挂「可领取」标签会让人以为在助手里就能领。
- const refreshText=refresh.next?`每周期轮换 · 下次刷新 ${esc(refresh.next)}`:'每周期轮换';
- const offerHint=`这些任务找<b>本宗 NPC 对话选「执事堂」</b> → 在「宗门任务」页签的「可接任务」列表里选任务、点「领取任务」即自动接取，完成后回执事堂提交。下面的「可领取」= 现在就能去领，不是奖励已到账。`;
- const ruleHint=`本期挂出 <b>${list.length}</b> 条外务委托${refresh.next?`，下次刷新 <b>${esc(refresh.next)}</b>`:''}，会轮换出新的一批。「本期挂出 ${list.length} 条」不等于「只能同时接 ${list.length} 个」——你能同时接的上限是 <b>${n(slots.limit)}</b> 条（由职位决定）。`;
- const offerBody=list.length?list.map(item=>{
-  const state=item.completed?badge('已完成','ok'):(item.locked?badge('职位不足','warn'):badge('可领取',''));
-  // 目标/地点来自 tbquest.objectives，与已接任务同源；占位任务没有目标时不显示这一行。
-  const detail=item.objective?`<div class="sec-task-obj">${esc(item.objective)}</div>
-   <div class="sec-task-meta">
-    ${item.location?`<span>${esc(item.location)}</span>`:''}
-    ${item.target?`<span>${esc(item.action||'目标')} ${esc(item.target)}${item.count?` ×${num(item.count)}`:''}${item.quality?` · ${esc(item.quality)}`:''}</span>`:''}
-   </div>`:'';
-  return `<div class="sec-task-card${item.completed?' done':''}">
-   <div class="sec-task-top">
-    <span class="sec-task-name">${esc(item.name)}</span>
-    ${badge(item.type_name||'宗门任务')}${badge('难度 '+n(item.difficulty))}
-    ${item.min_position?badge(item.min_position_name||('职位 '+item.min_position)):''}
-    <span class="sec-num">+${num(item.contribution)} 贡献</span>
-    ${item.reputation?`<span class="sec-num">+${num(item.reputation)} 声望</span>`:''}
-    ${item.stones?`<span class="sec-num">+${num(item.stones)} 灵石</span>`:''}
-    ${state}
-   </div>
-   ${detail}
-  </div>`;
- }).join(''):`<div class="sec-empty">本期委托板没有挂出的宗门任务。</div>`;
- const offerBlock=`<div class="sec-block">
-  <div class="sec-head">委托板 · 外务委托<span>${refreshText}</span></div>
-  <div class="sec-hint sec-offer-how">${offerHint}</div>
-  <details class="sec-pool sec-offer-rule"><summary>轮换与接取上限说明</summary><div class="sec-hint">${ruleHint}</div></details>
-  ${offerBody}
+function commissionGuide(c){
+ const place=c.scene_name?`宗门「${esc(c.scene_name)}」`:'宗门驻地';
+ const npcHint=c.npc_name?`（${esc(c.npc_name)}在${place}）`:'';
+ return `${place}场景顶部有「委托」按钮${npcHint}。任务每 ${num(c.refresh.days||30)} 天刷新 ${num(c.refresh_count||9)} 条，`
+  +`最多同时接 ${num(c.limit||10)} 条，接取后 ${num(c.completion_days||90)} 天内不做会失效；完成后回同一面板提交。`;
+}
+
+function taskCard(card,kind){
+ const isPending=kind==='pending';
+ const progress=card.progress_target?`<span class="sec-num">${num(card.progress_now)}/${num(card.progress_target)}</span>`:'';
+ const stateBadge=kind==='pending'?badge('待提交','warn')
+  :kind==='active'?badge('进行中','warn')
+  :kind==='submitted'?badge('已提交','ok')
+  :(card.locked?badge('职位不符','warn'):badge('可接取',''));
+ const remain=kind==='active'&&card.remaining_days!==null&&card.remaining_days!==undefined
+  ?badge(`剩 ${num(card.remaining_days)} 天`,card.remaining_days<=7?'warn':'') :'';
+ const meta=[];
+ if(card.location)meta.push(card.location);
+ if(card.target)meta.push(`${card.target}${card.count?` ×${num(card.count)}`:''}`);
+ if(card.position_text)meta.push(`需 ${card.position_text}`);
+ return `<div class="sec-task-card${isPending?' pending':''}${card.locked?' locked':''}">
+  <div class="sec-task-top">
+   <span class="sec-task-name">${esc(card.name)}</span>
+   ${badge(card.type_name,'act')}${badge('难度 '+num(card.difficulty))}
+   ${stateBadge}${remain}${progress}
+  </div>
+  ${card.objective?`<div class="sec-task-obj">${esc(card.objective)}</div>`:''}
+  <div class="sec-task-meta">
+   <span class="sec-task-reward">贡献 +${num(card.contribution)}</span>
+   ${card.reputation?`<span class="sec-task-reward">声望 +${num(card.reputation)}</span>`:''}
+   ${card.stones?`<span class="sec-task-reward">灵石 +${num(card.stones)}</span>`:''}
+   ${meta.map(text=>`<span>${esc(text)}</span>`).join('')}
+  </div>
  </div>`;
- // 差遣/要务/重任：已接任务来自任务日志（questComponent），与执事堂委托板是两套。
- // 游戏代码里 task_type 2/3/4 的 quest_id 全为 0、未实装，查不到「找执事/长老领取」的依据，
- // 因此不写具体接取人，只说明数据去向，避免编造引导。
- const dutyHint=`这里的已接任务来自游戏任务日志，与执事堂委托板是两套，不在委托板上；接取方式以游戏内任务来源为准，已接的计在「可同时接 <b>${n(slots.limit)}</b> 条」里。`;
- const dutyBody=(group('待提交',pending)+group('进行中',active)+group('已提交',done))
-  ||`<div class="sec-empty">当前没有已接取的差遣 / 要务 / 重任；这类任务不在执事堂委托板上。</div>`;
- const dutyBlock=`<div class="sec-block">
-  <div class="sec-head">宗门差遣 · 要务 · 重任<span>可同时接 ${n(slots.limit)} 条 · 已接 ${n(slots.accepted)} · 待提交 ${pending.length}</span></div>
-  <div class="sec-hint">${dutyHint}</div>
-  ${dutyBody}
+}
+
+function commissionsHtml(rows){
+ const c=commission(rows);
+ const groups=(c.groups||[]).filter(g=>n(g.count)>1);
+ const groupHint=groups.length
+  ?`<div class="sec-route"><b>顺路</b>${groups.slice(0,6).map(g=>`<span title="${esc((g.names||[]).join('、'))}">${esc(g.location)} ×${num(g.count)}</span>`).join('')}${groups.length>6?'<span>…</span>':''}</div>`
+  :'';
+ const pending=(c.pending||[]).map(card=>taskCard(card,'pending')).join('');
+ const active=(c.active||[]).map(card=>taskCard(card,'active')).join('');
+ const available=(c.available||[]).map(card=>taskCard(card,'available')).join('');
+ const submitted=(c.submitted||[]).map(card=>taskCard(card,'submitted')).join('');
+ const empty=`<div class="sec-empty">本期没有可接的宗门委托。进游戏刷新后再同步，或检查是否已接满 ${num(c.limit||10)} 条。</div>`;
+ return `<div class="sec-block">
+  <div class="sec-head">宗门委托<span>${esc(rows.sect_name||'')} · ${refreshText(c)}</span></div>
+  <div class="sec-offer-note">${commissionGuide(c)}</div>
+  ${groupHint}
+  ${pending?`<div class="sec-sub">待提交 ${(c.pending||[]).length} 条</div>${pending}`:''}
+  ${active?`<div class="sec-sub">进行中 ${(c.active||[]).length} 条</div>${active}`:''}
+  <div class="sec-sub">本期委托 ${(c.available||[]).length} 条 · 可接 ${(c.available||[]).filter(card=>!card.locked).length}</div>
+  ${available||empty}
+  ${submitted?`<details class="sec-pool"><summary>已提交 ${(c.submitted||[]).length} 条（下期刷新后移除）</summary>${submitted}</details>`:''}
  </div>`;
- return offerBlock+dutyBlock;
 }
 
 function shopHtml(rows){
@@ -290,37 +269,15 @@ function shopHtml(rows){
  </div>`;
 }
 
-function purchaseHtml(rows){
- const sect=view().sects[n(rows.sect_id)]||{};
- const purchase=rows.purchase||{};
- const current=purchase.current||[],delivered=purchase.delivered||[];
- const pool=sect.purchases||[];
- const currentHtml=current.length?current.map(order=>`<div class="sec-task">
-   <span class="sec-task-name">${esc(order.name)}</span><span class="badge">×${n(order.count)}</span>
-   <span class="sec-num">+${num(order.contribution)} 贡献</span>${badge(order.state||'待交付')}
-  </div>`).join(''):`<div class="sec-empty">本期没有征收委托${delivered.length?`（已交付 ${delivered.length} 单）`:''}。${purchase.refresh?('下次刷新：'+esc(purchase.refresh)):''}</div>`;
- const poolHtml=pool.length?`<details class="sec-pool"><summary>可征收清单 ${pool.length} 项</summary>${
-  pool.map(order=>`<div class="sec-task">
-   <span class="sec-task-name">${esc(order.name)}</span><span class="badge">×${n(order.count)}</span>
-   ${order.min_position?badge(order.min_position_name||('职位 '+order.min_position)):''}
-   <span class="sec-num">+${num(order.contribution)} 贡献</span>
-   ${order.reputation?`<span class="sec-num">+${num(order.reputation)} 声望</span>`:''}
-  </div>`).join('')}</details>`:'';
- return `<div class="sec-block">
-  <div class="sec-head">灵材征收<span>${esc(rows.position_name||'')}</span></div>
-  ${currentHtml}${poolHtml}
- </div>`;
-}
-
 function joinHtml(){
  const v=view(),sects=v.config.sects||[];
  const playable=sects.filter(s=>s.playable),closed=sects.filter(s=>!s.playable);
- return `<div class="sec-notice">当前存档尚未加入宗门。加入后可查看职位晋升、贡献兑换、宗门任务与灵材征收。</div>
+ return `<div class="sec-notice">当前存档尚未加入宗门。加入后可查看职位晋升、宗门委托与贡献兑换。</div>
   <div class="sec-block"><div class="sec-head">可加入宗门<span>${playable.length} 个</span></div>
    <div class="sec-join">${playable.map(s=>`<div class="sec-join-row">
     <b>${esc(s.name)}</b>${s.region?badge(s.region):''}
     <span class="sec-join-desc">${esc(s.feature||s.desc||'')}</span>
-    <span class="sec-join-meta">${s.headquarters_name?esc(s.headquarters_name):''}${s.join_quest?` · 入宗任务 ${s.join_quest}`:''}</span>
+    <span class="sec-join-meta">${s.headquarters_name?esc(s.headquarters_name):''}${s.join_quest?` · 入宗任务 ${esc(s.join_quest_name||'未识别任务')}`:''}</span>
    </div>`).join('')}</div>
   </div>
   ${closed.length?`<div class="sec-hint">另有 ${closed.length} 个宗门暂未配置藏经阁兑换，本期不展示：${closed.map(s=>esc(s.name)).join('、')}。</div>`:''}`;
@@ -340,12 +297,12 @@ function render(){
   return;
  }
  if(!rows.in_sect){
-  box.innerHTML=sourceHtml(DATA.modules.sect)+cardsHtml(rows)+warningsHtml(rows)+joinHtml();
+  box.innerHTML=sourceHtml(DATA.modules.sect)+warningsHtml(rows)+joinHtml();
   return;
  }
  box.innerHTML=sourceHtml(DATA.modules.sect)+dashboardHtml(rows)+warningsHtml(rows)
   +`<div class="sec-layout">
-    <div class="sec-main">${tasksHtml(rows)}${purchaseHtml(rows)}</div>
+    <div class="sec-main">${commissionsHtml(rows)}</div>
     <aside class="sec-side">${careerHtml(rows)}${incomeHtml(rows)}</aside>
    </div>`
   +shopHtml(rows);

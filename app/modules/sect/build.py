@@ -1,31 +1,49 @@
 # -*- coding: utf-8 -*-
 """宗门：配置表 → 模块快照。
 
-数据来源（均已核对）：
-    tbsect                 宗门基础信息、藏经阁兑换 NPC、入宗任务
-    tbsectposition         职位、晋升所需宗门声望与境界、年俸、任务上限
-    tbsectpositionquest    各宗门的晋升考核任务
-    tbsecttaskpool         宗门任务池（贡献与声望奖励）
-    tbsectpurchaseorder    灵材征收（收购委托）
-    tbnpcbagrule           藏经阁兑换货架（scriptoriumContributionPrice）
-    tbconditionexpr        兑换档位的职位条件（BASE_POS_GE_n）
-    tbquest / tbrewarddrop 任务名与奖励（贡献、声望）
+数据来源（2026-11-27 已核对）：
+
+    tbsect                    宗门基础信息、藏经阁兑换 NPC、入宗任务
+    tbsectposition            职位、晋升所需宗门声望与境界、年俸
+    tbsectpositionquest       各宗门的晋升考核任务
+    tbnpcbagrule              藏经阁兑换货架（scriptoriumContributionPrice）
+    tbconditionexpr           兑换档位的职位条件（BASE_POS_GE_n）
+    tbquest / tbrewarddrop    任务名、目标与奖励（贡献、声望）
+
+宗门委托（游戏现行系统，入口是宗门场景顶部的「委托」按钮）：
+
+    tbcommissionforce            委托势力；force_type=2 是宗门，parameter_id=宗门 id
+    tbcommissionforcetaskrefresh 各势力委托的入口场景/NPC、刷新条数
+    tbcommissiontaskpool         委托池：任务类型、职位门槛、任务 id、奖励掉落
+
+旧执事堂的 tbsecttaskpool / tbsectpurchaseorder 在当前版本没有游戏入口
+（执事堂交互动作 604 未被任何 NPC 或场景 UI 引用），不再进入快照。
 """
 import re
 
 from meta_update import _int, _plain, _rows, _text, build_realms
 
 
-# task_type 是玩法类型，不是业务分类。游戏 SectTaskType 枚举与
-# SectDutyHallViewModel.BuildTaskCard 的映射为 1=HUNT/2=GATHER/3=SPAR/4=FETCH，
-# 对应文案见 tbstrconfig.sect 的 DutyTaskTypeHunt/Gather/Spar/Fetch。
-# 未知类型兜底为「宗门任务·类型N」，不硬编码新类型。
-TASK_TYPES = {1: "讨伐", 2: "采集", 3: "切磋", 4: "寻物"}
+# 委托任务类型：来自游戏 TbStrConfig 的 COMMISSION_TASK_TYPE_* 文案
+# （1 找人 / 2 除妖 / 3 争斗 / 4 采集 / 5 疏经 / 6 炼器 / 7 炼丹 / 8 赠礼 /
+#  9 恩怨 / 10 偷窃），已用 tbcommissiontaskpool.task_type 与任务名逐一核对。
+COMMISSION_TASK_TYPES = {
+    1: "找人", 2: "除妖", 3: "争斗", 4: "采集", 5: "疏经",
+    6: "炼器", 7: "炼丹", 8: "赠礼", 9: "恩怨", 10: "偷窃",
+}
+COMMISSION_TASK_TYPE_FALLBACK = "委托"
+
+# 委托周期常量在 tbconstants 主表（不分片）。meta_update 对分片表只保留首个，
+# 可能拿到 tbconstants.* 分片而取不到这几项，此时回退到游戏实测值并记录来源。
+COMMISSION_CONSTANT_DEFAULTS = {
+    "COMMISSION_TASK_REFRESH_DAYS": 30,
+    "COMMISSION_TASK_MAX_ACCEPTED_PER_FORCE": 10,
+    "COMMISSION_TASK_COMPLETION_DAYS": 90,
+}
 
 
-def _task_type_name(task_type):
-    """任务类型文案：已知类型用固定文案，未知类型兜底为「宗门任务·类型N」。"""
-    return TASK_TYPES.get(task_type) or ("宗门任务·类型%d" % task_type)
+def _commission_type_name(task_type):
+    return COMMISSION_TASK_TYPES.get(task_type) or COMMISSION_TASK_TYPE_FALLBACK
 
 
 def _rows_of(tables, key):
@@ -49,24 +67,24 @@ def _quest_names(tables):
     for row in _rows_of(tables, "tbquest"):
         quest_id = _int(row.get("id"))
         if quest_id:
-            names[quest_id] = _plain(row.get("name")) or ("任务 %s" % quest_id)
+            names[quest_id] = _plain(row.get("name")) or ""
     return names
 
 
-def _quest_objective_info(row):
-    """从 tbquest 行解析目标/地点/目标物/数量/动作；无目标时返回空字典。
+def _strip_type_prefix(name):
+    """任务名去掉「[宗门]」这类类型前缀，只留可读任务名。"""
+    return re.sub(r"^\[[^\]]*\]\s*", "", name or "").strip()
 
-    已接的 [宗门] 任务与委托板任务共用这套解析，避免委托板只有任务名。
-    """
+
+def _quest_objective(row):
+    """任务目标 → 目标文本、地点、目标物/怪物/NPC、数量、品质。"""
     raw_texts = []
     for objective in row.get("objectives") or []:
         if isinstance(objective, dict):
             raw = _text(objective.get("description"))
             if raw:
                 raw_texts.append(raw)
-    if not raw_texts:
-        return {}
-    raw = raw_texts[0]
+    raw = raw_texts[0] if raw_texts else ""
     highlights = [_plain(match) for match in
                   re.findall(r"<color=[^>]+>(.*?)</color>", raw, re.S)]
     places = [text for text in highlights if "." in text or "·" in text]
@@ -76,48 +94,33 @@ def _quest_objective_info(row):
         location, target = highlights[0], (highlights[-1] if len(highlights) > 1 else "")
     objective = "；".join(_plain(text) for text in raw_texts)
     count = 0
-    match = re.search(r"(?:采集|收集|击败|击杀|讨伐|提交|准备)\s*(\d+)\s*(?:个|只|名|位|株|份|枚|张)", objective)
+    match = re.search(r"(?:采集|收集|击败|击杀|讨伐|提交|准备|炼制|筹备|赠送|窃取|偷窃|说服|行医|疏经)\s*(\d+)\s*(?:个|只|名|位|株|份|枚|张|件)", objective)
     if match:
         count = int(match.group(1))
     quality = ""
     quality_match = re.search(r"[（(]([^）)]+品质)[）)]", objective)
     if quality_match:
         quality = quality_match.group(1)
-    action = "其他"
-    for keyword, label in (("采集", "采集"), ("采药", "采集"), ("收集", "收集"),
-                           ("击败", "讨伐"), ("击杀", "讨伐"), ("除患", "讨伐"),
-                           ("切磋", "切磋"), ("交谈", "访谈"), ("访谈", "访谈"),
-                           ("赠礼", "赠礼"), ("亲密度", "赠礼"), ("好感度", "赠礼"),
-                           ("筹备", "筹备"), ("提交", "提交"), ("前往", "前往")):
-        if keyword in objective:
-            action = label
-            break
-    return {
-        "objective": objective, "location": location, "target": target,
-        "count": count, "quality": quality, "action": action,
-    }
+    return {"objective": objective, "location": location, "target": target,
+            "count": count, "quality": quality}
 
 
-def _duty_quests(tables):
-    """已接取的宗门任务：[宗门] 开头的任务目标、地点、目标物与动作。
+def _sect_quests(tables):
+    """全部 [宗门] 任务：任务名、目标、地点与数量。
 
-    这些任务不在 tbsecttaskpool 里（该表只用于委托板），只能从 tbquest 与
-    存档 questComponent.quests 关联，否则界面会只看到委托板的 3 条。
+    这些任务就是现行宗门委托的内容（tbcommissiontaskpool.quest_id 指向它们），
+    不在旧 tbsecttaskpool 里；已接任务的进度也只能从存档任务日志关联。
     """
     out = {}
     for row in _rows_of(tables, "tbquest"):
         quest_id = _int(row.get("id"))
         name = _plain(row.get("name")) or ""
-        if not quest_id or not name.startswith("[宗门]"):
+        if not quest_id or not (name.startswith("[宗门]") or name.startswith("[宗門]")):
             continue
-        info = _quest_objective_info(row)
-        out[str(quest_id)] = dict(info, name=name,
-                                  objective=info.get("objective", ""),
-                                  location=info.get("location", ""),
-                                  target=info.get("target", ""),
-                                  count=info.get("count", 0),
-                                  quality=info.get("quality", ""),
-                                  action=info.get("action", "其他"))
+        info = _quest_objective(row)
+        info["name"] = _strip_type_prefix(name)
+        info["full_name"] = name
+        out[str(quest_id)] = info
     return out
 
 
@@ -161,13 +164,17 @@ def _reward_items(tables):
     return items, drops
 
 
-def _sum_drop(entries, rep_map):
-    """把掉落拆成灵石、宗门声望、其它物品。rep_map: itemId → ('sect'|'town', id)。"""
-    stones, sect_rep, town_rep, extra = 0, {}, {}, []
+def _sum_drop(entries, rep_map, item_names):
+    """把掉落拆成灵石、宗门贡献、宗门/城镇声望、其它物品（其它物品带名称）。"""
+    stones, contribution, sect_rep, town_rep, extra = 0, 0, {}, {}, []
     for item_id, low, high in entries:
         count = low if low == high else max(low, high)
-        if item_id == 50000:
+        name = item_names.get(item_id) or ""
+        if name == "灵石":
             stones += count
+            continue
+        if name == "宗门贡献":
+            contribution += count
             continue
         target = rep_map.get(item_id)
         if target:
@@ -175,15 +182,40 @@ def _sum_drop(entries, rep_map):
             bucket = sect_rep if kind == "sect" else town_rep
             bucket[target_id] = bucket.get(target_id, 0) + count
             continue
-        extra.append({"item": item_id, "count": count})
-    return stones, sect_rep, town_rep, extra
+        extra.append({"item": item_id, "name": name or "未识别物品", "count": count})
+    return stones, contribution, sect_rep, town_rep, extra
+
+
+def _position_text(ids, names):
+    """职位门槛显示：连续段用「A ~ B」，否则顿号分隔。"""
+    names = [name for name in names if name]
+    if not ids:
+        return ""
+    if not names:
+        return ""
+    if len(names) > 1 and len(ids) == len(range(ids[0], ids[-1] + 1)):
+        return "%s ~ %s" % (names[0], names[-1])
+    return "、".join(names)
+
+
+def _commission_constants(tables):
+    """委托周期常量：优先 tbconstants 主表，取不到时回退游戏实测值。"""
+    values = dict(COMMISSION_CONSTANT_DEFAULTS)
+    source = "fallback"
+    keys = set(COMMISSION_CONSTANT_DEFAULTS)
+    for row in _rows_of(tables, "tbconstants"):
+        for key in keys:
+            if key in row:
+                values[key] = _int(row.get(key), values[key])
+                source = "config"
+    return values, source
 
 
 def build(tables):
     realms = build_realms(tables)
     item_names, drops = _reward_items(tables)
     quests = _quest_names(tables)
-    quest_rows = {_int(row.get("id")): row for row in _rows_of(tables, "tbquest")}
+    sect_quests = _sect_quests(tables)
     npcs = _npc_names(tables)
     aliases = _condition_aliases(tables)
 
@@ -234,8 +266,25 @@ def build(tables):
             if _int(phase):
                 phases[str(_int(phase))] = str(realm_id)
 
-    pool = _rows_of(tables, "tbsecttaskpool")
-    orders = _rows_of(tables, "tbsectpurchaseorder")
+    # 委托势力：force_type=2 → parameter_id 是宗门 id
+    force_by_sect = {}
+    for row in _rows_of(tables, "tbcommissionforce"):
+        if _int(row.get("force_type")) == 2:
+            force_by_sect[_int(row.get("parameter_id"))] = _int(row.get("id"))
+    refresh_by_force = {}
+    for row in _rows_of(tables, "tbcommissionforcetaskrefresh"):
+        force_id = _int(row.get("force_id"))
+        if force_id:
+            refresh_by_force[force_id] = row
+    pool_by_force = {}
+    for row in _rows_of(tables, "tbcommissiontaskpool"):
+        pool_by_force.setdefault(_int(row.get("force_id")), []).append(row)
+
+    commission_constants, constants_source = _commission_constants(tables)
+    commission_constants["source"] = constants_source
+    commission_constants["max_accepted"] = commission_constants.get(
+        "COMMISSION_TASK_MAX_ACCEPTED_PER_FORCE", 10)
+
     promo_rows = _rows_of(tables, "tbsectpositionquest")
 
     # 藏经阁：按 NPC 收集带贡献价的兑换项。
@@ -291,63 +340,67 @@ def build(tables):
         exchange.sort(key=lambda entry: (0 if entry["role"] == "low" else 1,
                                         -entry["sort"], entry["price"]))
 
-        tasks = []
-        for pool_row in pool:
-            if sect_id not in [_int(value) for value in (pool_row.get("sect_ids") or [])]:
-                continue
-            drop_id = _int(pool_row.get("reward_drop_id"))
-            stones, sect_rep, _town_rep, extra = _sum_drop(drops.get(drop_id) or [], rep_map)
-            quest_id = _int(pool_row.get("quest_id"))
-            task_type = _int(pool_row.get("task_type"))
-            type_name = _task_type_name(task_type)
-            difficulty = _int(pool_row.get("task_difficulty"), 1)
-            # 委托板任务的目标/地点/动作与已接任务同源（tbquest.objectives）；
-            # quest_id=0 的占位配置没有目标，也不在游戏抽选范围内，保持空字段。
-            info = _quest_objective_info(quest_rows.get(quest_id) or {}) if quest_id else {}
-            tasks.append({
-                "id": _int(pool_row.get("id")),
-                "quest": quest_id,
-                "name": quests.get(quest_id) or ("%s·难度%d" % (type_name, difficulty)),
-                "type": task_type,
-                "type_name": type_name,
-                "objective": info.get("objective", ""),
-                "location": info.get("location", ""),
-                "target": info.get("target", ""),
-                "count": info.get("count", 0),
-                "quality": info.get("quality", ""),
-                "action": info.get("action", ""),
-                "difficulty": difficulty,
-                "min_position": _int(pool_row.get("min_position_level")),
-                "min_position_name": (position_by_id.get(
-                    _int(pool_row.get("min_position_level"))) or {}).get("name", ""),
-                "contribution": _int(pool_row.get("reward_contribution")),
-                "reputation": sect_rep.get(sect_id, 0),
-                "stones": stones,
-                "other": extra,
-                "weight": _int(pool_row.get("weight")),
-                "refresh_scope": _int(pool_row.get("refresh_scope")),
+        # 宗门委托（现行系统）
+        force_id = force_by_sect.get(sect_id, 0)
+        commission = {
+            "force": force_id,
+            "enabled": False,
+            "entry_scene": 0,
+            "entry_scene_name": "",
+            "entry_npc": 0,
+            "entry_npc_name": "",
+            "refresh_count": 0,
+            "tasks": [],
+        }
+        if force_id:
+            entry_row = refresh_by_force.get(force_id) or {}
+            scene_id = _int(entry_row.get("entry_scene_id"))
+            npc_id = _int(entry_row.get("entry_npc_id"))
+            commission.update({
+                "enabled": bool(entry_row.get("enabled")),
+                "entry_scene": scene_id,
+                "entry_scene_name": space_names.get(scene_id, ""),
+                "entry_npc": npc_id,
+                "entry_npc_name": npcs.get(npc_id, ""),
+                "refresh_count": _int(entry_row.get("refresh_task_count")),
             })
-        tasks.sort(key=lambda task: (task["difficulty"], -task["contribution"], task["id"]))
-
-        purchases = []
-        for order_row in orders:
-            if sect_id not in [_int(value) for value in (order_row.get("sect_ids") or [])]:
-                continue
-            item_id = _int(order_row.get("item_id"))
-            purchases.append({
-                "id": _int(order_row.get("id")),
-                "item": item_id,
-                "name": item_names.get(item_id) or "未识别物品",
-                "count": _int(order_row.get("demand_count"), 1),
-                "contribution": _int(order_row.get("reward_contribution")),
-                "reputation": _int(order_row.get("sect_reputation_reward")),
-                "min_position": _int(order_row.get("min_position_level")),
-                "min_position_name": (position_by_id.get(
-                    _int(order_row.get("min_position_level"))) or {}).get("name", ""),
-                "difficulty": _int(order_row.get("task_difficulty"), 1),
-                "weight": _int(order_row.get("weight")),
-            })
-        purchases.sort(key=lambda order: (order["min_position"], order["id"]))
+            for pool_row in pool_by_force.get(force_id, []):
+                task_id = _int(pool_row.get("id"))
+                quest_id = _int(pool_row.get("quest_id"))
+                task_type = _int(pool_row.get("task_type"))
+                quest_info = sect_quests.get(str(quest_id)) or {}
+                stones, contribution, sect_rep, _town_rep, extra = _sum_drop(
+                    drops.get(_int(pool_row.get("reward_drop_id"))) or [], rep_map, item_names)
+                pos_ids = sorted({_int(value) for value in
+                                  (pool_row.get("sect_position_id") or []) if _int(value)})
+                pos_names = [(position_by_id.get(pid) or {}).get("name", "") for pid in pos_ids]
+                commission["tasks"].append({
+                    "id": task_id,
+                    "quest": quest_id,
+                    "name": quest_info.get("name") or "未识别委托",
+                    "type": task_type,
+                    "type_name": _commission_type_name(task_type),
+                    "difficulty": _int(pool_row.get("difficulty"), 1),
+                    "realm_section": _int(pool_row.get("realm_section")),
+                    "objective": quest_info.get("objective", ""),
+                    "location": quest_info.get("location", ""),
+                    "target": quest_info.get("target", ""),
+                    "count": quest_info.get("count", 0),
+                    "quality": quest_info.get("quality", ""),
+                    "position_ids": pos_ids,
+                    "position_names": [text for text in pos_names if text],
+                    "position_text": _position_text(pos_ids, pos_names),
+                    "contribution": contribution,
+                    "reputation": sect_rep.get(sect_id, 0),
+                    "stones": stones,
+                    "other": extra,
+                })
+            commission["tasks"].sort(
+                key=lambda task: (task["difficulty"], task["type"], task["id"]))
+            if exchange and not commission["tasks"]:
+                warnings.append("%s 有委托势力但任务池为空" % name)
+        elif exchange:
+            warnings.append("%s 未配置宗门委托势力（force_type=2）" % name)
 
         promotions = []
         for promo in promo_rows:
@@ -390,8 +443,7 @@ def build(tables):
             "playable": bool(exchange),
             "exchange": exchange,
             "exchange_total": sum(entry["price"] for entry in exchange),
-            "tasks": tasks,
-            "purchases": purchases,
+            "commission": commission,
             "promotions": promotions,
         })
 
@@ -404,6 +456,10 @@ def build(tables):
     stone_id = next((item_id for item_id, row in item_rows.items()
                      if _plain(row.get("itemName")) == "灵石"), 0)
     constants.setdefault("STONE_ITEM_ID", stone_id or 50000)
+    # 贡献 id 同理，避免写死 50002。
+    contribution_id = next((item_id for item_id, row in item_rows.items()
+                            if _plain(row.get("itemName")) == "宗门贡献"), 0)
+    constants.setdefault("SECT_CONTRIBUTION_ITEM_ID", contribution_id or 50002)
 
     return {
         "schema": 1,
@@ -412,8 +468,8 @@ def build(tables):
         "positions": positions,
         "career": career,
         "constants": constants,
-        "task_types": {str(key): value for key, value in TASK_TYPES.items()},
-        "duty_quests": _duty_quests(tables),
+        "commission_constants": commission_constants,
+        "commission_types": {str(key): value for key, value in COMMISSION_TASK_TYPES.items()},
         "sects": sects,
         "warnings": warnings,
     }
