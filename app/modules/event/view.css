@@ -42,3 +42,21 @@
 .evcheck.ok{border-color:var(--ok-border);color:var(--ok-text)}
 .evcheck.bad{border-color:var(--danger-border);color:var(--danger-text)}
 .evcheck.info{border-color:var(--info-border);color:var(--info-text)}
+
+/* 结局改成可折叠：一条奇遇常有 10 条以上结局，全展开时页面极长。 */
+.eend{background:var(--surface-alt);border:1px solid var(--border-subtle);border-radius:8px;margin:0 0 6px;overflow:hidden}
+.eend>.eend-head{list-style:none;cursor:pointer;padding:7px 9px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.eend>.eend-head::-webkit-details-marker{display:none}
+.eend>.eend-head:before{content:'\203a';color:var(--text-faint);font-size:15px;transition:.15s;flex:none}
+.eend[open]>.eend-head:before{transform:rotate(90deg)}
+.eend>.eend-head:hover{background:var(--surface-soft)}
+.eend-body{border-top:1px solid var(--border-raised);padding:8px 9px 9px}
+
+/* 首屏减噪：统计压一行、视角/达成并一行、其余筛选收进更多筛选。 */
+.ev-stats{display:flex;flex-wrap:wrap;gap:2px 16px;margin:10px 2px 12px;color:var(--text-muted);font-size:12px;line-height:1.8}
+.ev-stats b{color:var(--text);font-weight:650;font-variant-numeric:tabular-nums}
+.ev-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+.ev-line .event-chips{margin:0}
+.ev-adv{margin:8px 0 10px}
+.ev-adv .event-chips{margin:6px 0 0}
+.ev-legends{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0 0}

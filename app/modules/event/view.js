@@ -106,12 +106,15 @@ function initEvent(){
  const gateRows=topRows.filter(r=>!r.achieved&&groupMembers(r).some(m=>condSummary(m).some(c=>c.gate&&c.ok===false)));
  const hiPending=(()=>{const seen={};topRows.forEach(r=>hiRewardsOf(r).forEach(x=>{seen[x.name]=x}));
   return Object.keys(seen).map(k=>seen[k]).sort((a,b)=>(b.quality||0)-(a.quality||0));})();
+ // 五张统计卡压成一行小字：这页首屏要让给搜索和奇遇列表。
  const cards=
-  `<div class="card"><div class="k">奇遇达成</div><div class="v">${stats.achieved||0} <span>/ ${stats.events||0}</span></div>${stats.history?`<div class="s">旧存档记录 ${stats.history} 个（未计入）</div>`:''}${stats.memory?`<div class="s">含回忆收录 ${stats.memory} 个</div>`:''}</div>`+
-  `<div class="card"><div class="k">当前境界可做</div><div class="v">${realmRows.filter(r=>!r.achieved&&r.sect_ok!==false).length} <span>/ ${realmRows.length}</span></div><div class="s">${esc(st.current_realm_name||'当前境界')} 还未达成</div></div>`+
-  `<div class="card"><div class="k">属性门槛不足</div><div class="v">${gateRows.length} <span>个</span></div><div class="s">出发前优先补属性</div></div>`+
-  `<div class="card"><div class="k">未拿高品质</div><div class="v">${hiPending.length} <span>种</span></div><div class="s">${hiPending.length?('最值：'+esc(hiPending[0].name)):'暂无品质 ≥3 的未拿奖励'}</div></div>`+
-  `<div class="card"><div class="k">奖励图鉴</div><div class="v">${catalog.length} <span>种</span></div><div class="s">未拥有 ${catalog.filter(x=>!x.owned).length} 种</div></div>`;
+  `<div class="ev-stats">`+
+  `<span><b>${stats.achieved||0}</b> / ${stats.events||0} 已达成</span>`+
+  `<span>当前境界可做 <b>${realmRows.filter(r=>!r.achieved&&r.sect_ok!==false).length}</b> / ${realmRows.length}</span>`+
+  `<span>门槛不足 <b>${gateRows.length}</b> 个</span>`+
+  `<span>未拿高品质 <b>${hiPending.length}</b> 种${hiPending.length?`（最值 ${esc(hiPending[0].name)}）`:''}</span>`+
+  `<span>奖励图鉴 <b>${catalog.length}</b> 种 · 未拥有 ${catalog.filter(x=>!x.owned).length}</span>`+
+  `</div>`;
  
  function treeHtml(r,id,seen,depth){
   const t=r.tree||{},n=(t.nodes||{})[id];
@@ -226,16 +229,16 @@ function initEvent(){
     `<div class="small">后续结局「${esc(f.title)}」${(f.detail||[]).length?` · ${f.detail.map(esc).join(' · ')}`:''}</div>`+
     ((f.rewards||[]).length?`<div class="efchips">${rewardsHtml(f.rewards,f.got,'all')}</div>`:'')+
     `</div>`).join('')+`</div>`:'';
-  const body=endings.map(e=>`<div class="eend${e.got?' got':''}"><div class="eend-head">`+
+  const body=endings.map((e,i)=>`<details class="eend${e.got?' got':''}"${i===0?' open':''}><summary class="eend-head">`+
    `<span class="egrade ${gradeCls(e.grade)}">${esc(e.grade_name||gradeName(e.grade))}</span>`+
    `<span class="eend-title">${esc(e.title)}</span>`+
    (e.got?'<span class="badge ok">已达成</span>':'')+
    (e.history_got&&!e.got?'<span class="badge">历史达成</span>':'')+
    (e.reward_ok===false?'<span class="badge warn">奖励未收录</span>':'')+
-   `</div>${endReqHtml(e)}${e.rewards.length?`<div class="erewards"><b>${e.reward_mode==='one'?'随机获得其一':'结局奖励 · 全部获得'}</b>${e.reward_mode==='one'?'<span class="muted small">按权重随机获得其中一项</span>':''}<div class="efchips">${rewardsHtml(e.rewards,e.got,e.reward_mode)}</div></div>`:'<div class="muted small">无奖励记录</div>'}`+
+   `</summary><div class="eend-body">${endReqHtml(e)}${e.rewards.length?`<div class="erewards"><b>${e.reward_mode==='one'?'随机获得其一':'结局奖励 · 全部获得'}</b>${e.reward_mode==='one'?'<span class="muted small">按权重随机获得其中一项</span>':''}<div class="efchips">${rewardsHtml(e.rewards,e.got,e.reward_mode)}</div></div>`:'<div class="muted small">无奖励记录</div>'}`+
    `${(e.path||[]).length?`<div class="epath"><b>达成路径</b><div class="psteps">${e.path.map((step,i)=>`<span class="pstep"><i>${i+1}</i>${esc(step)}</span>`).join('<span class="parrow">›</span>')}</div></div>`:''}`+
    `${e.summary?`<div class="eend-sum">${esc(e.summary)}</div>`:''}`+
-   `${(e.detail||[]).length?`<div class="eend-detail">${e.detail.map(esc).join(' · ')}</div>`:''}</div>`).join('');
+   `${(e.detail||[]).length?`<div class="eend-detail">${e.detail.map(esc).join(' · ')}</div>`:''}</div></details>`).join('');
   const tree=r.tree?`<details class="etree"><summary>完整对话分支（可选） <span class="muted">静态可确认 ${r.tree_endings||0}/${endings.length} 条结局</span></summary>`+
    `<div class="treewrap">${treeHtml(r,r.tree.root,new Set(),0)}</div>`+
    `<div class="muted small">分支只作补充；优先看上方每条结局的奖励和「达成路径」。✓/✗ 表示当前角色是否满足条件，未标结局的分支由结算判定。</div></details>`:'';
@@ -367,17 +370,11 @@ function initEvent(){
  }
  const realmNames=[...new Set(topRows.map(r=>r.realm_name||'未知境界'))];
  const realmList=[...new Set(topRows.map(r=>String(r.realm||0)))];
- host.innerHTML=sourceHtml(m)+`<details class="evnotes"><summary>规则说明 · 境界限制与分支归并</summary><div class="notice"><b>境界提示：</b>奇遇绑定所在地点，配置里没有“境界高就关闭低阶奇遇”的硬限制；突破后低境界奇遇仍需回到对应地点才会遇到。当前境界的奇遇建议先清。</div><div class="notice"><b>分支归并：</b>同一母奇遇下的子奇遇折叠在母奇遇里；任一分支被选择或达成，整条奇遇即视为完成，其余未选分支不再计入未达成。无法确定父子关系的奇遇仍单独展示。</div></details>`+`<div class="cards">${cards}</div>`+
-  `<div class="legend"><span>物品品质：</span>${QUALITY_NAMES.map((n,i)=>`<span><i style="background:var(--q${i})"></i>${n}</span>`).join('')}<span>越靠右越稀有</span></div>`+
-  `<div class="legend"><span>结局品级：</span><span><i style="background:#8ee6b3"></i>上品</span><span><i style="background:#b9d9ff"></i>中品</span><span><i style="background:#e88b82"></i>下品</span><span>只代表结局平均奖励高低，具体看掉落</span></div>`+
-  `<div class="chips event-chips" id="evgoals"><span class="chip-label">我想…</span>`+
-   `<button class="chip" data-goal="check">出发前检查</button>`+
-   `<button class="chip" data-goal="reward">挑奖励</button>`+
-   `<button class="chip" data-goal="item">奖励图鉴</button>`+
-   `<button class="chip" data-goal="collect">看收集</button><button class="chip" id="evreset">重置筛选</button></div>`+
+ host.innerHTML=sourceHtml(m)+cards+
   `<div class="search-panel"><div class="search-fields" style="grid-template-columns:1fr"><label class="search-field"><span>找奇遇 / 结局 / 奖励物品</span><input id="evq" placeholder="输入奇遇名、结局名或奖励物品名称"></label></div></div>`+
-  `<div class="chips event-chips" id="evmode"><span class="chip-label">视角</span><button class="chip" data-mode="event">按奇遇</button><button class="chip" data-mode="item">按物品反查</button></div>`+
-  `<div class="chips event-chips" id="evstatus"><span class="chip-label">达成</span><button class="chip" data-status="">全部</button><button class="chip" data-status="todo">未达成</button><button class="chip" data-status="done">已达成</button></div>`+
+  `<div class="ev-line"><div class="chips event-chips" id="evmode"><span class="chip-label">视角</span><button class="chip" data-mode="event">按奇遇</button><button class="chip" data-mode="item">按物品反查</button></div>`+
+  `<div class="chips event-chips" id="evstatus"><span class="chip-label">达成</span><button class="chip" data-status="">全部</button><button class="chip" data-status="todo">未达成</button><button class="chip" data-status="done">已达成</button></div></div>`+
+  `<details class="advanced-filters ev-adv" id="evadv"><summary>更多筛选 <span id="evadvcount" class="filter-count"></span></summary>`+
   `<div class="chips event-chips" id="evopen"><span class="chip-label">开启</span>`+
    [['','全部',topRows.length],['pass','已开启',topRows.filter(r=>groupMembers(r).some(m=>m.open_status==='pass')).length],
     ['fail','未开启',topRows.filter(r=>groupMembers(r).some(m=>m.open_status==='fail')).length],
@@ -387,9 +384,16 @@ function initEvent(){
    (st.current_realm?`<button class="chip" data-realm="__current__">当前境界${st.current_realm_name?' · '+esc(st.current_realm_name):''}</button>`:'')+
    realmList.map((value,i)=>`<button class="chip" data-realm="${esc(value)}">${esc(realmNames[i]||('境界 '+value))}</button>`).join('')+`</div>`+
   `<div class="chips event-chips"><button class="chip" id="evcond">只看属性门槛不足</button><button class="chip" id="evmiss">只看有未拥有奖励</button></div>`+
+   `<div class="chips event-chips" id="evgoals"><span class="chip-label">我想…</span>`+
+   `<button class="chip" data-goal="check">出发前检查</button>`+
+   `<button class="chip" data-goal="reward">挑奖励</button>`+
+   `<button class="chip" data-goal="item">奖励图鉴</button>`+
+   `<button class="chip" data-goal="collect">看收集</button><button class="chip" id="evreset">重置筛选</button></div>`+
+  `</details>`+
   `<div class="chips event-chips" id="evitemq" style="display:none"></div>`+
   `<div class="chips event-chips" id="evitemuse" style="display:none"><button class="chip" id="evuseonly">只看有用途</button><button class="chip" id="evunowned">只看未拥有</button><select id="evitemtype" class="itemselect"></select><span class="chip-label">排序</span><button class="chip" data-isort="score">参考价值</button><button class="chip" data-isort="quality">品质</button><button class="chip" data-isort="name">名称</button></div>`+
   `<div id="evcount" class="result-info"></div><div id="evlist"></div>`+
+  `<details class="evnotes"><summary>规则说明 · 境界限制与分支归并</summary><div class="ev-legends"><div class="legend"><span>物品品质：</span>${QUALITY_NAMES.map((n,i)=>`<span><i style="background:var(--q${i})"></i>${n}</span>`).join('')}<span>越靠右越稀有</span></div><div class="legend"><span>结局品级：</span><span><i style="background:#8ee6b3"></i>上品</span><span><i style="background:#b9d9ff"></i>中品</span><span><i style="background:#e88b82"></i>下品</span><span>只代表结局平均奖励高低，具体看掉落</span></div></div><div class="notice"><b>境界提示：</b>奇遇绑定所在地点，配置里没有“境界高就关闭低阶奇遇”的硬限制；突破后低境界奇遇仍需回到对应地点才会遇到。当前境界的奇遇建议先清。</div><div class="notice"><b>分支归并：</b>同一母奇遇下的子奇遇折叠在母奇遇里；任一分支被选择或达成，整条奇遇即视为完成，其余未选分支不再计入未达成。无法确定父子关系的奇遇仍单独展示。</div></details>`+
   `<div class="tip">选择记录里的“累计选 N 次”是存档里的点击次数，不是奖励倍数。`+
   `「NPC 求购」表示该物品可被 NPC 收购或用于 NPC 需求任务；「炼丹药材 / 炼器材料」表示可作对应配方材料。`+
   ` 当前角色属性：${Object.values(attrs).map(a=>`${esc(a.name)} Lv${a.level}（${a.exp}/${a.next||'—'}）`).join(' · ')||'未读取到探索属性'}；灵石 ${money}。`+
