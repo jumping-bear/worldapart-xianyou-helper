@@ -12,7 +12,7 @@
 .fzone summary::-webkit-details-marker{display:none}
 .fzone[open]{padding:14px 16px 16px}
 .fzone-head{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:650;color:#d7dee8;margin:0;padding:13px 16px}
-.fzone-head:before{content:"";width:3px;height:14px;border-radius:4px;background:#4f9e73;flex:none}
+.fzone-head:before{content:"";width:3px;height:14px;border-radius:6px;background:#4f9e73;flex:none}
 .fzone-head:after{content:"›";margin-left:auto;color:var(--text-faint);font-size:16px;transition:transform .15s}
 .fzone[open] .fzone-head:after{transform:rotate(90deg)}
 .fzone-head span{color:var(--text-faint);font-size:11px;font-weight:400}

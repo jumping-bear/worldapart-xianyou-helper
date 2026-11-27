@@ -52,7 +52,7 @@
 .mapwrap{display:flex;flex-direction:column;gap:10px;min-width:0}
 .mapwrap .pill-legend{flex-direction:row;flex-wrap:wrap;gap:6px 16px;background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
 /* 详情随右栏自然排布，不贴顶也不压住下方内容 */
-.pill-detail{border-radius:10px;border:1px solid var(--border-subtle);border-left:3px solid var(--accent);flex:none}
+.pill-detail{border-radius:12px;border:1px solid var(--border-subtle);border-left:3px solid var(--accent);flex:none}
 /* 高级筛选默认折叠，把首屏让给搜索与地图 */
 .fsec-fold{padding:0}
 .fsec-fold>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:9px 12px}

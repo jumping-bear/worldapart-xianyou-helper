@@ -83,7 +83,7 @@
 .rolebook-place-sub{font-size:10px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rolebook-card-place-off .rolebook-place-main{font-weight:500}
 .rolebook-card-badges{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 8px;min-height:18px}
-.rolebook-role{font-size:10px;border-radius:4px;padding:1px 7px;line-height:1.7;border:1px solid}
+.rolebook-role{font-size:10px;border-radius:6px;padding:1px 7px;line-height:1.7;border:1px solid}
 .rolebook-role-师尊{background:#2a2340;color:#cbb8f5;border-color:#4a3b6b}
 .rolebook-role-弟子{background:var(--surface-raised);color:#a6d4e8;border-color:#35566b}
 .rolebook-role-道侣{background:#3a2331;color:#f5b8d8;border-color:#6b3552}
@@ -92,10 +92,10 @@
 .rolebook-role-已故{background:#262626;color:#9aa0a6;border-color:#454545}
 .rolebook-role-none{color:#5f6774;font-size:11px}
 /* 凡人寿命徽标 */
-.rolebook-lifespan{font-size:10px;line-height:1.7;border-radius:4px;padding:1px 7px;background:#1d2a3a;border:1px solid #3a5470;color:#bcd8f5;font-weight:600}
+.rolebook-lifespan{font-size:10px;line-height:1.7;border-radius:6px;padding:1px 7px;background:#1d2a3a;border:1px solid #3a5470;color:#bcd8f5;font-weight:600}
 .rolebook-lifespan-prot{background:#322a1a;border-color:#6b5830;color:#f0d59a}
 .rolebook-lifespan-over{background:#2e1e22;border-color:#6b3440;color:#ff9aa8}
-.rolebook-band{position:relative;height:8px;border-radius:4px;margin:2px 0 9px;background:linear-gradient(90deg,#8e3746 0%,#5a4a4e 35%,#4a5464 50%,#4a7a5c 65%,#2f9e6b 100%)}
+.rolebook-band{position:relative;height:8px;border-radius:6px;margin:2px 0 9px;background:linear-gradient(90deg,#8e3746 0%,#5a4a4e 35%,#4a5464 50%,#4a7a5c 65%,#2f9e6b 100%)}
 .rolebook-band-axis{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:rgba(255,255,255,.25)}
 .rolebook-band-dot{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid var(--surface);box-shadow:0 0 0 1px rgba(255,255,255,.6);transform:translate(-50%,-50%);transition:left .2s}
 .rolebook-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -139,7 +139,7 @@
 .rolebook-sec{padding:16px 0;border-bottom:1px solid var(--border-raised)}
 .rolebook-sec:last-child{border-bottom:0}
 .rolebook-sec h4{margin:0 0 12px;font-size:13px;color:#dfe6ef;font-weight:600;display:flex;align-items:baseline;gap:8px}
-.rolebook-sec h4:before{content:"";width:3px;height:13px;background:var(--accent);border-radius:4px}
+.rolebook-sec h4:before{content:"";width:3px;height:13px;background:var(--accent);border-radius:6px}
 .rolebook-sec h4 small{color:#6f7787;font-weight:400;font-size:11px}
 .rolebook-grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}
 .rolebook-kv{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--border-raised);padding:5px 0}
@@ -170,7 +170,7 @@
 .rolebook-relnode-弟子 .rolebook-rellabel{color:#a6d4e8}
 .rolebook-relnode-已故 .rolebook-rellabel{color:#9aa0a6}
 .rolebook-relpeople{display:flex;flex-wrap:wrap;gap:4px}
-.rolebook-relperson{font-size:11px;background:var(--surface-raised);border:1px solid #313c4b;color:var(--text-soft);border-radius:4px;padding:2px 7px}
+.rolebook-relperson{font-size:11px;background:var(--surface-raised);border:1px solid #313c4b;color:var(--text-soft);border-radius:6px;padding:2px 7px}
 
 .rolebook-inline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:10px;color:var(--text-muted);font-size:11px}
 .rolebook-tag{display:inline-block;background:var(--surface-raised);border:1px solid #313c4b;color:var(--text-soft);border-radius:6px;padding:3px 9px;font-size:11px}
@@ -203,7 +203,7 @@
 .rolebook-act.on{background:#1e2b25;border-color:#356047;color:#bfe8d3}
 .rolebook-act.off{color:#5f6774}
 /* 安全击杀小标记：杀他不掉善恶、不扣声望 */
-.rolebook-safe{font-size:10px;line-height:1.7;border-radius:4px;padding:1px 7px;background:#1e2b25;border:1px solid #356047;color:#8fd0a9;font-weight:600}
+.rolebook-safe{font-size:10px;line-height:1.7;border-radius:6px;padding:1px 7px;background:#1e2b25;border:1px solid #356047;color:#8fd0a9;font-weight:600}
 
 /* 击杀后果：数字在前，规则原文退居小字 */
 .rolebook-kill{background:var(--surface-soft);border:1px solid var(--border-subtle);border-radius:12px;padding:12px 14px}
@@ -241,7 +241,7 @@
 .rolebook-talent.is-locked{opacity:.55}
 .rolebook-talent-head{display:flex;align-items:center;gap:8px;color:#e2d3b6;font-size:13px}
 .rolebook-talent-head b{font-weight:600}
-.rolebook-talent-lock{font-size:11px;color:#8d97a8;border:1px solid #3a4456;border-radius:4px;padding:1px 5px}
+.rolebook-talent-lock{font-size:11px;color:#8d97a8;border:1px solid #3a4456;border-radius:6px;padding:1px 5px}
 .rolebook-talent p{margin:6px 0 0;color:#9fb0c6;font-size:12px;line-height:1.6}
 /* 覆盖模式顶栏高 46px，详情抽屉要避开，否则人物名字被压住 */
 body.xy-overlay .rolebook-drawer{top:46px}
@@ -256,9 +256,9 @@ body.xy-overlay .rolebook-drawer{top:46px}
 .rolebook-bt-sum{color:#8f9aab;font-size:12px;margin-left:6px}
 
 /* 值得洗髓：凡人 + 在世 + 高品质天赋，一眼可辨 */
-.rolebook-wash{display:inline-block;font-size:11px;color:#e0a34a;border:1px solid #6b5124;background:#2a2113;border-radius:4px;padding:1px 6px;margin-right:4px}
+.rolebook-wash{display:inline-block;font-size:11px;color:#e0a34a;border:1px solid #6b5124;background:#2a2113;border-radius:6px;padding:1px 6px;margin-right:4px}
 
 /* 本月特殊互动入口：卡片徽标与详情标签 */
-.rolebook-special{display:inline-block;font-size:11px;line-height:1.6;padding:1px 7px;border-radius:4px;
+.rolebook-special{display:inline-block;font-size:11px;line-height:1.6;padding:1px 7px;border-radius:6px;
   color:var(--ok-text);background:rgba(95,189,139,.1);border:1px solid rgba(95,189,139,.36);white-space:nowrap}
 .rolebook-tag-green{color:var(--ok-text);background:rgba(95,189,139,.1);border-color:rgba(95,189,139,.36)}

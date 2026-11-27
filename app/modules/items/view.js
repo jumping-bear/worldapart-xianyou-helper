@@ -376,8 +376,7 @@ function initItems(){
   .viewbtn{background:#1b222c;border:1px solid #35404f;border-radius:8px;color:#9aa3b2;padding:9px 16px;cursor:pointer;font-size:13px}
   .viewbtn:hover{background:#25303d}
   .viewbtn.on{background:#263b34;border-color:#3d735b;color:#c9f5dd}
-  .filter-bar.items{grid-template-columns:repeat(3,minmax(0,1fr));align-items:end}
-  .filter-bar.items .filter-actions{grid-column:1 / -1;justify-content:flex-end}
+  .filter-bar.items{grid-template-columns:repeat(3,minmax(0,1fr)) auto;align-items:end}
   .qsec{background:#12161c;border:1px solid #232b36;border-radius:12px;margin:0 0 16px;overflow:hidden}
   .qsec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:13px 16px}
   .qsec>summary::-webkit-details-marker{display:none}
@@ -387,7 +386,7 @@ function initItems(){
   .qsec-title{font-size:15px;font-weight:650}
   .qsec-meta{margin-left:auto;color:#778292;font-size:11px;font-weight:400}
   .qsec-body{padding:4px 12px 12px}
-  @media(max-width:850px){.filter-bar.items{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-bar.items .filter-actions{grid-column:span 2}}
+  @media(max-width:850px){.filter-bar.items{grid-template-columns:repeat(2,minmax(0,1fr)) auto}}
   @media(max-width:720px){.ni-row{grid-template-columns:minmax(0,1fr) 36px 54px 56px 46px;gap:6px;padding:6px 6px}.ni-row .ni-type{display:none}.ni-name .badge{display:none}.ni-name .itag{display:none}.ni-rule{margin-left:0;width:100%}.ni-sep{display:none}}
   @media(max-width:560px){.filter-bar.items{grid-template-columns:1fr}.filter-bar.items .filter-actions{grid-column:span 1}.qsec-body{padding:4px 8px 8px}}
   </style>
@@ -405,28 +404,38 @@ function initItems(){
    <label class="filter-field"><span>在世状态</span><select id="ialive"><option value="1">只看在世（可交互）</option><option value="">全部（含已不在世）</option><option value="0">只看已不在世</option></select></label>
    <label class="filter-field"><span>关系</span><select id="irel"><option value="">全部关系</option><option value="1">只看有交情</option><option value="0">只看没交情</option></select></label>
    <label class="filter-field"><span>品质</span><select id="iquality">${qualityOptions()}</select></label>
-   <label class="filter-field"><span>类型</span><select id="itype">${opts(types,'类型')}</select></label>
-   <label class="filter-field"><span>区域</span><select id="iregion">${opts(regions,'区域')}</select></label>
-   <label class="filter-field"><span>具体位置</span><select id="ilocation"></select></label>
-   <label class="filter-field"><span>偷窃</span><select id="isteal"><option value="">全部持有者</option><option value="1">只看可偷</option><option value="0">只看不可偷</option></select></label>
-   <label class="filter-field"><span>索要</span><select id="idemand"><option value="">全部物品</option><option value="1">只看可索要</option></select></label>
-   <label class="filter-field"><span>赠礼</span><select id="igift"><option value="">全部物品</option><option value="1">只看可赠</option></select></label>
    <div class="filter-actions"><button type="button" id="iclear" class="filter-button">清空筛选</button></div>
   </div>
+  <details class="advanced-filters" id="iadv"><summary>更多筛选 <span id="iadvcount" class="filter-count"></span></summary><div class="advanced-grid">
+   <label><span>类型</span><select id="itype">${opts(types,'类型')}</select></label>
+   <label><span>区域</span><select id="iregion">${opts(regions,'区域')}</select></label>
+   <label><span>具体位置</span><select id="ilocation"></select></label>
+   <label><span>偷窃</span><select id="isteal"><option value="">全部持有者</option><option value="1">只看可偷</option><option value="0">只看不可偷</option></select></label>
+   <label><span>索要</span><select id="idemand"><option value="">全部物品</option><option value="1">只看可索要</option></select></label>
+   <label><span>赠礼</span><select id="igift"><option value="">全部物品</option><option value="1">只看可赠</option></select></label>
+  </div></details>
   <div id="iresult" class="result-info"></div><div id="ilist"></div>`;
  function updateItemLocations(){
   const locations=uniq(m.rows.filter(r=>!itemFilters.region||(r.region||'未知区域')===itemFilters.region).map(r=>r.location||'未知地点'));
   if(itemFilters.location&&!locations.includes(itemFilters.location))itemFilters.location='';
   $('ilocation').innerHTML=opts(locations,'具体位置');$('ilocation').value=itemFilters.location||'';
  }
- function saveAndRender(){store.set(ITEM_KEY,itemFilters);renderList()}
+ const ADV_KEYS=['type','region','location','steal','demand','gift'];
+ function updateAdvCount(){
+  const box=$('iadvcount');if(!box)return;
+  const count=ADV_KEYS.filter(key=>String(itemFilters[key]||'')!=='').length;
+  box.textContent=count?`（${count}）`:'';
+ }
+ function syncAdvOpen(){const box=$('iadv');if(!box)return;
+  if(ADV_KEYS.some(key=>String(itemFilters[key]||'')!==''))box.open=true}
+ function saveAndRender(){store.set(ITEM_KEY,itemFilters);updateAdvCount();renderList()}
  function applyView(){
   $('iview-item').classList.toggle('on',itemView==='item');
   $('iview-npc').classList.toggle('on',itemView==='npc');
  }
  $('iview-item').addEventListener('click',()=>{itemView='item';store.set('worldapart.item.view.v1',itemView);applyView();renderList()});
  $('iview-npc').addEventListener('click',()=>{itemView='npc';store.set('worldapart.item.view.v1',itemView);applyView();renderList()});
- $('iregion').value=itemFilters.region||'';updateItemLocations();
+ $('iregion').value=itemFilters.region||'';updateItemLocations();updateAdvCount();syncAdvOpen();
  for(const key of ['alive','rel','q','npc','location','type','quality','steal','demand','gift']){
   const node=$('i'+key);node.value=itemFilters[key]??'';
   node.addEventListener(node.tagName==='INPUT'?'input':'change',()=>{itemFilters[key]=node.value;saveAndRender()});

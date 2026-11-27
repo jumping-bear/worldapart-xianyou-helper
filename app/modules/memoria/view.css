@@ -37,7 +37,7 @@
 .mem-next b{flex:none;color:var(--gold);font-size:10px;letter-spacing:.5px}
 .mem-next i{font-style:normal;color:var(--text-dim)}
 .mem-next em{font-style:normal;color:var(--gold);font-size:11px}
-.mem-bar{height:5px;border-radius:4px;background:var(--surface-track);overflow:hidden;display:block;margin-top:2px}
+.mem-bar{height:5px;border-radius:6px;background:var(--surface-track);overflow:hidden;display:block;margin-top:2px}
 .mem-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--ok),var(--ok-fill))}
 .mem-pct{flex:none;text-align:right;color:var(--text);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
 .mem-pct small{display:block;color:var(--text-faint);font-size:11px;font-weight:400;margin-top:2px}

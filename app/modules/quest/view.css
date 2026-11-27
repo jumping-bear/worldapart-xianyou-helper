@@ -5,7 +5,7 @@
 .sq-line>summary.sq-line-h{display:flex;flex-wrap:wrap;gap:7px;align-items:center;cursor:pointer;list-style:none;padding:11px 13px;background:var(--surface-soft);border-bottom:1px solid var(--border-strong)}
 .sq-line>summary.sq-line-h::-webkit-details-marker{display:none}
 .sq-line[open]>summary.sq-line-h{border-bottom-color:var(--border-subtle);background:var(--surface-soft)}
-.sq-chap{flex:none;font-size:10px;line-height:1.6;padding:1px 7px;border-radius:4px;border:1px solid #33465c;background:var(--surface-soft);color:#a6cff0;white-space:nowrap}
+.sq-chap{flex:none;font-size:10px;line-height:1.6;padding:1px 7px;border-radius:6px;border:1px solid #33465c;background:var(--surface-soft);color:#a6cff0;white-space:nowrap}
 /* 章节配色位由境界表顺序决定（c0…c5），新增境界自动套用，无需改样式 */
 .sq-chap.c0{border-color:#3a5c3f;background:#152119;color:#a8dfb4}
 .sq-chap.c1{border-color:#2e455c;background:var(--surface-soft);color:#a6cff0}
@@ -13,7 +13,7 @@
 .sq-chap.c3{border-color:#6b5a2e;background:#231d12;color:#f0d38a}
 .sq-chap.c4{border-color:#5c3a3a;background:#211616;color:#f0b4b4}
 .sq-chap.c5{border-color:#39424f;background:var(--surface);color:#9aa8b8}
-.sq-region{flex:none;font-size:10px;line-height:1.6;padding:1px 7px;border-radius:4px;border:1px solid #39424f;background:var(--surface);color:#9aa8b8;white-space:nowrap}
+.sq-region{flex:none;font-size:10px;line-height:1.6;padding:1px 7px;border-radius:6px;border:1px solid #39424f;background:var(--surface);color:#9aa8b8;white-space:nowrap}
 .sq-lname{font-size:15px;font-weight:650;color:#eef3f9;min-width:0;overflow-wrap:anywhere}
 .sq-npc{font-size:11px;color:#8fa2b8}
 .sq-prog{font-size:12px;color:#c9d6e5;font-variant-numeric:tabular-nums}
@@ -24,7 +24,7 @@
 .sq-stone{font-size:11px;color:#e8c76d;white-space:nowrap}
 /* 剧情线摘要里的高品质待拿奖励（替代原来的“可拿灵石”） */
 .sq-hiwrap{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap}
-.sq-hi{font-size:10px;line-height:1.6;padding:1px 6px;border-radius:4px;white-space:nowrap;
+.sq-hi{font-size:10px;line-height:1.6;padding:1px 6px;border-radius:6px;white-space:nowrap;
   background:var(--tier-bg,var(--surface-soft));border:1px solid var(--tier-bd,var(--border-subtle));color:var(--tier-fg,var(--text-body))}
 .sq-hi-more{font-size:10px;color:var(--text-faint)}
 
@@ -63,7 +63,7 @@
 .sq-node.hit{box-shadow:0 0 0 1px var(--accent) inset}
 .sq-step{flex:none;min-width:18px;color:#6f7d8f;font-size:11px;font-variant-numeric:tabular-nums;text-align:center}
 .sq-nm{font-size:13px;font-weight:600;color:#e9eff7;min-width:0;overflow-wrap:anywhere}
-.sq-badge{flex:none;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:4px;background:var(--surface-raised);color:var(--text-dim);white-space:nowrap}
+.sq-badge{flex:none;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:6px;background:var(--surface-raised);color:var(--text-dim);white-space:nowrap}
 .sq-badge.b-done{background:#1d3a2c;color:var(--ok-text)}
 .sq-badge.b-doing{background:#1c2f42;color:#a6cff0}
 .sq-badge.b-ready{background:#1b3a2b;color:var(--ok-text)}
@@ -72,7 +72,7 @@
 .sq-badge.b-wait{background:var(--surface-raised);color:#a6b2c0}
 .sq-badge.b-unpicked{background:#2a2440;color:#cbb2ee}
 .sq-badge.b-legacy{background:#2a2416;color:#cbb488}
-.sq-tag{flex:none;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:4px;border:1px solid #33465c;background:var(--surface-soft);color:#9fb0c4;white-space:nowrap}
+.sq-tag{flex:none;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:6px;border:1px solid #33465c;background:var(--surface-soft);color:#9fb0c4;white-space:nowrap}
 .sq-tag.hid{border-color:#6b5a2e;background:#231d12;color:#f0d38a}
 .sq-tag.egg{border-color:#7a4a2a;background:#2a1c12;color:#ffc987}
 .sq-tag.retry{border-color:#3d5a73;background:var(--surface-soft);color:#9cc7e6}
@@ -80,13 +80,13 @@
 .sq-tag.unsel{border-color:#4a4458;background:#211d2c;color:#b9aed4}
 .sq-tag.risk{border-color:#7a4a2a;background:#2a1c12;color:#ffc987}
 .sq-rwline{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
-.sq-rw{font-size:10px;line-height:1.6;padding:1px 5px;border-radius:4px;background:var(--tier-bg,var(--surface-soft));border:1px solid var(--tier-bd,var(--border-subtle));color:var(--tier-fg,#c3cbd7);white-space:nowrap}
+.sq-rw{font-size:10px;line-height:1.6;padding:1px 5px;border-radius:6px;background:var(--tier-bg,var(--surface-soft));border:1px solid var(--tier-bd,var(--border-subtle));color:var(--tier-fg,#c3cbd7);white-space:nowrap}
 .sq-rw.more{color:var(--text-faint)}
 .sq-rw i{font-style:normal;color:var(--text-faint);margin-left:4px}
 .sq-loc{font-size:11px;color:var(--text-muted);min-width:0;overflow-wrap:anywhere}
 .sq-one{flex-basis:100%;color:#8fa2b8;font-size:11px;line-height:1.6;overflow-wrap:anywhere}
 .sq-opts-inline{flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
-.sq-opt-tag{display:inline-flex;gap:5px;align-items:baseline;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:4px;border:1px solid #3a4a5e;background:var(--surface-soft);color:#a9bccf;max-width:100%;overflow-wrap:anywhere}
+.sq-opt-tag{display:inline-flex;gap:5px;align-items:baseline;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:6px;border:1px solid #3a4a5e;background:var(--surface-soft);color:#a9bccf;max-width:100%;overflow-wrap:anywhere}
 .sq-opt-tag em{font-style:normal;color:#d5a86c;white-space:nowrap}
 .sq-opt-tag.ok{border-color:var(--accent);background:#17281f;color:#9fe0b8}
 .sq-opt-tag.no{border-color:#6b3a3a;background:#291718;color:#e6a3a3}
@@ -106,7 +106,7 @@
 .sq-cval{color:#9fb0c4;font-variant-numeric:tabular-nums;white-space:nowrap}
 .sq-gap{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px}
 .sq-gap b{color:#ff9a6b;font-size:11px}
-.sq-gap span{background:#2a1c12;border:1px solid #7a4a2a;color:#ffc987;border-radius:4px;padding:1px 7px;font-size:11px;overflow-wrap:anywhere}
+.sq-gap span{background:#2a1c12;border:1px solid #7a4a2a;color:#ffc987;border-radius:6px;padding:1px 7px;font-size:11px;overflow-wrap:anywhere}
 .sq-muted{color:var(--text-muted);font-size:11px;line-height:1.7;overflow-wrap:anywhere}
 .sq-desc{color:#c3cbd7;font-size:12px;line-height:1.8;overflow-wrap:anywhere}
 .sq-hint{margin-top:9px;background:var(--surface-soft);border:1px solid #2f4154;border-radius:6px;padding:7px 9px;color:#b9c9da;font-size:11px;line-height:1.7}
@@ -198,7 +198,7 @@
 
 /* 怎么触发 / 前置任务 / 可点击引用（2.1 返工第三轮） */
 .sq-how{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:2px 0 8px}
-.sq-howtag{font-size:11px;line-height:1.7;padding:2px 8px;border-radius:4px;border:1px solid #33465c;background:var(--surface-soft);color:#a6cff0;white-space:nowrap}
+.sq-howtag{font-size:11px;line-height:1.7;padding:2px 8px;border-radius:6px;border:1px solid #33465c;background:var(--surface-soft);color:#a6cff0;white-space:nowrap}
 .sq-howtag.auto{border-color:#3a5c3f;background:#152119;color:#a8dfb4}
 .sq-howtag.npc{border-color:#4a3c5c;background:#1c1622;color:#cbb2ee}
 .sq-howmeta{font-size:12px;color:#9fb0c4;overflow-wrap:anywhere}
@@ -215,7 +215,7 @@
 .sq-pre.out:hover{border-color:#33465c;background:var(--surface-soft)}
 .sq-ref{color:#8ec5f0;text-decoration:none;border-bottom:1px dashed #4c7fb5;cursor:pointer}
 .sq-ref:hover{color:#b8dcff;border-bottom-color:#8ec5f0}
-.sq-mode{flex:none;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:4px;white-space:nowrap;
+.sq-mode{flex:none;font-size:10px;line-height:1.6;padding:1px 6px;border-radius:6px;white-space:nowrap;
   border:1px solid #33465c;background:var(--surface-soft);color:#9fb0c4}
 .sq-mode.auto{border-color:#3a5c3f;background:#152119;color:#a8dfb4}
 .sq-mode.npc{border-color:#4a3c5c;background:#1c1622;color:#cbb2ee}

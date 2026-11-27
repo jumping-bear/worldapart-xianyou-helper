@@ -30,9 +30,9 @@
 .gmb-card-h .badge.gmb-done{background:var(--accent-bg);color:#9fe5bd}
 .gmb-price{margin-left:auto;color:var(--text-muted);font-size:11px}
 .gmb-price b{color:var(--text);font-size:13px;font-variant-numeric:tabular-nums}
-.gmb-q{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:4px;font-size:11px;font-weight:600;background:var(--tier-bg,var(--border-strong));color:var(--tier-fg,var(--text-soft))}
+.gmb-q{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:6px;font-size:11px;font-weight:600;background:var(--tier-bg,var(--border-strong));color:var(--tier-fg,var(--text-soft))}
 .gmb-prog{display:flex;align-items:center;gap:9px;margin:9px 0 8px}
-.gmb-bar{flex:1;height:6px;border-radius:4px;background:var(--surface-track);overflow:hidden;display:block}
+.gmb-bar{flex:1;height:6px;border-radius:6px;background:var(--surface-track);overflow:hidden;display:block}
 .gmb-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--ok),#2f9e6b)}
 .gmb-prog em{font-style:normal;color:var(--text-muted);font-size:11px;font-variant-numeric:tabular-nums;flex:none}
 .gmb-metrics{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}

@@ -43,7 +43,7 @@
 .sec-cond{display:grid;grid-template-columns:86px 1fr;gap:6px 10px;font-size:12px;margin:0 0 9px}
 .sec-cond-k{color:var(--text-faint)}
 .sec-cond-v{color:var(--text-soft);font-variant-numeric:tabular-nums}
-.sec-bar{height:5px;border-radius:4px;background:var(--surface-track);overflow:hidden;margin:0 0 7px}
+.sec-bar{height:5px;border-radius:6px;background:var(--surface-track);overflow:hidden;margin:0 0 7px}
 .sec-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--ok),#2f9e6b)}
 .sec-hint{color:var(--text-faint);font-size:11px;line-height:1.7}
 .sec-hint b{color:var(--text-soft);font-variant-numeric:tabular-nums}

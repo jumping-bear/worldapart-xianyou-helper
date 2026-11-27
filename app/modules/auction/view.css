@@ -24,10 +24,10 @@
 .au-main{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
 .au-title{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
 .au-name{font-weight:600;color:var(--text);font-size:13px}
-.au-flag{font-size:10px;padding:1px 5px;border-radius:4px;border:1px solid #453a5c;color:#cbb2ee;background:#1b1622}
+.au-flag{font-size:10px;padding:1px 5px;border-radius:6px;border:1px solid #453a5c;color:#cbb2ee;background:#1b1622}
 .au-flag.gold{border-color:#5a4c2a;color:#f0d38a;background:#211c12}
-.au-type{font-size:10px;padding:1px 5px;border-radius:4px;border:1px solid var(--border-subtle);color:var(--text-muted);white-space:nowrap}
-.au-q{font-size:10px;padding:1px 5px;border-radius:4px;border:1px solid var(--tier-bd,var(--border-subtle));color:var(--tier-fg,var(--text-dim));white-space:nowrap}
+.au-type{font-size:10px;padding:1px 5px;border-radius:6px;border:1px solid var(--border-subtle);color:var(--text-muted);white-space:nowrap}
+.au-q{font-size:10px;padding:1px 5px;border-radius:6px;border:1px solid var(--tier-bd,var(--border-subtle));color:var(--tier-fg,var(--text-dim));white-space:nowrap}
 .au-nums{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--text-muted)}
 .au-nums b{color:#d7dee8;font-weight:600}
 .au-ratio{color:var(--text-dim)}

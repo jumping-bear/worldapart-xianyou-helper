@@ -1,5 +1,5 @@
 /* 奇遇：母奇遇下的子分支折叠展示 *//* 规则说明默认折叠，避免把搜索框挤出首屏 */
-.evnotes{background:var(--info-bg);border:1px solid var(--info-border);border-radius:9px;padding:7px 12px;margin:0 0 10px}
+.evnotes{background:var(--info-bg);border:1px solid var(--info-border);border-radius:8px;padding:7px 12px;margin:0 0 10px}
 .evnotes>summary{cursor:pointer;list-style:none;color:var(--info-text);font-size:12px;font-weight:600}
 .evnotes>summary::-webkit-details-marker{display:none}
 .evnotes>summary::before{content:'▸';margin-right:6px;color:var(--text-faint);font-size:10px}
@@ -17,7 +17,7 @@
 
 /* 高品质待拿奖励：和支线一致，直接在奇遇标题旁亮出紫/橙/红品 */
 .ev-hi{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
-.ev-hi-chip{font-size:10px;line-height:1.6;padding:1px 6px;border-radius:4px;white-space:nowrap;
+.ev-hi-chip{font-size:10px;line-height:1.6;padding:1px 6px;border-radius:6px;white-space:nowrap;
   background:var(--tier-bg,var(--surface-raised));border:1px solid var(--tier-bd,var(--border-subtle));color:var(--tier-fg,var(--text-soft))}
 .ev-hi-more{font-size:10px;color:var(--text-faint)}
 #evopen .chip i{font-style:normal;color:var(--text-muted);margin-left:5px;font-size:10px}
@@ -38,7 +38,7 @@
 .evwhy{margin:4px 0 8px}
 .evwhy>summary{cursor:pointer;color:var(--text-muted);font-size:11px;line-height:1.8}
 .evchecks{display:flex;flex-direction:column;gap:3px;margin-top:5px}
-.evcheck{font-size:11px;line-height:1.7;padding:3px 8px;border-radius:4px;background:var(--surface-sunken);border:1px solid var(--border)}
+.evcheck{font-size:11px;line-height:1.7;padding:3px 8px;border-radius:6px;background:var(--surface-sunken);border:1px solid var(--border)}
 .evcheck.ok{border-color:var(--ok-border);color:var(--ok-text)}
 .evcheck.bad{border-color:var(--danger-border);color:var(--danger-text)}
 .evcheck.info{border-color:var(--info-border);color:var(--info-text)}

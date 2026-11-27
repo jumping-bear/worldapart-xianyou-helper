@@ -18,9 +18,10 @@ _SHELL = {
         "title": "不问凡尘 · 仙友助手",
         "heading": "不问凡尘 · 仙友助手",
         "sub": "只读分析解密副本，不修改游戏存档；筛选条件会保留在本机浏览器。",
-        "tip": ("游戏保存后点页面上的「立即同步」可马上导出最新副本，平时插件每 10 秒自动同步。本页仅在数据变化时自动刷新。<br>"
-                "配置来源优先使用游戏当前 YooAsset 清单；更新失败时使用兼容缓存或内置快照。"
-                "若存档结构、加密或 Unity 格式大改，仍需更新工具。"),
+        "tip": ("游戏里保存后，点页面上的「立即同步」就能马上刷新；平时插件每 10 秒自动同步一次，本页只在数据变化时重画。"
+                '<details class="tip-more"><summary>数据来源说明</summary><div>'
+                "配置优先读游戏当前配置；读不到时退回兼容缓存或内置快照。"
+                "若存档结构、加密方式或引擎版本大改，仍需更新工具。</div></details>"),
         "notice_update": ('从 <b>v2.2</b> 起，进游戏后按 <b>F3</b> 即可呼出本页面；'
                           '或双击 仙友助手.exe 启用网页版。'
                           '老用户重新运行一次「一键安装.bat」即可更新。'),
@@ -38,10 +39,11 @@ _SHELL = {
         "heading": "WorldApart · Xianyou Helper",
         "sub": ("Read-only analysis of decrypted save copies. Your save is never modified; "
                 "filters are kept in this browser."),
-        "tip": ("After saving in game click “Sync now” on the page to export a copy immediately; the plugin also syncs every 10 seconds. "
-                "This page refreshes only when data changes.<br>"
-                "Config comes from the game's current YooAsset manifest first, then the compatible cache or "
-                "built-in snapshot. Major save/encryption/Unity format changes still need a tool update."),
+        "tip": ("After saving in game, click “Sync now” to refresh immediately; the plugin also syncs every 10 seconds. "
+                "This page only redraws when data changes."
+                '<details class="tip-more"><summary>Where the data comes from</summary><div>'
+                "Config is read from the game first, then falls back to the compatible cache or the built-in snapshot. "
+                "Major save/encryption/engine format changes still need a tool update.</div></details>"),
         "notice_update": ('Since <b>v2.2</b>, press <b>F3</b> in game to open this page; '
                           'you can also double-click 仙友助手.exe (Xianyou Helper.exe) to view it in a browser. '
                           'Existing users can re-run 「一键安装.bat」 (install.bat) to update.'),
