@@ -1,12 +1,13 @@
 [h1]Xianyou Helper v2.5.0 - Pocket Guide[/h1]
-[b]Up and running in 30 seconds - do these 3 steps first[/b]
+[b]17 modules, one save file read: where to go, what is left, what is worth it - worked out for you. No game files modified; saves never touched.[/b]
+Read-only save copy · no save editing · English UI supported (switch it in 「功能设置」)
+
+[b]Installation[/b]
 [list]
 [*]1. Subscribe to this item and wait for the download to finish.
 [*]2. [b]Fully close the game[/b], double-click 「一键安装.bat」 in the workshop folder, confirm your game directory, and continue only when every self-check shows ✓.
 [*]3. Start the game and stay on the main menu for about 20 seconds (the first launch generates interop files and may look frozen for 1-3 minutes - that is normal, do not close the game). Then press [b]F3[/b] in-game.
 [/list]
-[b]17 modules, one save file read: where to go, what is left, what is worth it - worked out for you. No game files modified; saves never touched.[/b]
-Read-only save copy · no save editing · English UI supported (switch it in 「功能设置」)
 
 [h2]Match the problem, find the page[/h2]
 [list]
